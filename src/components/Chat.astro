@@ -1,0 +1,64 @@
+---
+// Sectiunea "Intreaba catalogul" de pe pagina catalogului. Fara JavaScript arata doar
+// lamurirea; scriptul (chat.ts) porneste formularul.
+interface Props {
+  catalogId: string;
+  indexate: number;   // surse cu document in Gemini
+  ramase: number;
+  limita: number;
+}
+const { catalogId, indexate, ramase, limita } = Astro.props;
+---
+
+<section class="chat" id="chat" data-chat={indexate > 0 ? catalogId : undefined}>
+  <h2>Întreabă catalogul</h2>
+  {indexate === 0 ? (
+    <p class="gol">Catalogul nu are încă documente indexate. Întrebările se pot pune după ce se adaugă PDF-urile actelor.</p>
+  ) : (
+    <>
+      <p class="lamurire">
+        Răspunsurile vin doar din documentele catalogului, cu trimitere la articol și la pagina din PDF.
+        Verifică întotdeauna în actul citat.
+      </p>
+      <div class="schimburi" data-schimburi></div>
+      <form class="intrebare">
+        <textarea name="intrebare" rows="2" maxlength="2000" placeholder="Ex.: Ce condiții cere liberarea condiționată?" aria-label="Întrebarea ta" required></textarea>
+        <div class="rand">
+          <output class="ramase" data-ramase>{ramase} din {limita} întrebări rămase azi</output>
+          <button type="button" class="buton mic" data-sterge hidden>Șterge conversația</button>
+          <button type="submit" class="buton principal" disabled={ramase === 0}>Întreabă</button>
+        </div>
+      </form>
+      <noscript><p class="gol">Chatul cere JavaScript.</p></noscript>
+    </>
+  )}
+</section>
+
+<script>
+  import "../scripts/chat";
+</script>
+
+<style is:global>
+  .chat { margin-top: 36px; display: flex; flex-direction: column; gap: 14px; }
+  .chat .gol, .chat .lamurire { color: var(--muted); font-size: 14px; }
+  .chat .schimburi { display: flex; flex-direction: column; gap: 14px; }
+  .chat .schimb { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 18px; background: var(--bg-2); border: 1px solid var(--line); }
+  .chat .intrebare-text, .chat .schimb .intrebare { font-weight: 700; color: var(--accent, var(--violet)); white-space: pre-wrap; }
+  .chat .schimb .raspuns { font-size: 15.5px; }
+  .chat .schimb .raspuns p:last-child { margin-bottom: 0; }
+  .chat .citari { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chat .citare {
+    display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+    background: rgba(var(--accent-rgb, 179, 147, 242), 0.14); color: var(--accent, var(--violet)); border: 1px solid rgba(var(--accent-rgb, 179, 147, 242), 0.3);
+  }
+  a.citare:hover { filter: brightness(1.15); }
+  .chat form.intrebare { display: flex; flex-direction: column; gap: 10px; }
+  .chat textarea {
+    width: 100%; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg-3);
+    color: var(--text); font-size: 16px; font-family: var(--body); resize: vertical; min-height: 64px;
+  }
+  .chat textarea:focus { border-color: var(--accent, var(--violet)); outline: none; }
+  .chat .rand { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .chat .ramase { color: var(--muted); font-size: 13px; font-weight: 600; margin-right: auto; }
+  .chat .ramase.eroare { color: var(--coral); }
+</style>

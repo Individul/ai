@@ -9,6 +9,7 @@ const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsW
   <a class="brand" href="/">Cataloage<span>.</span></a>
   <nav aria-label="Navigare principală">
     <a href="/" class:list={{ activ: activ("/") }}>Cataloage</a>
+    <a href="/consum" class:list={{ activ: activ("/consum") }}>Consum</a>
     <a href="/acces" class:list={{ activ: activ("/acces") }}>Cum obțin acces</a>
     {admin && <a href="/admin" class:list={["admin", { activ: activ("/admin") }]}>Admin</a>}
   </nav>

@@ -14,6 +14,7 @@ export interface Catalog {
   url_notebook: string;
   note_utilizare: string;
   ordine: number;
+  magazin: string | null;          // fileSearchStores/... la Google; NULL = inca fara
   creat_la: string;
   actualizat_la: string;
 }
@@ -33,10 +34,16 @@ export interface Sursa {
   url: string | null;
   fisier_nume: string | null;
   fisier_marime: number | null;
+  doc_google: string | null;       // fileSearchStores/x/documents/y
+  indexare: StareIndexare;
+  indexare_mesaj: string | null;
+  operatie_google: string | null;  // operations/... cat timp e in_curs
   ordine: number;
   creat_la: string;
   actualizat_la: string;
 }
+
+export type StareIndexare = "neindexat" | "in_curs" | "gata" | "eroare";
 
 export interface Audio {
   id: string;
@@ -57,8 +64,8 @@ export type RezultatActualizare<T> =
   | { ok: false; motiv: "lipsa" }
   | { ok: false; motiv: "conflict"; rand: T };
 
-const COL_CATALOG = "id, slug, titlu, descriere, pictograma, culoare, stare, url_notebook, note_utilizare, ordine, creat_la, actualizat_la";
-const COL_SURSA = "id, catalog_id, titlu, tip, numar, data_emiterii, url, fisier_nume, fisier_marime, ordine, creat_la, actualizat_la";
+const COL_CATALOG = "id, slug, titlu, descriere, pictograma, culoare, stare, url_notebook, note_utilizare, ordine, magazin, creat_la, actualizat_la";
+const COL_SURSA = "id, catalog_id, titlu, tip, numar, data_emiterii, url, fisier_nume, fisier_marime, doc_google, indexare, indexare_mesaj, operatie_google, ordine, creat_la, actualizat_la";
 const COL_AUDIO = "id, catalog_id, titlu, descriere, durata_s, data, tip_mime, fisier_nume, marime, ordine, creat_la";
 
 // Timp strict crescator: in Workers `Date.now()` poate sta pe loc intr-o cerere, iar
@@ -164,6 +171,19 @@ export async function actualizeazaCatalog(
   return { ok: false, motiv: "conflict", rand: curent };
 }
 
+export async function seteazaMagazin(db: D1Database, id: string, magazin: string): Promise<void> {
+  await db.prepare("UPDATE cataloage SET magazin = ? WHERE id = ?").bind(magazin, id).run();
+}
+
+// Numarul de surse indexate (cu document la Google), pentru a sti daca chatul are ce cauta.
+export async function surseIndexate(db: D1Database, catalogId: string): Promise<number> {
+  const r = await db
+    .prepare("SELECT count(*) AS n FROM surse WHERE catalog_id = ? AND indexare = 'gata'")
+    .bind(catalogId)
+    .first<{ n: number }>();
+  return r?.n ?? 0;
+}
+
 export async function seteazaStareCatalog(db: D1Database, id: string, stare: Stare): Promise<boolean> {
   const r = await db.prepare("UPDATE cataloage SET stare = ?, actualizat_la = ? WHERE id = ?").bind(stare, acum(), id).run();
   return r.meta.changes > 0;
@@ -263,6 +283,16 @@ export async function seteazaFisierSursa(
   const sursa = await citesteSursa(db, id);
   if (sursa) await atingeCatalog(db, sursa.catalog_id);
   return sursa;
+}
+
+export async function seteazaIndexare(
+  db: D1Database, id: string,
+  i: { indexare: StareIndexare; doc_google?: string | null; operatie_google?: string | null; indexare_mesaj?: string | null }
+): Promise<void> {
+  await db
+    .prepare("UPDATE surse SET indexare = ?, doc_google = ?, operatie_google = ?, indexare_mesaj = ? WHERE id = ?")
+    .bind(i.indexare, i.doc_google ?? null, i.operatie_google ?? null, i.indexare_mesaj ?? null, id)
+    .run();
 }
 
 // Doar randul; obiectul din R2 se sterge inainte, de cine apeleaza.

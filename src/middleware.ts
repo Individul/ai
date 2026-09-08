@@ -3,6 +3,8 @@ import { env } from "cloudflare:workers";
 import { identitate } from "./lib/identitate";
 import { esteAdmin } from "./lib/admin";
 import { eroare } from "./lib/api";
+import { atingeVizita, citesteUtilizator } from "./lib/consum";
+import { aziChisinau } from "./lib/data";
 
 // Identitatea pe fiecare cerere. Singurul loc care citeste env.ACCESS_* / DEV_EMAIL / ADMIN_EMAILS.
 //
@@ -32,6 +34,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (!r.ok) return api ? eroare(r.status, r.mesaj) : text(r.mesaj, r.status);
   context.locals.email = r.email;
   context.locals.admin = esteAdmin(r.email, env.ADMIN_EMAILS);
+
+  // Blocare (doar pentru non-admin) si ultima vizita, o data pe zi. Fisierele si API-ul
+  // trec prin aceeasi poarta, ca un utilizator blocat sa nu mai poata descarca nimic.
+  const utilizator = await citesteUtilizator(env.DB, r.email);
+  if (utilizator?.blocat && !context.locals.admin) {
+    const mesaj = "Accesul tău la această aplicație a fost suspendat. Vorbește cu administratorul.";
+    return api ? eroare(403, mesaj) : text(mesaj, 403);
+  }
+  const azi = aziChisinau();
+  if (utilizator?.ultima_vizita !== azi) await atingeVizita(env.DB, r.email, azi);
 
   const zonaAdmin = pathname === "/admin" || pathname.startsWith("/admin/") || pathname.startsWith("/api/admin/");
   if (zonaAdmin && !context.locals.admin) {

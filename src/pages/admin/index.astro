@@ -13,7 +13,10 @@ const cataloage = await listeazaCataloage(env.DB, { cuArhivate: true });
 <Base title="Admin · Cataloage">
   <header class="antet">
     <h1>Administrare</h1>
-    <a class="buton principal" href="/admin/cataloage/nou">+ Catalog nou</a>
+    <div class="butoane">
+      <a class="buton" href="/admin/consum">Consum și limite</a>
+      <a class="buton principal" href="/admin/cataloage/nou">+ Catalog nou</a>
+    </div>
   </header>
 
   {cataloage.length === 0 ? (
@@ -43,6 +46,7 @@ const cataloage = await listeazaCataloage(env.DB, { cuArhivate: true });
 
 <style>
   .antet { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+  .butoane { display: flex; gap: 8px; flex-wrap: wrap; }
   .gol { color: var(--muted); }
   .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
   li {

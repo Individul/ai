@@ -5,12 +5,15 @@ import Base from "../../../layouts/Base.astro";
 import FormularCatalog from "../../../components/FormularCatalog.astro";
 import { citesteCatalog, listeazaAudio, listeazaSurse } from "../../../lib/db";
 import { ETICHETE_TIP, TIPURI_SURSA, fmtDurata, fmtMarime } from "../../../lib/validare";
+
+const ETICHETE_INDEXARE = { neindexat: "neindexat", in_curs: "se indexează…", gata: "indexat", eroare: "eroare la indexare" } as const;
 import { aziChisinau, fmtMoment } from "../../../lib/data";
 
 const id = Astro.params.id ?? "";
 const catalog = await citesteCatalog(env.DB, id);
 if (!catalog) return new Response(null, { status: 404 });
 const [surse, audio] = await Promise.all([listeazaSurse(env.DB, id), listeazaAudio(env.DB, id)]);
+const indexate = surse.filter((s) => s.indexare === "gata").length;
 const eroare = Astro.url.searchParams.get("eroare");
 const ok = Astro.url.searchParams.has("ok");
 const act = (cale: string) => `/admin/actiuni/${cale}`;
@@ -41,7 +44,7 @@ const act = (cale: string) => `/admin/actiuni/${cale}`;
   </form>
 
   <section class="sectiune" id="surse">
-    <h2>Surse <span class="numar">{surse.length}</span></h2>
+    <h2>Surse <span class="numar">{surse.length}</span> <span class="numar">· {indexate} în chat{catalog.magazin ? "" : " · fără magazin Gemini încă"}</span></h2>
     <ul class="randuri">
       {surse.map((s, i) => (
         <li>
@@ -67,6 +70,10 @@ const act = (cale: string) => `/admin/actiuni/${cale}`;
               <>
                 <a class="buton mic" href={`/f/pdf/${s.id}`} target="_blank" rel="noopener">PDF: {s.fisier_nume} ({fmtMarime(s.fisier_marime ?? 0)})</a>
                 <label class="buton mic" data-cere-js hidden>înlocuiește <input type="file" accept="application/pdf" data-pdf-sursa={s.id} hidden /></label>
+                <span class:list={["indexare", s.indexare]} data-indexare={s.id} title={s.indexare_mesaj ?? ""}>{ETICHETE_INDEXARE[s.indexare]}</span>
+                {s.indexare !== "in_curs" && (
+                  <button type="button" class="buton mic" data-indexeaza={s.id} data-cere-js hidden>{s.indexare === "gata" ? "Reindexează" : "Indexează"}</button>
+                )}
               </>
             ) : (
               <label class="buton mic" data-cere-js hidden>+ PDF <input type="file" accept="application/pdf" data-pdf-sursa={s.id} hidden /></label>
@@ -168,6 +175,10 @@ const act = (cale: string) => `/admin/actiuni/${cale}`;
   .stare-incarcare { font-size: 13px; font-weight: 600; color: var(--muted); }
   .stare-incarcare.ok { color: var(--live); }
   .stare-incarcare.eroare { color: var(--coral); }
+  .indexare { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--line); color: var(--muted); }
+  .indexare.gata { color: var(--live); background: rgba(111, 227, 165, 0.12); }
+  .indexare.in_curs { color: var(--wip); background: rgba(242, 194, 91, 0.12); }
+  .indexare.eroare { color: var(--coral); background: rgba(244, 135, 106, 0.12); }
   @media (max-width: 640px) {
     .grila-sursa, .grila-audio { grid-template-columns: 1fr 1fr; }
     .ultima { margin-left: 0; }

@@ -5,7 +5,10 @@ import Base from "../../layouts/Base.astro";
 import Pictograma from "../../components/Pictograma.astro";
 import ListaSurse from "../../components/ListaSurse.astro";
 import ListaAudio from "../../components/ListaAudio.astro";
+import Chat from "../../components/Chat.astro";
 import { citesteCatalogDupaSlug, listeazaAudio, listeazaSurse } from "../../lib/db";
+import { intrebariAzi, limitaPentru } from "../../lib/consum";
+import { aziChisinau } from "../../lib/data";
 import { ETICHETE_STARE } from "../../lib/validare";
 import { randeazaMarkdown } from "../../lib/markdown";
 import { fmtMoment } from "../../lib/data";
@@ -15,7 +18,12 @@ const catalog = await citesteCatalogDupaSlug(env.DB, slug);
 if (!catalog || (catalog.stare === "arhivat" && !Astro.locals.admin)) {
   return new Response(null, { status: 404 });
 }
-const [surse, audio] = await Promise.all([listeazaSurse(env.DB, catalog.id), listeazaAudio(env.DB, catalog.id)]);
+const email = Astro.locals.email;
+const [surse, audio, folosite, limita] = await Promise.all([
+  listeazaSurse(env.DB, catalog.id), listeazaAudio(env.DB, catalog.id),
+  intrebariAzi(env.DB, email, aziChisinau()), limitaPentru(env.DB, email),
+]);
+const indexate = catalog.magazin ? surse.filter((s) => s.indexare === "gata").length : 0;
 const areNotebook = catalog.url_notebook !== "";
 const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) : "";
 ---
@@ -44,9 +52,12 @@ const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) :
       )}
       <p class="lamurire">
         Notebook-ul se deschide pe notebook.google.com (NotebookLM) și cere un cont Google adăugat la el.
+        Poți întreba și direct aici, mai jos, fără cont Google.
         <a href="/acces">Cum obțin acces?</a>
       </p>
     </div>
+
+    <Chat catalogId={catalog.id} indexate={indexate} ramase={Math.max(0, limita - folosite)} limita={limita} />
 
     <section class="sectiune">
       <h2>Surse <span class="numar">{surse.length}</span></h2>

@@ -8,6 +8,7 @@ import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { citesteSursa, seteazaFisierSursa } from "../../../../../lib/db";
 import { cheieR2, numeFisierCurat, verificaUpload } from "../../../../../lib/fisiere";
+import { scoateDinIndex } from "../../../../../lib/indexare";
 import { eroare, json } from "../../../../../lib/api";
 
 const origineStraina = (request: Request) => {
@@ -25,6 +26,8 @@ export const PUT: APIRoute = async ({ params, request }) => {
   if (!request.body) return eroare(400, "Cererea nu are corp.");
 
   const nume = numeFisierCurat(request.headers.get("x-nume-fisier"), `${sursa.titlu}.pdf`);
+  // PDF nou = document nou la Google; cel vechi (daca era) se scoate, iar clientul porneste indexarea.
+  if (sursa.doc_google || sursa.indexare !== "neindexat") await scoateDinIndex(env, sursa);
   await env.FISIERE.put(cheieR2("pdf", id), request.body, { httpMetadata: { contentType: v.tip } });
   const actualizata = await seteazaFisierSursa(env.DB, id, nume, v.marime);
   if (!actualizata) {
@@ -39,6 +42,7 @@ export const DELETE: APIRoute = async ({ params, request }) => {
   const id = params.id ?? "";
   const sursa = await citesteSursa(env.DB, id);
   if (!sursa) return eroare(404, "Sursa nu există.");
+  await scoateDinIndex(env, sursa);
   await env.FISIERE.delete(cheieR2("pdf", id));
   await seteazaFisierSursa(env.DB, id, null, null);
   return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });

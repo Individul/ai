@@ -15,6 +15,8 @@
 //   audio/:id                  actualizeaza metadatele
 //   audio/:id/sterge
 //   audio/:id/muta?dir=sus|jos
+//   utilizator/:email          limita_zi, blocat, nota (pagina /admin/consum)
+//   setari                     limita_zi_implicita, model
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import {
@@ -22,7 +24,9 @@ import {
   creeazaCatalog, mutaAudio, mutaCatalog, mutaSursa, seteazaStareCatalog, stergeAudio, stergeSursa,
 } from "../../../lib/db";
 import { cheieR2 } from "../../../lib/fisiere";
-import { esteStare, slug, valideazaAudio, valideazaCatalog, valideazaSursa } from "../../../lib/validare";
+import { scoateDinIndex } from "../../../lib/indexare";
+import { esteModel, esteStare, slug, valideazaAudio, valideazaCatalog, valideazaSursa } from "../../../lib/validare";
+import { seteazaSetare, seteazaUtilizator } from "../../../lib/consum";
 
 const text = (s: string, status: number, extra: Record<string, string> = {}) =>
   new Response(`${s}\n`, { status, headers: { "content-type": "text/plain; charset=utf-8", ...extra } });
@@ -107,6 +111,7 @@ export const POST: APIRoute = async ({ params, request, url, redirect }) => {
       return inapoi({ ok: true });
     }
     if (actiune === "sterge") {
+      if (sursa.doc_google) await scoateDinIndex(env, sursa);
       if (sursa.fisier_nume) await env.FISIERE.delete(cheieR2("pdf", id));
       await stergeSursa(env.DB, id);
       return inapoi({ ok: true });
@@ -142,6 +147,33 @@ export const POST: APIRoute = async ({ params, request, url, redirect }) => {
       return inapoi({ ok: true });
     }
     return text("Acțiune necunoscută.", 404);
+  }
+
+  // ---------------------------------------------------------------- consum
+  if (fel === "utilizator" && id) {
+    const email = decodeURIComponent(id).trim().toLowerCase();
+    const laConsum = (r: { ok: true } | { eroare: string }) =>
+      redirect("/admin/consum?" + ("eroare" in r ? `eroare=${encodeURIComponent(r.eroare)}` : "ok=1"), 303);
+    if (!email.includes("@")) return laConsum({ eroare: "Adresă de e-mail invalidă." });
+    const brut = (f.limita_zi ?? "").trim();
+    const limita_zi = brut === "" ? null : Number(brut);
+    if (limita_zi !== null && (!Number.isInteger(limita_zi) || limita_zi < 0 || limita_zi > 10_000)) {
+      return laConsum({ eroare: "Limita trebuie să fie un număr întreg (sau gol = implicit)." });
+    }
+    await seteazaUtilizator(env.DB, email, { limita_zi, blocat: f.blocat === "1", nota: (f.nota ?? "").trim() || null });
+    return laConsum({ ok: true });
+  }
+
+  if (fel === "setari") {
+    const laConsum = (r: { ok: true } | { eroare: string }) =>
+      redirect("/admin/consum?" + ("eroare" in r ? `eroare=${encodeURIComponent(r.eroare)}` : "ok=1"), 303);
+    const limita = Number((f.limita_zi_implicita ?? "").trim());
+    if (!Number.isInteger(limita) || limita < 0 || limita > 10_000) return laConsum({ eroare: "Limita implicită trebuie să fie un număr întreg." });
+    const model = (f.model ?? "").trim();
+    if (!esteModel(model)) return laConsum({ eroare: "Model necunoscut." });
+    await seteazaSetare(env.DB, "limita_zi_implicita", String(limita));
+    await seteazaSetare(env.DB, "model", model);
+    return laConsum({ ok: true });
   }
 
   return text("Acțiune necunoscută.", 404);

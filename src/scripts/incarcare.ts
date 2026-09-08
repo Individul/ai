@@ -56,13 +56,50 @@ for (const input of document.querySelectorAll<HTMLInputElement>("input[data-pdf-
         "content-type": "application/pdf",
         "x-nume-fisier": antet(fisier.name),
       }, (p) => stare(iesire, `se încarcă… ${Math.round(p * 100)}%`));
-      if (r.status === 200) { stare(iesire, "încărcat", "ok"); location.reload(); return; }
+      if (r.status === 200) {
+        stare(iesire, "încărcat; se indexează…", "ok");
+        await indexeaza(id, iesire);
+        location.reload();
+        return;
+      }
       stare(iesire, mesajEroare(r), "eroare");
     } catch (e) {
       stare(iesire, (e as Error).message, "eroare");
     }
     input.disabled = false;
     input.value = "";
+  });
+}
+
+// --- Indexare in Gemini File Search: porneste, apoi intreaba starea la 3 s pana se termina.
+async function indexeaza(id: string, iesire: HTMLElement | null): Promise<void> {
+  const r = await fetch(`/api/admin/surse/${id}/indexeaza`, { method: "POST" });
+  if (!r.ok) {
+    let mesaj = `Eroare ${r.status}.`;
+    try { mesaj = ((await r.json()) as { eroare?: string }).eroare ?? mesaj; } catch { /* nu e JSON */ }
+    stare(iesire, mesaj, "eroare");
+    return;
+  }
+  for (let i = 0; i < 60; i++) {
+    await new Promise((res) => setTimeout(res, 3000));
+    const s = await fetch(`/api/admin/surse/${id}/indexeaza`);
+    if (!s.ok) { stare(iesire, `Verificarea a eșuat (${s.status}).`, "eroare"); return; }
+    const d = (await s.json()) as { indexare: string; mesaj: string | null };
+    if (d.indexare === "gata") { stare(iesire, "indexat", "ok"); return; }
+    if (d.indexare === "eroare") { stare(iesire, d.mesaj ?? "eroare la indexare", "eroare"); return; }
+    stare(iesire, `se indexează… (${(i + 1) * 3}s)`);
+  }
+  stare(iesire, "încă se indexează; reîncarcă pagina mai târziu");
+}
+
+for (const b of document.querySelectorAll<HTMLButtonElement>("button[data-indexeaza]")) {
+  b.addEventListener("click", async () => {
+    const id = b.dataset.indexeaza ?? "";
+    const iesire = b.closest("form")?.querySelector<HTMLElement>("[data-stare]") ?? null;
+    b.disabled = true;
+    stare(iesire, "se trimite la indexare…");
+    await indexeaza(id, iesire);
+    location.reload();
   });
 }
 

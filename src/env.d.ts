@@ -15,6 +15,8 @@ declare namespace Cloudflare {
     ACCESS_AUD?: string;
     // Adresele care pot intra la /admin, separate prin virgula. Goala = nimeni.
     ADMIN_EMAILS?: string;
+    // Cheia Gemini API (secret pe Worker, .dev.vars local). Fara ea, chatul si indexarea raspund 503.
+    GEMINI_API_KEY?: string;
     // Doar in .dev.vars, pentru dezvoltare locala. Ignorat in productie.
     DEV_EMAIL?: string;
   }

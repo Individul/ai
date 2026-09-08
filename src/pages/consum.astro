@@ -1,0 +1,62 @@
+---
+// Consumul propriu: cate intrebari azi, limita, ultimele intrebari cu raspunsuri.
+import { env } from "cloudflare:workers";
+import Base from "../layouts/Base.astro";
+import { intrebariAzi, istoricUtilizator, limitaPentru } from "../lib/consum";
+import { aziChisinau, fmtMoment } from "../lib/data";
+import { listeazaCataloage } from "../lib/db";
+import { randeazaMarkdown } from "../lib/markdown";
+
+const email = Astro.locals.email;
+const zi = aziChisinau();
+const [folosite, limita, istoric, cataloage] = await Promise.all([
+  intrebariAzi(env.DB, email, zi), limitaPentru(env.DB, email), istoricUtilizator(env.DB, email, 50),
+  listeazaCataloage(env.DB, { cuArhivate: true }),
+]);
+const numeCatalog = new Map(cataloage.map((c) => [c.id, c.titlu]));
+const ramase = Math.max(0, limita - folosite);
+---
+
+<Base title="Consumul meu · Cataloage">
+  <h1>Consumul meu</h1>
+  <p class="rezumat">
+    Azi ai pus <strong>{folosite}</strong> {folosite === 1 ? "întrebare" : "întrebări"} din <strong>{limita}</strong>.
+    Mai ai <strong>{ramase}</strong>. Limita se resetează la miezul nopții.
+  </p>
+
+  <h2>Ultimele întrebări</h2>
+  {istoric.length === 0 ? (
+    <p class="gol">Nicio întrebare încă. Deschide un catalog și întreabă.</p>
+  ) : (
+    <ul class="lista">
+      {istoric.map((i) => (
+        <li class:list={[i.stare]}>
+          <div class="meta">
+            <span>{fmtMoment(i.creat_la)}</span>
+            <span>·</span>
+            <span>{numeCatalog.get(i.catalog_id) ?? "catalog"}</span>
+            {i.stare === "refuzat" && <span class="eticheta">refuzată, limita atinsă</span>}
+            {i.stare === "eroare" && <span class="eticheta">eroare</span>}
+          </div>
+          <p class="intrebare">{i.intrebare}</p>
+          {i.stare === "ok" && <div class="proza raspuns" set:html={randeazaMarkdown(i.raspuns)} />}
+        </li>
+      ))}
+    </ul>
+  )}
+</Base>
+
+<style>
+  h1 { margin-bottom: 12px; }
+  h2 { margin: 32px 0 14px; }
+  .rezumat { color: var(--text-2); font-size: 17px; }
+  .rezumat strong { color: var(--text); }
+  .gol { color: var(--muted); }
+  .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  li { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 16px; background: var(--bg-2); border: 1px solid var(--line); }
+  li.refuzat, li.eroare { opacity: 0.7; }
+  .meta { display: flex; gap: 8px; flex-wrap: wrap; color: var(--faint); font-size: 12.5px; font-weight: 600; }
+  .eticheta { color: var(--coral); }
+  .intrebare { font-weight: 700; }
+  .raspuns { font-size: 15px; }
+</style>

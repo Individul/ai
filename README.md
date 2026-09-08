@@ -40,7 +40,7 @@ Stare (8 septembrie 2026): făcută. D1 `ai` (id în `wrangler.jsonc`), bucket R
 
 1. `npx wrangler d1 create ai` → `database_id` în `wrangler.jsonc`; `npx wrangler r2 bucket create ai-fisiere`; `npm run migrate:remote`.
 2. Zero Trust → Access → Applications → Self-hosted: nume `Cataloage`, domeniu `ai.dumitru.cloud`, sesiune 1 lună, doar One-time PIN. Policy „Colegi”: Allow, Include → Emails. Copiază **Application Audience (AUD) Tag**.
-3. `wrangler.jsonc`: `vars.ACCESS_TEAM_DOMAIN` și `vars.ADMIN_EMAILS`; apoi `npx wrangler secret put ACCESS_AUD`, `npx wrangler secret put GEMINI_API_KEY` (cheie din Google AI Studio, pe un proiect cu facturare) și `npx wrangler secret put ZAI_API_KEY` (consola z.ai, planul de coding). `DEV_EMAIL` nu se pune **niciodată** pe Worker.
+3. `wrangler.jsonc`: `vars.ACCESS_TEAM_DOMAIN` și `vars.ADMIN_EMAILS`; apoi `npx wrangler secret put ACCESS_AUD`, `npx wrangler secret put GEMINI_API_KEY` (cheie din Google AI Studio, pe un proiect cu facturare) și `npx wrangler secret put ZAI_API_KEY` (consola z.ai, planul de coding). Pe Windows, nu lipi cheia la promptul interactiv (Ctrl+V poate ajunge ca un caracter de control, iar cererile pică cu „Network connection lost”); trimite-o prin stdin: `(Get-Content .dev.vars | Where-Object { $_ -like 'ZAI_API_KEY=*' }) -replace '^ZAI_API_KEY=','' | npx wrangler secret put ZAI_API_KEY`. `DEV_EMAIL` nu se pune **niciodată** pe Worker.
 4. `npm run deploy`. Domeniul custom (DNS + certificat) apare din `routes` la primul deploy. `*.workers.dev` rămâne activ, dar cererile de acolo nu au JWT și primesc 403.
 
 ### Chat

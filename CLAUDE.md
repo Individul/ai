@@ -20,7 +20,7 @@ Hub de cataloage de legislație pentru colegi (ai.dumitru.cloud). Astro `output:
 
 ## Development
 
-Prima dată: `cp .dev.vars.example .dev.vars` (completează `GEMINI_API_KEY` și/sau `ZAI_API_KEY`) și `npm run migrate:local`. În producție cheile sunt secrete pe Worker (`npx wrangler secret put ZAI_API_KEY`).
+Prima dată: `cp .dev.vars.example .dev.vars` (completează `GEMINI_API_KEY` și/sau `ZAI_API_KEY`) și `npm run migrate:local`. În producție cheile sunt secrete pe Worker. **Capcană (Windows, 8 sept. 2026):** la promptul interactiv al `wrangler secret put`, Ctrl+V a fost înregistrat ca un singur caracter de control (cod 22), nu ca lipire; orice cerere cu acel antet `Authorization` pica pe loc cu „Network connection lost”. Secretele se pun prin stdin, din `.dev.vars`: `(Get-Content .dev.vars | Where-Object { $_ -like 'ZAI_API_KEY=*' }) -replace '^ZAI_API_KEY=','' | npx wrangler secret put ZAI_API_KEY`. Verificat pe viu: de pe rețeaua Cloudflare, un context de 2 M caractere (676 k tokeni) pe GLM-5.3-Flash răspunde în ≈ 42 s.
 
 Pentru verificări vizuale folosește `npm run dev:worker` (port 8787), care servește build-ul real. `astro dev` cu adaptorul Cloudflare servește uneori paginile fără stiluri (rulează în workerd și pierde mediul de dev la pornire rece); rutele, middleware-ul și API-ul merg corect.
 

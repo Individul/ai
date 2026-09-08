@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { creeazaCatalog } from "./db";
 import {
-  atingeVizita, citesteUtilizator, consumUtilizator, costUltimele30Zile, esteBlocat, fmtCost, inregistreazaIntrebare, intrebariAzi,
+  atingeVizita, citesteUtilizator, consumUtilizator, costUltimele30Zile, esteBlocat, fmtCost, inregistreazaIntrebare, intrebariAzi, istoricCatalog,
   istoricUtilizator, limitaPentru, raportUtilizatori, seteazaSetare, seteazaUtilizator,
 } from "./consum";
 
@@ -112,5 +112,19 @@ describe("consumUtilizator", () => {
     const r = await consumUtilizator(env.DB, A, "2026-09-08");
     expect(r).toEqual({ azi: 1, zile30: 2, total: 3, cost_azi: 7200, cost_30: 10800, cost_total: 14400, tokens_total: 30400 });
     expect(await consumUtilizator(env.DB, "nimeni@x.md", "2026-09-08")).toMatchObject({ total: 0, cost_total: 0 });
+  });
+});
+
+describe("istoricCatalog", () => {
+  it("intoarce doar intrebarile reusite ale utilizatorului din catalogul dat, cronologic, ultimele n", async () => {
+    const c = await creeazaCatalog(env.DB, "c3", { titlu: "C3" });
+    const alt = await creeazaCatalog(env.DB, "c4", { titlu: "C4" });
+    const i1 = await intrebare(A, c.id, "2026-09-06");
+    await intrebare(A, c.id, "2026-09-07", "eroare");
+    const i2 = await intrebare(A, c.id, "2026-09-08");
+    await intrebare(A, alt.id, "2026-09-08");
+    await intrebare(B, c.id, "2026-09-08");
+    expect((await istoricCatalog(env.DB, A, c.id)).map((i) => i.id)).toEqual([i1.id, i2.id]);
+    expect((await istoricCatalog(env.DB, A, c.id, 1)).map((i) => i.id)).toEqual([i2.id]);
   });
 });

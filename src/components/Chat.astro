@@ -89,10 +89,13 @@ const admin = Astro.locals.admin;
   .chat .anterioare h3 { color: var(--faint); font-family: var(--body); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
   .chat .mai-multe { align-self: flex-start; margin-top: -12px; }
   .chat .mai-multe:disabled { opacity: 0.5; cursor: default; }
+  /* Strans: intrebarea pe un singur rand, taiata cu „…”; deschis: textul intreg. Altfel 5 intrebari lungi umplu pagina. */
   .chat details.vechi summary {
     cursor: pointer; list-style: none; color: var(--muted); font-size: 15px; font-weight: 600; line-height: 1.4; padding: 4px 0;
+    display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color 0.15s, text-decoration-color 0.15s;
   }
+  .chat details.vechi[open] summary { white-space: normal; }
   .chat details.vechi summary::-webkit-details-marker { display: none; }
   .chat details.vechi summary::before { content: "›"; display: inline-block; width: 16px; color: var(--faint); transition: transform 0.15s; }
   .chat details.vechi[open] summary::before { transform: rotate(90deg); }

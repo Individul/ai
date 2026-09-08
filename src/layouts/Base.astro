@@ -140,16 +140,16 @@ const email = Astro.locals.email;
       /* Butoane */
       .buton {
         display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-        padding: 9px 16px; border-radius: 999px; border: 1px solid var(--line);
-        background: transparent; color: var(--text-2); font-weight: 600; font-size: 14px; cursor: pointer;
+        padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line);
+        background: transparent; color: var(--text-2); font-weight: 600; font-size: 13.5px; cursor: pointer;
         transition: border-color 0.15s, color 0.15s, background 0.15s;
       }
       .buton:hover { border-color: var(--violet); color: var(--violet); }
-      .buton.principal { background: var(--accent, var(--violet)); border-color: transparent; color: var(--pe-accent); font-size: 15px; padding: 11px 20px; }
+      .buton.principal { background: var(--accent, var(--violet)); border-color: transparent; color: var(--pe-accent); font-size: 14px; padding: 8px 18px; }
       .buton.principal:hover { filter: brightness(1.08); color: var(--pe-accent); }
       .buton.periculos:hover { border-color: var(--coral); color: var(--coral); }
       .buton[aria-disabled="true"], .buton:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
-      .buton.mic { padding: 5px 10px; font-size: 13px; }
+      .buton.mic { padding: 4px 10px; font-size: 12.5px; }
 
       /* Insigne de stare */
       .insigna {

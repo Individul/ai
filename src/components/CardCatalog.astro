@@ -1,5 +1,6 @@
 ---
-// Un card din grila de pe prima pagina, in stilul cardurilor din portofoliu.
+// Un card din grila de pe prima pagina: plat, cu chenar fin; culoarea catalogului apare doar
+// in pictograma mica si la hover.
 import Pictograma from "./Pictograma.astro";
 import type { CatalogRezumat } from "../lib/db";
 import { ETICHETE_STARE } from "../lib/validare";
@@ -14,45 +15,40 @@ const plural = (n: number, unu: string, multe: string) => `${n} ${n === 1 ? unu 
 
 <a class:list={["card", `culoare-${c.culoare}`]} href={`/c/${c.slug}`}>
   <div class="sus">
-    <div class="icon"><Pictograma nume={c.pictograma} /></div>
+    <div class="icon"><Pictograma nume={c.pictograma} marime={18} /></div>
     <span class:list={["insigna", c.stare]}>{ETICHETE_STARE[c.stare]}</span>
   </div>
-  <div class="corp">
-    <h2>{c.titlu}</h2>
-    {c.descriere && <p class="descriere">{c.descriere}</p>}
-  </div>
+  <h2>{c.titlu}</h2>
+  {c.descriere && <p class="descriere">{c.descriere}</p>}
   <div class="jos">
     <span>{plural(c.nr_surse, "sursă", "surse")}</span>
-    <span>·</span>
-    <span>{plural(c.nr_audio, "audio", "audio")}</span>
-    <span class="data">actualizat {fmtMoment(c.actualizat_la)}</span>
+    {c.nr_audio > 0 && <span>· {plural(c.nr_audio, "audio", "audio")}</span>}
+    <span class="data">{fmtMoment(c.actualizat_la)}</span>
   </div>
 </a>
 
 <style>
   .card {
-    display: flex; flex-direction: column; gap: 18px; min-height: 240px; padding: 26px;
-    border-radius: 24px; border: 1px solid rgba(var(--accent-rgb), 0.35);
-    background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.20), rgba(var(--accent-rgb), 0.05));
-    transition: transform 0.18s ease, border-color 0.18s ease;
+    display: flex; flex-direction: column; gap: 10px; padding: 22px 24px 20px;
+    border-radius: 18px; border: 1px solid var(--line); background: var(--bg-2);
+    transition: border-color 0.18s ease, transform 0.18s ease;
   }
-  .card:hover { transform: translateY(-3px); border-color: rgba(var(--accent-rgb), 0.7); }
-  .sus { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .card:hover { border-color: rgba(var(--accent-rgb), 0.6); transform: translateY(-2px); }
+  .sus { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
   .icon {
-    width: 50px; height: 50px; border-radius: 15px; display: grid; place-items: center;
-    background: var(--accent); color: var(--pe-accent);
+    width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center;
+    background: rgba(var(--accent-rgb), 0.16); color: var(--accent);
   }
-  .corp { display: flex; flex-direction: column; gap: 8px; }
-  h2 { font-size: 26px; }
+  h2 { font-size: 22px; letter-spacing: -0.01em; }
+  .card:hover h2 { color: var(--accent); }
   .descriere {
-    color: var(--text-2); font-size: 15px; line-height: 1.5;
+    color: var(--muted); font-size: 14.5px; line-height: 1.5;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   }
   .jos {
-    margin-top: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-    font-size: 13px; font-weight: 600; color: var(--accent);
+    margin-top: auto; padding-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    font-size: 13px; font-weight: 600; color: var(--faint);
   }
-  .jos .data { margin-left: auto; color: var(--faint); font-weight: 500; }
-  @media (max-width: 560px) { .card { min-height: 0; padding: 22px; } h2 { font-size: 22px; } }
+  .jos .data { margin-left: auto; font-weight: 500; }
   @media (prefers-reduced-motion: reduce) { .card { transition: none; } .card:hover { transform: none; } }
 </style>

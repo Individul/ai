@@ -11,11 +11,7 @@ const cataloage = await listeazaCataloage(env.DB);
 <Base title="Cataloage" lat>
   <section class="antet">
     <h1>Cataloage de legislație</h1>
-    <p>
-      Fiecare catalog adună actele dintr-un domeniu. Deschizi catalogul, pui întrebarea și primești
-      răspunsul cu trimitere la articol și la pagina din act. Tot acolo găsești sursele în PDF
-      și rezumatele audio.
-    </p>
+    <p>Alege un catalog, pune întrebarea și primești răspunsul cu trimitere la articol și la pagina din act.</p>
   </section>
 
   {cataloage.length === 0 ? (
@@ -28,9 +24,9 @@ const cataloage = await listeazaCataloage(env.DB);
 </Base>
 
 <style>
-  .antet { max-width: 720px; margin-bottom: 32px; display: flex; flex-direction: column; gap: 12px; }
-  .antet p { color: var(--text-2); font-size: 17px; }
-  .grila { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 22px; }
+  .antet { max-width: 640px; margin-bottom: 28px; display: flex; flex-direction: column; gap: 8px; }
+  .antet p { color: var(--muted); font-size: 16px; }
+  .grila { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
   .gol { color: var(--muted); padding: 40px 0; text-align: center; }
-  @media (max-width: 560px) { .grila { grid-template-columns: 1fr; gap: 16px; } h1 { font-size: 28px; } }
+  @media (max-width: 560px) { .grila { grid-template-columns: 1fr; gap: 12px; } h1 { font-size: 28px; } }
 </style>

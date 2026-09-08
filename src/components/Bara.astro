@@ -1,7 +1,15 @@
 ---
 // Bara de sus: brand si navigare. "Admin" apare doar pentru administrator.
+// Langa "Consum" e costul propriu de la inceput; langa "Admin", costul tuturor.
+import { env } from "cloudflare:workers";
+import { costPropriu, costTotalToti, fmtCost } from "../lib/consum";
+
 const cale = Astro.url.pathname;
 const admin = Astro.locals.admin;
+const [propriu, toti] = await Promise.all([
+  costPropriu(env.DB, Astro.locals.email),
+  admin ? costTotalToti(env.DB) : Promise.resolve(0),
+]);
 const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsWith("/c/") : cale.startsWith(prefix));
 ---
 
@@ -9,9 +17,9 @@ const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsW
   <a class="brand" href="/">Cataloage<span>.</span></a>
   <nav aria-label="Navigare principală">
     <a href="/" class:list={{ activ: activ("/") }}>Cataloage</a>
-    <a href="/consum" class:list={{ activ: activ("/consum") }}>Consum</a>
+    <a href="/consum" class:list={{ activ: activ("/consum") }}>Consum <span class="suma" title="costul tău de la început">{fmtCost(propriu)}</span></a>
     <a href="/acces" class:list={{ activ: activ("/acces") }}>Cum obțin acces</a>
-    {admin && <a href="/admin" class:list={["admin", { activ: activ("/admin") }]}>Admin</a>}
+    {admin && <a href="/admin" class:list={["admin", { activ: activ("/admin") }]}>Admin <span class="suma" title="costul tuturor de la început">{fmtCost(toti)}</span></a>}
   </nav>
 </header>
 
@@ -30,6 +38,8 @@ const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsW
   nav a:hover { color: var(--text); background: var(--line); }
   nav a.activ { color: var(--violet); }
   nav a.admin { color: var(--coral); }
+  .suma { margin-left: 6px; font-size: 12px; font-weight: 700; color: var(--faint); font-variant-numeric: tabular-nums; }
+  nav a.activ .suma, nav a:hover .suma { color: inherit; opacity: 0.75; }
   nav a.admin.activ { background: rgba(244, 135, 106, 0.12); }
   @media (max-width: 560px) {
     .bara { gap: 10px; padding: 0 14px; }

@@ -235,6 +235,18 @@ export async function consumUtilizator(db: D1Database, email: string, azi: strin
   return r ?? { azi: 0, zile30: 0, total: 0, cost_azi: 0, cost_30: 0, cost_total: 0, tokens_total: 0 };
 }
 
+// Costul total al tuturor (de la inceput), pentru bara de sus a adminului.
+export async function costTotalToti(db: D1Database): Promise<number> {
+  const r = await db.prepare("SELECT coalesce(sum(cost_microdolari), 0) AS c FROM intrebari").first<{ c: number }>();
+  return r?.c ?? 0;
+}
+
+// Costul propriu de la inceput, pentru bara de sus.
+export async function costPropriu(db: D1Database, email: string): Promise<number> {
+  const r = await db.prepare("SELECT coalesce(sum(cost_microdolari), 0) AS c FROM intrebari WHERE email = ?").bind(email).first<{ c: number }>();
+  return r?.c ?? 0;
+}
+
 // Costul total (microdolari) al intrebarilor din ultimele 30 de zile, pentru antetul raportului.
 export async function costUltimele30Zile(db: D1Database, azi: string): Promise<number> {
   const r = await db

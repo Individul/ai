@@ -210,6 +210,31 @@ export async function raportUtilizatori(db: D1Database, azi: string): Promise<Ra
   return r.results;
 }
 
+// Totalurile unui singur utilizator (pagina /consum): intrebari si cost pe azi / 30 zile / tot.
+export interface ConsumPropriu {
+  azi: number; zile30: number; total: number;
+  cost_azi: number; cost_30: number; cost_total: number;
+  tokens_total: number;
+}
+
+export async function consumUtilizator(db: D1Database, email: string, azi: string): Promise<ConsumPropriu> {
+  const de30 = ziMinus(azi, 29);
+  const r = await db
+    .prepare(
+      `SELECT coalesce(sum(CASE WHEN stare = 'ok' AND zi = ?1 THEN 1 ELSE 0 END), 0) AS azi,
+              coalesce(sum(CASE WHEN stare = 'ok' AND zi >= ?2 THEN 1 ELSE 0 END), 0) AS zile30,
+              coalesce(sum(CASE WHEN stare = 'ok' THEN 1 ELSE 0 END), 0) AS total,
+              coalesce(sum(CASE WHEN zi = ?1 THEN cost_microdolari ELSE 0 END), 0) AS cost_azi,
+              coalesce(sum(CASE WHEN zi >= ?2 THEN cost_microdolari ELSE 0 END), 0) AS cost_30,
+              coalesce(sum(cost_microdolari), 0) AS cost_total,
+              coalesce(sum(tokens_intrare + tokens_iesire), 0) AS tokens_total
+       FROM intrebari WHERE email = ?3`
+    )
+    .bind(azi, de30, email)
+    .first<ConsumPropriu>();
+  return r ?? { azi: 0, zile30: 0, total: 0, cost_azi: 0, cost_30: 0, cost_total: 0, tokens_total: 0 };
+}
+
 // Costul total (microdolari) al intrebarilor din ultimele 30 de zile, pentru antetul raportului.
 export async function costUltimele30Zile(db: D1Database, azi: string): Promise<number> {
   const r = await db

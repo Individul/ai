@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { creeazaCatalog } from "./db";
 import {
-  atingeVizita, citesteUtilizator, costUltimele30Zile, esteBlocat, fmtCost, inregistreazaIntrebare, intrebariAzi,
+  atingeVizita, citesteUtilizator, consumUtilizator, costUltimele30Zile, esteBlocat, fmtCost, inregistreazaIntrebare, intrebariAzi,
   istoricUtilizator, limitaPentru, raportUtilizatori, seteazaSetare, seteazaUtilizator,
 } from "./consum";
 
@@ -96,5 +96,19 @@ describe("jurnal si raport", () => {
   it("formateaza costul", () => {
     expect(fmtCost(3600)).toBe("0,36 ¢");
     expect(fmtCost(1_250_000)).toBe("1,25 $");
+  });
+});
+
+describe("consumUtilizator", () => {
+  it("aduna intrebarile si costul propriu pe azi / 30 zile / tot", async () => {
+    const c = await creeazaCatalog(env.DB, "c2", { titlu: "C2" });
+    await intrebare(A, c.id, "2026-09-08");
+    await intrebare(A, c.id, "2026-08-20");
+    await intrebare(A, c.id, "2026-07-01");
+    await intrebare(A, c.id, "2026-09-08", "eroare");
+    await intrebare(B, c.id, "2026-09-08");
+    const r = await consumUtilizator(env.DB, A, "2026-09-08");
+    expect(r).toEqual({ azi: 1, zile30: 2, total: 3, cost_azi: 7200, cost_30: 10800, cost_total: 14400, tokens_total: 30400 });
+    expect(await consumUtilizator(env.DB, "nimeni@x.md", "2026-09-08")).toMatchObject({ total: 0, cost_total: 0 });
   });
 });

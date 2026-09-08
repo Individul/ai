@@ -7,6 +7,7 @@
 	// Adaugarea unei rute dezactiveaza implicit URL-ul workers.dev; il pastram activ.
 	// E sigur: cererile spre *.workers.dev nu trec prin Access, deci nu au JWT -> 403.
 	"workers_dev": true,
+	"preview_urls": false,
 	// Domeniul public. Cloudflare creeaza singur inregistrarea DNS si certificatul.
 	"routes": [{ "pattern": "ai.dumitru.cloud", "custom_domain": true }],
 	"assets": {

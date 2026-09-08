@@ -8,5 +8,8 @@ export default defineConfig({
   // Domeniul oficial; adresele absolute pornesc de aici.
   site: 'https://ai.dumitru.cloud',
   output: 'server',
-  adapter: cloudflare(),
+  // Fara sesiuni Astro: identitatea vine din Cloudflare Access, iar adaptorul ar cere altfel
+  // un namespace KV ("SESSION") la deploy. Fara procesare de imagini (nu folosim <Image>).
+  session: false,
+  adapter: cloudflare({ imageService: 'passthrough' }),
 });

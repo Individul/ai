@@ -94,6 +94,68 @@ export async function intreabaZai(cheie: string, baza: string, c: CerereZai): Pr
   return rasp;
 }
 
+// ---------------------------------------------------------------- cota planului
+
+// Cota planului de coding, de la endpointul folosit de uneltele terte (nedocumentat oficial):
+// GET https://api.z.ai/api/monitor/usage/quota/limit, cu cheia direct in Authorization (fara Bearer).
+// Verificat pe viu la 8 sept. 2026: data.level = "lite"; data.limits[] cu type CREDIT_LIMIT,
+// unit 3 / number 5 = fereastra de 5 ore, unit 6 / number 1 = saptamana; usage = plafonul,
+// currentValue = folosit, percentage, nextResetTime (ms). Include tot ce merge pe cheie
+// (si Claude Code), deci e procentul real. Daca endpointul dispare, cotaZai intoarce null.
+export const URL_COTA_ZAI = "https://api.z.ai/api/monitor/usage/quota/limit";
+
+export interface FereastraCota {
+  eticheta: string;   // "5 h" | "săpt."
+  folosit: number;
+  total: number;
+  procent: number;
+  reset: string;      // ISO
+}
+
+export interface Cota {
+  nivel: string;      // lite | pro | max
+  ferestre: FereastraCota[];
+}
+
+function etichetaFereastra(unit: number, number: number): string {
+  if (unit === 3) return `${number} h`;
+  if (unit === 6) return number === 1 ? "săpt." : `${number} săpt.`;
+  return `${number}/${unit}`;
+}
+
+export function extrageCota(d: any): Cota | null {
+  const limite: any[] = Array.isArray(d?.data?.limits) ? d.data.limits : [];
+  const ferestre = limite
+    .filter((l) => l?.type === "CREDIT_LIMIT")
+    .map((l) => ({
+      eticheta: etichetaFereastra(Number(l.unit), Number(l.number)),
+      folosit: Number(l.currentValue ?? 0),
+      total: Number(l.usage ?? 0),
+      procent: Number(l.percentage ?? 0),
+      reset: new Date(Number(l.nextResetTime ?? 0)).toISOString(),
+    }));
+  if (!ferestre.length) return null;
+  return { nivel: String(d.data.level ?? ""), ferestre };
+}
+
+// Cache pe izolat, 60 s: bara de sus o cere la fiecare pagina, iar cota nu se schimba mai repede.
+// Esecul se tine minte tot 60 s, ca un endpoint cazut sa nu incetineasca fiecare pagina.
+let cotaCache: { la: number; cota: Cota | null } | null = null;
+const CACHE_COTA_MS = 60_000;
+
+export async function cotaZai(cheie: string): Promise<Cota | null> {
+  if (cotaCache && Date.now() - cotaCache.la < CACHE_COTA_MS) return cotaCache.cota;
+  let cota: Cota | null = null;
+  try {
+    const r = await fetch(URL_COTA_ZAI, { headers: { authorization: cheie, "accept-language": "en-US,en" }, signal: AbortSignal.timeout(5_000) });
+    cota = r.ok ? extrageCota(await r.json()) : null;
+  } catch {
+    cota = null;
+  }
+  cotaCache = { la: Date.now(), cota };
+  return cota;
+}
+
 // Creditele planului de coding: (intrare fara cache x i + cache x c + iesire x o) / 10.000,
 // cu multiplicatorii modelului din TARIFE. 0 pentru modelele fara credite (Gemini).
 export function crediteZai(model: string, tokensIntrare: number, tokensCache: number, tokensIesire: number): number {

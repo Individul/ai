@@ -5,8 +5,9 @@ import Base from "../../layouts/Base.astro";
 import {
   citesteBuget, citesteSetare, costUltimele30Zile, crediteUltimele7Zile, fmtCost, fmtCredite, limitaImplicita, raportUtilizatori,
 } from "../../lib/consum";
-import { aziChisinau, fmtZi } from "../../lib/data";
+import { aziChisinau, fmtMoment, fmtZi } from "../../lib/data";
 import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, MODELE, TARIFE, motorModel } from "../../lib/validare";
+import { cotaZai } from "../../lib/zai";
 
 const azi = aziChisinau();
 const [raport, limita, model, cost30, credite7, buget] = await Promise.all([
@@ -14,8 +15,10 @@ const [raport, limita, model, cost30, credite7, buget] = await Promise.all([
   crediteUltimele7Zile(env.DB, azi), citesteBuget(env.DB),
 ]);
 const motor = motorModel(model) ?? "gemini";
+// Cota reala a planului (include si Claude Code), de la Z.AI; null daca nu raspunde sau motorul nu e Z.AI.
+const cota = motor === "zai" && env.ZAI_API_KEY ? await cotaZai(env.ZAI_API_KEY) : null;
 // Planul Lite Z.AI: 2.000 de credite la 5 ore, 10.000 pe saptamana, pentru toti la un loc.
-const COTA_SAPTAMANA = 10_000;
+const COTA_SAPTAMANA = cota?.ferestre.find((f) => f.eticheta === "săpt.")?.total ?? 10_000;
 const descriereModel = (m: string) => {
   const t = TARIFE[m]!;
   const tarif = `${t.intrare.toFixed(2)} / ${t.iesire.toFixed(2)} $ per M tokeni`;
@@ -37,6 +40,9 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
       <span><strong>{total30}</strong> în 30 de zile</span>
       <span><strong>{fmtCost(cost30)}</strong> cost în 30 de zile</span>
       <span><strong>{fmtCredite(credite7)}</strong> credite Z.AI în 7 zile, din {fmtCredite(COTA_SAPTAMANA)}</span>
+      {cota && cota.ferestre.map((f) => (
+        <span title={`se resetează ${fmtMoment(f.reset)}`}><strong>{f.procent} %</strong> din cota pe {f.eticheta} ({fmtCredite(f.folosit)} din {fmtCredite(f.total)}, planul {cota.nivel})</span>
+      ))}
     </div>
   </header>
 

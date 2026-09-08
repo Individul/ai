@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { construiesteCerereZai, crediteZai, EroareZai, extrageRaspunsZai, PROMPT_SISTEM_ZAI } from "./zai";
+import { construiesteCerereZai, crediteZai, EroareZai, extrageCota, extrageRaspunsZai, PROMPT_SISTEM_ZAI } from "./zai";
 import { costMicrodolari } from "./gemini";
 
 // Raspuns real de la api.z.ai/api/coding/paas/v4 (8 sept. 2026), cu gandire adaugata ca sa vedem ca o ignoram.
@@ -65,5 +65,34 @@ describe("EroareZai", () => {
     expect(new EroareZai(400, "Prompt exceeds max length", "1261").contextPreaLung).toBe(true);
     expect(new EroareZai(400, "prompt exceeds max length").contextPreaLung).toBe(true);
     expect(new EroareZai(401, "Unauthorized", "1000").contextPreaLung).toBe(false);
+  });
+});
+
+describe("extrageCota", () => {
+  // Raspuns real de la api.z.ai/api/monitor/usage/quota/limit (8 sept. 2026), planul Lite.
+  const COTA = {
+    code: 200, msg: "Operation successful", success: true,
+    data: {
+      level: "lite",
+      limits: [
+        { type: "CREDIT_LIMIT", unit: 3, number: 5, usage: 2000, currentValue: 401, remaining: 1598, percentage: 20, nextResetTime: 1788895064523 },
+        { type: "CREDIT_LIMIT", unit: 6, number: 1, usage: 10000, currentValue: 5174, remaining: 4825, percentage: 51, nextResetTime: 1789194217977 },
+      ],
+    },
+  };
+
+  it("citeste nivelul si ferestrele de 5 ore si o saptamana, cu procent si momentul resetarii", () => {
+    expect(extrageCota(COTA)).toEqual({
+      nivel: "lite",
+      ferestre: [
+        { eticheta: "5 h", folosit: 401, total: 2000, procent: 20, reset: "2026-09-08T19:17:44.523Z" },
+        { eticheta: "săpt.", folosit: 5174, total: 10000, procent: 51, reset: "2026-09-12T06:23:37.977Z" },
+      ],
+    });
+  });
+
+  it("fara date intoarce null; sare peste limitele care nu sunt credite", () => {
+    expect(extrageCota({ code: 401 })).toBeNull();
+    expect(extrageCota({ data: { level: "pro", limits: [{ type: "TOOL_LIMIT", unit: 4, number: 1, usage: 1000, currentValue: 5, percentage: 1, nextResetTime: 0 }] } })).toBeNull();
   });
 });

@@ -66,16 +66,16 @@ export const POST: APIRoute = async ({ params, request, url, redirect }) => {
       return redirect(laCatalog(c.id, { ok: true }), 303);
     }
     const catalog = await citesteCatalog(env.DB, id);
-    if (!catalog) return text("Catalogul nu există.", 404);
+    if (!catalog) return text("Culegerea nu există.", 404);
 
     if (actiune === "") {
       const v = valideazaCatalog(f);
       if (!v.ok) return redirect(laCatalog(id, { eroare: v.eroare }), 303);
       const r = await actualizeazaCatalog(env.DB, id, v.date, f.baza ?? "");
       if (!r.ok && r.motiv === "conflict") {
-        return redirect(laCatalog(id, { eroare: "Catalogul a fost modificat între timp în altă parte. Reîncarcă pagina și reia modificările." }), 303);
+        return redirect(laCatalog(id, { eroare: "Culegerea a fost modificată între timp în altă parte. Reîncarcă pagina și reia modificările." }), 303);
       }
-      if (!r.ok) return text("Catalogul nu există.", 404);
+      if (!r.ok) return text("Culegerea nu există.", 404);
       return redirect(laCatalog(id, { ok: true }), 303);
     }
     if (actiune === "stare") {
@@ -97,7 +97,7 @@ export const POST: APIRoute = async ({ params, request, url, redirect }) => {
     if (!id) {
       const catalogId = f.catalog_id ?? "";
       const catalog = await citesteCatalog(env.DB, catalogId);
-      if (!catalog) return text("Catalogul nu există.", 404);
+      if (!catalog) return text("Culegerea nu există.", 404);
       const v = valideazaSursa(f);
       if (!v.ok) return redirect(laCatalog(catalogId, { eroare: v.eroare }), 303);
       await adaugaSursa(env.DB, catalogId, v.date);

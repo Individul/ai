@@ -10,17 +10,17 @@ import { fmtMoment } from "../../lib/data";
 const cataloage = await listeazaCataloage(env.DB, { cuArhivate: true });
 ---
 
-<Base title="Admin · Cataloage">
+<Base title="Admin · Culegeri">
   <header class="antet">
     <h1>Administrare</h1>
     <nav class="actiuni">
       <a href="/admin/consum">Consum și limite</a>
-      <a class="buton principal" href="/admin/cataloage/nou">+ Catalog nou</a>
+      <a class="buton principal" href="/admin/cataloage/nou">+ Culegere nouă</a>
     </nav>
   </header>
 
   {cataloage.length === 0 ? (
-    <p class="gol">Niciun catalog. Creează primul.</p>
+    <p class="gol">Nicio culegere încă. Creează prima.</p>
   ) : (
     <ul class="lista">
       {cataloage.map((c, i) => (

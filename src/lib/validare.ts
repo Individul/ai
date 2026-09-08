@@ -13,7 +13,8 @@ export type Culoare = (typeof CULORI)[number];
 
 export const STARI = ["activ", "in_lucru", "arhivat"] as const;
 export type Stare = (typeof STARI)[number];
-export const ETICHETE_STARE: Record<Stare, string> = { activ: "Activ", in_lucru: "În lucru", arhivat: "Arhivat" };
+// Etichetele sunt la feminin: in interfata, catalogul se numeste „culegere”.
+export const ETICHETE_STARE: Record<Stare, string> = { activ: "Activă", in_lucru: "În lucru", arhivat: "Arhivată" };
 
 export const PICTOGRAME = ["carte", "balanta", "ciocan", "document", "lacat", "cheie"] as const;
 export type Pictograma = (typeof PICTOGRAME)[number];

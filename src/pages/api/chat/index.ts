@@ -32,14 +32,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .map((s) => ({ intrebare: String(s?.intrebare ?? ""), raspuns: String(s?.raspuns ?? "") }));
 
   const catalog = await citesteCatalog(env.DB, c.date.catalog ?? "");
-  if (!catalog || (catalog.stare === "arhivat" && !locals.admin)) return eroare(404, "Catalogul nu există.");
+  if (!catalog || (catalog.stare === "arhivat" && !locals.admin)) return eroare(404, "Culegerea nu există.");
 
   let model = await citesteSetare(env.DB, "model");
   if (!esteModel(model)) model = "gemini-3.5-flash-lite";
   const motor = motorModel(model) ?? "gemini";
   const surse = await listeazaSurse(env.DB, catalog.id);
   if (disponibilePentruChat(motor, catalog.magazin, surse) === 0) {
-    return eroare(409, "Catalogul nu are încă documente pregătite pentru chat.");
+    return eroare(409, "Culegerea nu are încă documente pregătite pentru chat.");
   }
   if (!(motor === "zai" ? env.ZAI_API_KEY : env.GEMINI_API_KEY)) return eroare(503, "Chatul nu este configurat încă pe server.");
 

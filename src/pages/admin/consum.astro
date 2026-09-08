@@ -69,8 +69,8 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
   <p class="lamurire sus">
     Motorul activ: <strong>{motor === "zai" ? "Z.AI (GLM)" : "Gemini File Search"}</strong>.{" "}
     {motor === "zai"
-      ? "GLM primește textul întregului catalog dacă încape în buget, altfel paginile care se potrivesc cu întrebarea. La 3.000.000 de caractere (≈ 1 M tokeni) o întrebare pe GLM-5.3-Flash costă ≈ 230 de credite din cota planului Lite (2.000 la 5 ore, 10.000 pe săptămână, pentru toți)."
-      : "Modelele GLM cer textul extras din PDF-uri (se face la upload sau din „Extrage textul” în pagina catalogului)."}
+      ? "GLM primește textul întregii culegeri dacă încape în buget, altfel paginile care se potrivesc cu întrebarea. La 3.000.000 de caractere (≈ 1 M tokeni) o întrebare pe GLM-5.3-Flash costă ≈ 230 de credite din cota planului Lite (2.000 la 5 ore, 10.000 pe săptămână, pentru toți)."
+      : "Modelele GLM cer textul extras din PDF-uri (se face la upload sau din „Extrage textul” în pagina culegerii)."}
   </p>
 
   <h2>Utilizatori <span class="numar">{raport.length}</span></h2>

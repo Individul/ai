@@ -5,6 +5,7 @@ Hub de cataloage de legislație pentru colegi (ai.dumitru.cloud). Astro `output:
 ## Convenții
 
 - Totul în română: UI cu diacritice; comentarii, mesaje de commit și nume de fișiere fără diacritice; identificatori în română (`creeazaCatalog`, `verificaUpload`).
+- **În interfață, catalogul se numește „culegere” (plural „culegeri”)**, cu acordurile la feminin („Culegerea nu există”, „Activă”, „Arhivată”); decizia lui Dumitru din 8 sept. 2026, pentru că „cataloage” sună greoi. În cod, în D1 (`cataloage`), în adrese (`/c/`, `/admin/cataloage/`) și în documentele tehnice rămâne „catalog”.
 - Fără `owner`: datele sunt comune tuturor celor din Access. Scrierea e doar pentru admin, iar poarta e **în middleware** (`/admin*`, `/api/admin*`), nu în pagini. Paginile nu citesc `env.ACCESS_*` / `env.ADMIN_EMAILS` direct; identitatea vine din `Astro.locals.email` / `Astro.locals.admin`.
 - Fișierele nu trec niciodată prin `arrayBuffer()` sau `formData()`: upload = `request.body` streamat în `FISIERE.put`, descărcare = `obj.body` în `Response`. Workerul are 128 MB.
 - Obiectul din R2 se scrie înaintea rândului din D1 (audio) și se șterge înaintea rândului (surse, audio); un rând fără fișier nu trebuie să existe.

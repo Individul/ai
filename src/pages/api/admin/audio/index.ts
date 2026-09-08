@@ -20,7 +20,7 @@ export const PUT: APIRoute = async ({ request, url }) => {
 
   const catalogId = url.searchParams.get("catalog") ?? "";
   const catalog = await citesteCatalog(env.DB, catalogId);
-  if (!catalog) return eroare(404, "Catalogul nu există.");
+  if (!catalog) return eroare(404, "Culegerea nu există.");
 
   const v = verificaUpload("audio", request);
   if (!v.ok) return eroare(v.status, v.mesaj);

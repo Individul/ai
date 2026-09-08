@@ -9,7 +9,7 @@ import { eroare, json } from "../../../lib/api";
 
 export const GET: APIRoute = async ({ url, locals }) => {
   const catalog = url.searchParams.get("catalog") ?? "";
-  if (!catalog) return eroare(400, "Lipsește catalogul.");
+  if (!catalog) return eroare(400, "Lipsește culegerea.");
   const n = Math.min(50, Math.max(1, Number(url.searchParams.get("n")) || 5));
   const inainte = url.searchParams.get("inainte") || undefined;
   // Cerem unul in plus doar ca sa stim daca mai sunt; nu il trimitem.

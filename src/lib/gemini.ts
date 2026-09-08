@@ -14,10 +14,10 @@ import type { Citare } from "./consum";
 
 const BAZA = "https://generativelanguage.googleapis.com";
 
-export const PROMPT_SISTEM = `Ești asistentul unui catalog de acte normative din sistemul penitenciar al Republicii Moldova.
+export const PROMPT_SISTEM = `Ești asistentul unei culegeri de acte normative din sistemul penitenciar al Republicii Moldova.
 Răspunzi în limba română, doar pe baza fragmentelor de documente primite prin căutare.
 Citează de fiecare dată articolul, punctul sau alineatul și denumirea actului din care ai luat informația.
-Dacă informația nu se găsește în documente, spune clar „Nu am găsit această informație în documentele catalogului” și nu inventa.
+Dacă informația nu se găsește în documente, spune clar „Nu am găsit această informație în documentele culegerii” și nu inventa.
 Fii concis și precis; nu da interpretări juridice proprii și nu speculezi dincolo de text.`;
 
 export interface Schimb {

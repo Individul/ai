@@ -5,14 +5,14 @@ import FormularCatalog from "../../../components/FormularCatalog.astro";
 const eroare = Astro.url.searchParams.get("eroare");
 ---
 
-<Base title="Catalog nou · Admin">
-  <p class="cale"><a href="/admin">Administrare</a> / Catalog nou</p>
-  <h1>Catalog nou</h1>
+<Base title="Culegere nouă · Admin">
+  <p class="cale"><a href="/admin">Administrare</a> / Culegere nouă</p>
+  <h1>Culegere nouă</h1>
   {eroare && <p class="mesaj eroare">{eroare}</p>}
   <form method="post" action="/admin/actiuni/catalog" class="formular">
     <FormularCatalog />
     <div class="butoane">
-      <button class="buton principal" type="submit">Creează catalogul</button>
+      <button class="buton principal" type="submit">Creează culegerea</button>
       <a class="renunta" href="/admin">renunță</a>
     </div>
   </form>

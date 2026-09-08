@@ -53,7 +53,7 @@ export function disponibilePentruChat(
 export async function raspunde(env: Mediu, i: Intrebare, apelZai: ApelZai = intreabaZai): Promise<Rezultat> {
   if (motorModel(i.model) === "zai") return raspundeZai(env, i, apelZai);
   if (!env.GEMINI_API_KEY) throw new EroareGemini(503, "Cheia Gemini nu este configurată pe server.");
-  if (!i.catalog.magazin) throw new EroareGemini(409, "Catalogul nu are încă documente indexate.");
+  if (!i.catalog.magazin) throw new EroareGemini(409, "Culegerea nu are încă documente indexate.");
   const r = await intreaba(env.GEMINI_API_KEY, { model: i.model, magazin: i.catalog.magazin, istoric: i.istoric, intrebare: i.intrebare });
   return {
     text: r.text, citari: r.citari, tokens_intrare: r.tokens_intrare, tokens_cache: 0, tokens_iesire: r.tokens_iesire,

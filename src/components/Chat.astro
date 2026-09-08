@@ -16,7 +16,7 @@ const admin = Astro.locals.admin;
 <section class="chat" id="chat" data-chat={disponibile > 0 ? catalogId : undefined} data-motor={motor}>
   {disponibile === 0 ? (
     <div class="gol">
-      <p>Catalogul nu are încă documente pregătite pentru chat. Întrebările se pot pune după ce se adaugă PDF-urile actelor.</p>
+      <p>Culegerea nu are încă documente pregătite pentru chat. Întrebările se pot pune după ce se adaugă PDF-urile actelor.</p>
       {admin && (
         <p class="pas-admin">
           <a class="buton" href={`/admin/cataloage/${catalogId}#surse`}>Adaugă sursele și PDF-urile →</a>
@@ -27,13 +27,13 @@ const admin = Astro.locals.admin;
   ) : (
     <>
       <form class="intrebare">
-        <textarea name="intrebare" rows="2" maxlength="2000" placeholder="Întreabă catalogul… de exemplu: ce condiții cere liberarea condiționată?" aria-label="Întrebarea ta" required></textarea>
+        <textarea name="intrebare" rows="2" maxlength="2000" placeholder="Întreabă culegerea… de exemplu: ce condiții cere liberarea condiționată?" aria-label="Întrebarea ta" required></textarea>
         <div class="rand">
           <output class="ramase" data-ramase>{ramase} din {limita} întrebări rămase azi</output>
           <button type="button" class="text" data-sterge hidden>șterge conversația</button>
           <button type="submit" class="buton principal" disabled={ramase === 0}>Întreabă</button>
         </div>
-        <p class="lamurire">Răspunsurile vin doar din actele catalogului, cu trimitere la articol și la pagina din PDF. Verifică întotdeauna în act.</p>
+        <p class="lamurire">Răspunsurile vin doar din actele culegerii, cu trimitere la articol și la pagina din PDF. Verifică întotdeauna în act.</p>
       </form>
       <div class="schimburi" data-schimburi></div>
       <button type="button" class="text mai-multe" data-mai-multe hidden>arată întrebări mai vechi</button>

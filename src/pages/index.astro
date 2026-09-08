@@ -8,16 +8,16 @@ import { listeazaCataloage } from "../lib/db";
 const cataloage = await listeazaCataloage(env.DB);
 ---
 
-<Base title="Cataloage" lat>
+<Base title="Culegeri" lat>
   <section class="antet">
-    <h1>Cataloage de legislație</h1>
-    <p>Alege un catalog, pune întrebarea și primești răspunsul cu trimitere la articol și la pagina din act.</p>
+    <h1>Culegeri de legislație</h1>
+    <p>Alege o culegere, pune întrebarea și primești răspunsul cu trimitere la articol și la pagina din act.</p>
   </section>
 
   {cataloage.length === 0 ? (
-    <p class="gol">Niciun catalog încă.</p>
+    <p class="gol">Nicio culegere încă.</p>
   ) : (
-    <section class="grila" aria-label="Cataloage">
+    <section class="grila" aria-label="Culegeri">
       {cataloage.map((c) => <CardCatalog catalog={c} />)}
     </section>
   )}

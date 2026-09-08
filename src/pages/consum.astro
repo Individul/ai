@@ -17,7 +17,7 @@ const numeCatalog = new Map(cataloage.map((c) => [c.id, c.titlu]));
 const ramase = Math.max(0, limita - folosite);
 ---
 
-<Base title="Consumul meu · Cataloage">
+<Base title="Consumul meu · Culegeri">
   <h1>Consumul meu</h1>
   <p class="rezumat">
     Azi ai pus <strong>{folosite}</strong> {folosite === 1 ? "întrebare" : "întrebări"} din <strong>{limita}</strong>.
@@ -32,7 +32,7 @@ const ramase = Math.max(0, limita - folosite);
 
   <h2>Ultimele întrebări</h2>
   {istoric.length === 0 ? (
-    <p class="gol">Nicio întrebare încă. Deschide un catalog și întreabă.</p>
+    <p class="gol">Nicio întrebare încă. Deschide o culegere și întreabă.</p>
   ) : (
     <ul class="lista">
       {istoric.map((i) => (
@@ -40,7 +40,7 @@ const ramase = Math.max(0, limita - folosite);
           <div class="meta">
             <span>{fmtMoment(i.creat_la)}</span>
             <span>·</span>
-            <span>{numeCatalog.get(i.catalog_id) ?? "catalog"}</span>
+            <span>{numeCatalog.get(i.catalog_id) ?? "culegere"}</span>
             {i.stare === "refuzat" && <span class="eticheta">refuzată, limita atinsă</span>}
             {i.stare === "eroare" && <span class="eticheta">eroare</span>}
             {i.stare === "ok" && <span class="cost" title={`${i.tokens_intrare} tokeni intrare · ${i.tokens_iesire} ieșire · ${i.model}`}>{fmtCost(i.cost_microdolari)}</span>}

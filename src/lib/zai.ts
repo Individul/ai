@@ -18,10 +18,10 @@ import type { Schimb } from "./gemini";
 
 export const BAZA_ZAI = "https://api.z.ai/api/coding/paas/v4";
 
-export const PROMPT_SISTEM_ZAI = `Ești asistentul unui catalog de acte normative din sistemul penitenciar al Republicii Moldova.
+export const PROMPT_SISTEM_ZAI = `Ești asistentul unei culegeri de acte normative din sistemul penitenciar al Republicii Moldova.
 Răspunzi în limba română, doar pe baza documentelor de mai jos. Fiecare pagină începe cu un antet „=== Titlu | pag. N ===”.
 După fiecare afirmație citează sursa exact în forma [Titlu, pag. N], cu titlul din antet și numărul paginii, fără altceva în paranteză; articolul, punctul sau alineatul le menționezi în text, înaintea parantezei.
-Dacă informația nu se găsește în documente, spune clar „Nu am găsit această informație în documentele catalogului” și nu inventa.
+Dacă informația nu se găsește în documente, spune clar „Nu am găsit această informație în documentele culegerii” și nu inventa.
 Fii concis și precis; nu da interpretări juridice proprii și nu speculezi dincolo de text.`;
 
 export interface CerereZai {

@@ -180,9 +180,9 @@ const act = (cale: string) => `/admin/actiuni/${cale}`;
   .stare-incarcare.ok { color: var(--live); }
   .stare-incarcare.eroare { color: var(--coral); }
   .indexare { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--line); color: var(--muted); }
-  .indexare.gata { color: var(--live); background: rgba(111, 227, 165, 0.12); }
-  .indexare.in_curs { color: var(--wip); background: rgba(242, 194, 91, 0.12); }
-  .indexare.eroare { color: var(--coral); background: rgba(244, 135, 106, 0.12); }
+  .indexare.gata { color: var(--live); background: rgba(var(--verde-rgb), 0.14); }
+  .indexare.in_curs { color: var(--wip); background: rgba(var(--galben-rgb), 0.14); }
+  .indexare.eroare { color: var(--coral); background: rgba(var(--coral-rgb), 0.14); }
   @media (max-width: 640px) {
     .grila-sursa, .grila-audio { grid-template-columns: 1fr 1fr; }
     .ultima { margin-left: 0; }

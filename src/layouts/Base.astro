@@ -19,8 +19,16 @@ const email = Astro.locals.email;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#16121D" />
+    <script is:inline>
+      // Tema aleasa de utilizator, aplicata inainte de prima randare (fara palpait).
+      // Fara alegere: urmeaza setarea sistemului (prefers-color-scheme).
+      try {
+        const t = localStorage.getItem("tema");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
     <meta name="robots" content="noindex, nofollow" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Cataloage" />
@@ -32,6 +40,7 @@ const email = Astro.locals.email;
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" />
     <style is:global>
+      /* Tema intunecata (implicita cand sistemul e intunecat sau utilizatorul a ales-o). */
       :root {
         --bg: #16121D;
         --bg-2: #1E1927;
@@ -41,27 +50,60 @@ const email = Astro.locals.email;
         --muted: #A99FB8;
         --faint: #6E6580;
         --line: rgba(244, 239, 248, 0.10);
-        --coral: #F4876A;
-        --teal: #4EC5BE;
-        --violet: #B393F2;
-        --verde: #6FE3A5;
-        --galben: #F2C25B;
+        --coral: #F4876A;  --coral-rgb: 244, 135, 106;
+        --teal: #4EC5BE;   --teal-rgb: 78, 197, 190;
+        --violet: #B393F2; --violet-rgb: 179, 147, 242;
+        --verde: #6FE3A5;  --verde-rgb: 111, 227, 165;
+        --galben: #F2C25B; --galben-rgb: 242, 194, 91;
         --live: #6FE3A5;
         --wip: #F2C25B;
+        --pe-accent: #16121D;           /* textul pus pe un fundal de accent */
+        --umbra: 0 1px 2px rgba(0, 0, 0, 0.3);
         --display: 'Outfit', 'Avenir Next', 'Segoe UI', sans-serif;
         --body: 'Manrope', 'Avenir Next', 'Segoe UI', sans-serif;
         --mono: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+        color-scheme: dark;
+      }
+      /* Tema alba: aceleasi variabile, alte valori. Accentele sunt mai inchise, ca sa aiba contrast. */
+      @media (prefers-color-scheme: light) {
+        :root:not([data-theme="dark"]) {
+          --bg: #F7F5FA; --bg-2: #FFFFFF; --bg-3: #EFEBF4;
+          --text: #1A1523; --text-2: #3F3750; --muted: #6B6280; --faint: #9A92AA;
+          --line: rgba(26, 21, 35, 0.10);
+          --coral: #D9634A;  --coral-rgb: 217, 99, 74;
+          --teal: #1E9A93;   --teal-rgb: 30, 154, 147;
+          --violet: #7A55D6; --violet-rgb: 122, 85, 214;
+          --verde: #2E9E63;  --verde-rgb: 46, 158, 99;
+          --galben: #B9861B; --galben-rgb: 185, 134, 27;
+          --live: #2E9E63; --wip: #B9861B;
+          --pe-accent: #FFFFFF;
+          --umbra: 0 1px 2px rgba(26, 21, 35, 0.08);
+          color-scheme: light;
+        }
+      }
+      :root[data-theme="light"] {
+        --bg: #F7F5FA; --bg-2: #FFFFFF; --bg-3: #EFEBF4;
+        --text: #1A1523; --text-2: #3F3750; --muted: #6B6280; --faint: #9A92AA;
+        --line: rgba(26, 21, 35, 0.10);
+        --coral: #D9634A;  --coral-rgb: 217, 99, 74;
+        --teal: #1E9A93;   --teal-rgb: 30, 154, 147;
+        --violet: #7A55D6; --violet-rgb: 122, 85, 214;
+        --verde: #2E9E63;  --verde-rgb: 46, 158, 99;
+        --galben: #B9861B; --galben-rgb: 185, 134, 27;
+        --live: #2E9E63; --wip: #B9861B;
+        --pe-accent: #FFFFFF;
+        --umbra: 0 1px 2px rgba(26, 21, 35, 0.08);
+        color-scheme: light;
       }
       /* Accentul unui catalog: clasa culoare-* pe container. */
-      .culoare-coral { --accent: var(--coral); --accent-rgb: 244, 135, 106; }
-      .culoare-teal { --accent: var(--teal); --accent-rgb: 78, 197, 190; }
-      .culoare-violet { --accent: var(--violet); --accent-rgb: 179, 147, 242; }
-      .culoare-verde { --accent: var(--verde); --accent-rgb: 111, 227, 165; }
-      .culoare-galben { --accent: var(--galben); --accent-rgb: 242, 194, 91; }
+      .culoare-coral { --accent: var(--coral); --accent-rgb: var(--coral-rgb); }
+      .culoare-teal { --accent: var(--teal); --accent-rgb: var(--teal-rgb); }
+      .culoare-violet { --accent: var(--violet); --accent-rgb: var(--violet-rgb); }
+      .culoare-verde { --accent: var(--verde); --accent-rgb: var(--verde-rgb); }
+      .culoare-galben { --accent: var(--galben); --accent-rgb: var(--galben-rgb); }
 
       * { box-sizing: border-box; }
       [hidden] { display: none !important; }
-      html { color-scheme: dark; }
       html, body { margin: 0; padding: 0; }
       body {
         background: var(--bg);
@@ -103,8 +145,8 @@ const email = Astro.locals.email;
         transition: border-color 0.15s, color 0.15s, background 0.15s;
       }
       .buton:hover { border-color: var(--violet); color: var(--violet); }
-      .buton.principal { background: var(--accent, var(--violet)); border-color: transparent; color: #16121D; font-size: 15px; padding: 11px 20px; }
-      .buton.principal:hover { filter: brightness(1.08); color: #16121D; }
+      .buton.principal { background: var(--accent, var(--violet)); border-color: transparent; color: var(--pe-accent); font-size: 15px; padding: 11px 20px; }
+      .buton.principal:hover { filter: brightness(1.08); color: var(--pe-accent); }
       .buton.periculos:hover { border-color: var(--coral); color: var(--coral); }
       .buton[aria-disabled="true"], .buton:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
       .buton.mic { padding: 5px 10px; font-size: 13px; }
@@ -115,8 +157,8 @@ const email = Astro.locals.email;
         font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap;
       }
       .insigna::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-      .insigna.activ { color: var(--live); background: rgba(111, 227, 165, 0.12); }
-      .insigna.in_lucru { color: var(--wip); background: rgba(242, 194, 91, 0.12); }
+      .insigna.activ { color: var(--live); background: rgba(var(--verde-rgb), 0.14); }
+      .insigna.in_lucru { color: var(--wip); background: rgba(var(--galben-rgb), 0.14); }
       .insigna.arhivat { color: var(--muted); background: var(--line); }
 
       /* Text randat din Markdown (note de utilizare, pagina de acces) */
@@ -136,8 +178,8 @@ const email = Astro.locals.email;
 
       /* Mesaje de formular */
       .mesaj { padding: 10px 14px; border-radius: 12px; font-size: 14px; font-weight: 600; margin-bottom: 18px; }
-      .mesaj.ok { background: rgba(111, 227, 165, 0.12); color: var(--live); }
-      .mesaj.eroare { background: rgba(244, 135, 106, 0.12); color: var(--coral); }
+      .mesaj.ok { background: rgba(var(--verde-rgb), 0.14); color: var(--live); }
+      .mesaj.eroare { background: rgba(var(--coral-rgb), 0.14); color: var(--coral); }
     </style>
     <slot name="head" />
   </head>

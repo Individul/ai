@@ -1,0 +1,69 @@
+---
+// Sursele unui catalog, grupate pe tip, in ordinea vocabularului.
+import type { Sursa } from "../lib/db";
+import { ETICHETE_TIP, TIPURI_SURSA, fmtMarime } from "../lib/validare";
+import { fmtZi } from "../lib/data";
+
+interface Props {
+  surse: Sursa[];
+}
+const { surse } = Astro.props;
+const grupuri = TIPURI_SURSA
+  .map((tip) => ({ tip, eticheta: ETICHETE_TIP[tip], surse: surse.filter((s) => s.tip === tip) }))
+  .filter((g) => g.surse.length > 0);
+---
+
+{surse.length === 0 ? (
+  <p class="gol">Nicio sursă adăugată încă.</p>
+) : (
+  <div class="grupuri">
+    {grupuri.map((g) => (
+      <section class="grup">
+        <h3>{g.eticheta}</h3>
+        <ul>
+          {g.surse.map((s) => (
+            <li>
+              <div class="text">
+                <span class="titlu">{s.titlu}</span>
+                <span class="meta">
+                  {s.numar && <span>nr. {s.numar}</span>}
+                  {s.data_emiterii && <span>{fmtZi(s.data_emiterii)}</span>}
+                </span>
+              </div>
+              <div class="linkuri">
+                {s.url && (
+                  <a class="buton mic" href={s.url} target="_blank" rel="noopener noreferrer">Link</a>
+                )}
+                {s.fisier_nume && (
+                  <>
+                    <a class="buton mic" href={`/f/pdf/${s.id}`} target="_blank" rel="noopener">PDF ({fmtMarime(s.fisier_marime ?? 0)})</a>
+                    <a class="buton mic" href={`/f/pdf/${s.id}?descarca=1`} title="Descarcă" aria-label={`Descarcă ${s.fisier_nume}`}>↓</a>
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+  </div>
+)}
+
+<style>
+  .gol { color: var(--muted); }
+  .grupuri { display: flex; flex-direction: column; gap: 22px; }
+  .grup h3 { color: var(--accent, var(--violet)); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  li {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 12px 0; border-top: 1px solid var(--line);
+  }
+  li:last-child { border-bottom: 1px solid var(--line); }
+  .text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .titlu { font-weight: 600; }
+  .meta { display: flex; gap: 12px; color: var(--muted); font-size: 13px; }
+  .linkuri { display: flex; gap: 6px; flex: none; }
+  @media (max-width: 560px) {
+    li { flex-direction: column; align-items: flex-start; gap: 8px; }
+  }
+</style>

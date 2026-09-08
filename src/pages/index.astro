@@ -1,6 +1,36 @@
 ---
-// Placeholder pana la pasul cu paginile.
+// Prima pagina: grila cataloagelor active si in lucru. Arhivatele se vad doar in /admin.
+import { env } from "cloudflare:workers";
+import Base from "../layouts/Base.astro";
+import CardCatalog from "../components/CardCatalog.astro";
+import { listeazaCataloage } from "../lib/db";
+
+const cataloage = await listeazaCataloage(env.DB);
 ---
-<!doctype html>
-<html lang="ro"><head><meta charset="utf-8" /><title>Cataloage</title></head>
-<body>Cataloage</body></html>
+
+<Base title="Cataloage" lat>
+  <section class="antet">
+    <h1>Cataloage de legislație</h1>
+    <p>
+      Fiecare catalog adună actele dintr-un domeniu într-un notebook NotebookLM, în care poți pune
+      întrebări și primești răspunsuri cu trimitere la articol. Aici găsești sursele, rezumatele audio
+      și linkul spre notebook.
+    </p>
+  </section>
+
+  {cataloage.length === 0 ? (
+    <p class="gol">Niciun catalog încă.</p>
+  ) : (
+    <section class="grila" aria-label="Cataloage">
+      {cataloage.map((c) => <CardCatalog catalog={c} />)}
+    </section>
+  )}
+</Base>
+
+<style>
+  .antet { max-width: 720px; margin-bottom: 32px; display: flex; flex-direction: column; gap: 12px; }
+  .antet p { color: var(--text-2); font-size: 17px; }
+  .grila { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 22px; }
+  .gol { color: var(--muted); padding: 40px 0; text-align: center; }
+  @media (max-width: 560px) { .grila { grid-template-columns: 1fr; gap: 16px; } h1 { font-size: 28px; } }
+</style>

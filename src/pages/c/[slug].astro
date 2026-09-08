@@ -1,0 +1,92 @@
+---
+// Pagina unui catalog: notebook, surse grupate pe tip, audio, note de utilizare.
+import { env } from "cloudflare:workers";
+import Base from "../../layouts/Base.astro";
+import Pictograma from "../../components/Pictograma.astro";
+import ListaSurse from "../../components/ListaSurse.astro";
+import ListaAudio from "../../components/ListaAudio.astro";
+import { citesteCatalogDupaSlug, listeazaAudio, listeazaSurse } from "../../lib/db";
+import { ETICHETE_STARE } from "../../lib/validare";
+import { randeazaMarkdown } from "../../lib/markdown";
+import { fmtMoment } from "../../lib/data";
+
+const slug = Astro.params.slug ?? "";
+const catalog = await citesteCatalogDupaSlug(env.DB, slug);
+if (!catalog || (catalog.stare === "arhivat" && !Astro.locals.admin)) {
+  return new Response(null, { status: 404 });
+}
+const [surse, audio] = await Promise.all([listeazaSurse(env.DB, catalog.id), listeazaAudio(env.DB, catalog.id)]);
+const areNotebook = catalog.url_notebook !== "";
+const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) : "";
+---
+
+<Base title={`${catalog.titlu} · Cataloage`}>
+  <article class:list={["catalog", `culoare-${catalog.culoare}`]}>
+    <header class="antet">
+      <div class="icon"><Pictograma nume={catalog.pictograma} marime={34} /></div>
+      <div class="titluri">
+        <div class="rand">
+          <h1>{catalog.titlu}</h1>
+          <span class:list={["insigna", catalog.stare]}>{ETICHETE_STARE[catalog.stare]}</span>
+        </div>
+        {catalog.descriere && <p class="descriere">{catalog.descriere}</p>}
+      </div>
+    </header>
+
+    <div class="notebook">
+      {areNotebook ? (
+        <a class="buton principal" href={catalog.url_notebook} target="_blank" rel="noopener noreferrer">
+          Deschide în NotebookLM
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>
+        </a>
+      ) : (
+        <span class="buton principal" aria-disabled="true">Notebook în pregătire</span>
+      )}
+      <p class="lamurire">
+        Notebook-ul se deschide pe notebooklm.google.com și cere un cont Google adăugat la el.
+        <a href="/acces">Cum obțin acces?</a>
+      </p>
+    </div>
+
+    <section class="sectiune">
+      <h2>Surse <span class="numar">{surse.length}</span></h2>
+      <ListaSurse surse={surse} />
+    </section>
+
+    <section class="sectiune">
+      <h2>Rezumate audio <span class="numar">{audio.length}</span></h2>
+      <ListaAudio audio={audio} />
+    </section>
+
+    {note && (
+      <section class="sectiune">
+        <h2>Note de utilizare</h2>
+        <div class="proza" set:html={note} />
+      </section>
+    )}
+
+    <footer class="ultima">ultima actualizare {fmtMoment(catalog.actualizat_la)}</footer>
+  </article>
+</Base>
+
+<style>
+  .antet { display: flex; gap: 18px; align-items: flex-start; }
+  .icon {
+    flex: none; width: 60px; height: 60px; border-radius: 18px; display: grid; place-items: center;
+    background: var(--accent); color: #16121D;
+  }
+  .titluri { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .rand { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .descriere { color: var(--text-2); font-size: 17px; }
+  .notebook { margin: 28px 0 8px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+  .lamurire { color: var(--muted); font-size: 14px; }
+  .lamurire a { color: var(--violet); text-decoration: underline; text-underline-offset: 3px; margin-left: 4px; }
+  .sectiune { margin-top: 36px; display: flex; flex-direction: column; gap: 14px; }
+  .sectiune h2 { display: flex; align-items: baseline; gap: 10px; }
+  .numar { color: var(--faint); font-size: 15px; font-weight: 600; }
+  .ultima { margin-top: 40px; color: var(--faint); font-size: 13px; font-weight: 600; }
+  @media (max-width: 560px) {
+    .antet { flex-direction: column; }
+    h1 { font-size: 28px; }
+  }
+</style>

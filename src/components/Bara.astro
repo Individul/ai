@@ -1,0 +1,37 @@
+---
+// Bara de sus: brand si navigare. "Admin" apare doar pentru administrator.
+const cale = Astro.url.pathname;
+const admin = Astro.locals.admin;
+const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsWith("/c/") : cale.startsWith(prefix));
+---
+
+<header class="bara">
+  <a class="brand" href="/">Cataloage<span>.</span></a>
+  <nav aria-label="Navigare principală">
+    <a href="/" class:list={{ activ: activ("/") }}>Cataloage</a>
+    <a href="/acces" class:list={{ activ: activ("/acces") }}>Cum obțin acces</a>
+    {admin && <a href="/admin" class:list={["admin", { activ: activ("/admin") }]}>Admin</a>}
+  </nav>
+</header>
+
+<style>
+  .bara {
+    display: flex; align-items: center; gap: 16px;
+    height: 60px; padding: 0 20px; border-bottom: 1px solid var(--line);
+  }
+  .brand { font-family: var(--display); font-weight: 600; font-size: 20px; letter-spacing: -0.01em; }
+  .brand span { color: var(--violet); }
+  nav { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+  nav a {
+    display: inline-flex; align-items: center; height: 36px; padding: 0 12px; border-radius: 10px;
+    font-weight: 600; font-size: 14px; color: var(--muted); white-space: nowrap;
+  }
+  nav a:hover { color: var(--text); background: var(--line); }
+  nav a.activ { color: var(--violet); }
+  nav a.admin { color: var(--coral); }
+  nav a.admin.activ { background: rgba(244, 135, 106, 0.12); }
+  @media (max-width: 560px) {
+    .bara { gap: 10px; padding: 0 14px; }
+    nav a { padding: 0 9px; font-size: 13px; }
+  }
+</style>

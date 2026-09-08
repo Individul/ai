@@ -8,11 +8,17 @@ import { ETICHETE_TIP, TIPURI_SURSA, fmtDurata, fmtMarime } from "../../../lib/v
 
 const ETICHETE_INDEXARE = { neindexat: "neindexat", in_curs: "se indexează…", gata: "indexat", eroare: "eroare la indexare" } as const;
 import { aziChisinau, fmtMoment } from "../../../lib/data";
+import { verificaIndexarea } from "../../../lib/indexare";
 
 const id = Astro.params.id ?? "";
 const catalog = await citesteCatalog(env.DB, id);
 if (!catalog) return new Response(null, { status: 404 });
-const [surse, audio] = await Promise.all([listeazaSurse(env.DB, id), listeazaAudio(env.DB, id)]);
+let [surse, audio] = await Promise.all([listeazaSurse(env.DB, id), listeazaAudio(env.DB, id)]);
+// Sursele ramase "in curs" (ex. tabul inchis in timpul indexarii) se reverifica la Google acum.
+if (surse.some((s) => s.indexare === "in_curs") && env.GEMINI_API_KEY) {
+  await Promise.all(surse.filter((s) => s.indexare === "in_curs").map((s) => verificaIndexarea(env, s).catch(() => null)));
+  surse = await listeazaSurse(env.DB, id);
+}
 const indexate = surse.filter((s) => s.indexare === "gata").length;
 const eroare = Astro.url.searchParams.get("eroare");
 const ok = Astro.url.searchParams.has("ok");

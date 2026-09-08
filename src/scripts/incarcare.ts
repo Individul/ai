@@ -80,14 +80,16 @@ async function indexeaza(id: string, iesire: HTMLElement | null): Promise<void> 
     stare(iesire, mesaj, "eroare");
     return;
   }
-  for (let i = 0; i < 60; i++) {
+  // Actele mari (sute de pagini) stau la Google si 10 minute; asteptam pana la 15.
+  for (let i = 0; i < 300; i++) {
     await new Promise((res) => setTimeout(res, 3000));
     const s = await fetch(`/api/admin/surse/${id}/indexeaza`);
     if (!s.ok) { stare(iesire, `Verificarea a eșuat (${s.status}).`, "eroare"); return; }
     const d = (await s.json()) as { indexare: string; mesaj: string | null };
     if (d.indexare === "gata") { stare(iesire, "indexat", "ok"); return; }
     if (d.indexare === "eroare") { stare(iesire, d.mesaj ?? "eroare la indexare", "eroare"); return; }
-    stare(iesire, `se indexează… (${(i + 1) * 3}s)`);
+    const s = (i + 1) * 3;
+    stare(iesire, `se indexează… (${s < 60 ? `${s}s` : `${Math.floor(s / 60)} min`}; la acte mari durează până la 10 minute)`);
   }
   stare(iesire, "încă se indexează; reîncarcă pagina mai târziu");
 }

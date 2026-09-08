@@ -37,16 +37,17 @@ function pornesteChat(el: HTMLElement) {
     return `<div class="citari">${etichete.join("")}</div>`;
   }
 
-  function randeaza() {
-    lista.innerHTML = istoric
+  // Cel mai nou schimb primul, imediat sub caseta; caseta ramane mereu in acelasi loc.
+  function randeaza(nou = false) {
+    lista.innerHTML = [...istoric]
+      .reverse()
       .map(
-        (s) =>
-          `<article class="schimb"><p class="intrebare">${esc(s.intrebare)}</p>` +
+        (s, i) =>
+          `<article class="schimb${nou && i === 0 ? " nou" : ""}"><p class="intrebare">${esc(s.intrebare)}</p>` +
           `<div class="raspuns proza">${randeazaMarkdown(s.raspuns)}</div>${htmlCitari(s.citari)}</article>`
       )
       .join("");
     if (sterge) sterge.hidden = istoric.length === 0;
-    lista.lastElementChild?.scrollIntoView({ block: "nearest" });
   }
 
   function stare(text: string, fel: "" | "eroare" = "") {
@@ -86,8 +87,9 @@ function pornesteChat(el: HTMLElement) {
       }
       istoric.push({ intrebare, raspuns: d.raspuns, citari: d.citari ?? [] });
       salveaza();
-      randeaza();
+      randeaza(true);
       camp.value = "";
+      lista.firstElementChild?.scrollIntoView({ block: "nearest", behavior: "smooth" });
       stare(`${d.ramase ?? "?"} din ${d.limita ?? "?"} întrebări rămase azi`);
       buton.disabled = d.ramase === 0;
     } catch (e) {

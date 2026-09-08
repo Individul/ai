@@ -24,7 +24,6 @@ const admin = Astro.locals.admin;
     </div>
   ) : (
     <>
-      <div class="schimburi" data-schimburi></div>
       <form class="intrebare">
         <textarea name="intrebare" rows="2" maxlength="2000" placeholder="Întreabă catalogul… de exemplu: ce condiții cere liberarea condiționată?" aria-label="Întrebarea ta" required></textarea>
         <div class="rand">
@@ -34,6 +33,7 @@ const admin = Astro.locals.admin;
         </div>
         <p class="lamurire">Răspunsurile vin doar din actele catalogului, cu trimitere la articol și la pagina din PDF. Verifică întotdeauna în act.</p>
       </form>
+      <div class="schimburi" data-schimburi></div>
       <noscript><p class="lamurire">Chatul cere JavaScript.</p></noscript>
     </>
   )}
@@ -50,8 +50,10 @@ const admin = Astro.locals.admin;
   .chat .pas-admin small { color: var(--faint); flex-basis: 100%; }
   .chat .lamurire { color: var(--faint); font-size: 13px; line-height: 1.5; }
 
-  /* Schimburi: intrebarea ca titlu mic, raspunsul ca text, o linie subtire intre ele */
-  .chat .schimburi { display: flex; flex-direction: column; gap: 32px; }
+  /* Schimburi, cel mai nou primul, sub caseta: intrebarea ca titlu mic, raspunsul ca text */
+  .chat .schimburi { display: flex; flex-direction: column; gap: 36px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .chat .schimb.nou { animation: apare 0.25s ease-out; }
+  @keyframes apare { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
   .chat .schimburi:empty { display: none; }
   .chat .schimb { display: flex; flex-direction: column; gap: 10px; }
   .chat .schimb .intrebare { font-family: var(--display); font-weight: 600; font-size: 19px; line-height: 1.3; color: var(--text); white-space: pre-wrap; }

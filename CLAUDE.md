@@ -1,6 +1,6 @@
 # Cataloage
 
-Hub de cataloage de legislație pentru colegi (ai.dumitru.cloud). Astro `output: 'server'` pe Cloudflare Workers, D1 pentru date, R2 pentru fișiere, Cloudflare Access pentru autentificare. NotebookLM nu se integrează (nu are API pe cont personal): hub-ul doar trimite spre notebook și găzduiește ce s-a descărcat de acolo. Planul complet: `docs/plans/2026-09-08-cataloage-v1.md`.
+Hub de cataloage de legislație pentru colegi (ai.dumitru.cloud). Astro `output: 'server'` pe Cloudflare Workers, D1 pentru date, R2 pentru fișiere, Cloudflare Access pentru autentificare, Gemini File Search pentru chatul cu citări. NotebookLM nu se integrează (nu are API pe cont personal): hub-ul trimite spre notebook, găzduiește ce s-a descărcat de acolo și are chatul propriu peste PDF-urile din R2. Planurile: `docs/plans/2026-09-08-cataloage-v1.md` (hub), `docs/plans/2026-09-08-cataloage-v2-chat.md` (chat, consum, limite).
 
 ## Convenții
 
@@ -10,11 +10,14 @@ Hub de cataloage de legislație pentru colegi (ai.dumitru.cloud). Astro `output:
 - Obiectul din R2 se scrie înaintea rândului din D1 (audio) și se șterge înaintea rândului (surse, audio); un rând fără fișier nu trebuie să existe.
 - Catalogul se arhivează (`stare = 'arhivat'`), nu se șterge; `ON DELETE RESTRICT` e plasa de siguranță.
 - Formularele de admin sunt clasice (POST → `/admin/actiuni/*` → 303 cu `?ok=1` / `?eroare=`). Doar upload-ul are JavaScript (`src/scripts/incarcare.ts`).
+- Tot ce vorbește cu Google e în `src/lib/gemini.ts` (REST, fără SDK; formele JSON verificate pe viu). Orchestrarea (R2 → Google, stări) e în `src/lib/indexare.ts`; rutele nu apelează `gemini.ts` direct pentru indexare. Documentul de la Google se scoate înaintea înlocuirii/ștergerii PDF-ului.
+- Upload-ul direct în magazin (`uploadToFileSearchStore`) răspundea 404 în sept. 2026; folosim Files API + `importFile`. Citările vin din `groundingMetadata.groundingChunks[].retrievedContext` (`customMetadata.sursa`, `pageNumber`).
+- Limita pe zi numără doar întrebările cu `stare = 'ok'`; blocarea e în middleware, adminul nu poate fi blocat.
 - Modulele pure din `src/lib` au teste (`vitest` cu `@cloudflare/vitest-pool-workers`, D1 + R2 locale). Rutele Astro se verifică cu `curl` (formularele cer antetul `Origin`, altfel Astro răspunde 403).
 
 ## Development
 
-Prima dată: `cp .dev.vars.example .dev.vars` și `npm run migrate:local`.
+Prima dată: `cp .dev.vars.example .dev.vars` (completează `GEMINI_API_KEY`) și `npm run migrate:local`.
 
 Pentru verificări vizuale folosește `npm run dev:worker` (port 8787), care servește build-ul real. `astro dev` cu adaptorul Cloudflare servește uneori paginile fără stiluri (rulează în workerd și pierde mediul de dev la pornire rece); rutele, middleware-ul și API-ul merg corect.
 

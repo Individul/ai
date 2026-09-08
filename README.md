@@ -2,7 +2,7 @@
 
 Cataloage de legislație penitenciară pentru colegi, la [ai.dumitru.cloud](https://ai.dumitru.cloud). Fiecare catalog (Legislația penală, Legislația contravențională, Ordine penitenciare…) are un notebook NotebookLM în care se pun întrebări și se primesc răspunsuri cu trimitere la articol. Hub-ul organizează cataloagele, găzduiește sursele (cu PDF) și rezumatele audio (Audio Overview) descărcate din NotebookLM, și trimite spre notebook.
 
-NotebookLM (redenumit Gemini Notebook) nu poate fi încorporat într-un site terț și nu are API pe cont personal, de aceea chatul rămâne pe notebooklm.google.com. Vezi deciziile în [`docs/plans/2026-09-08-cataloage-v1.md`](docs/plans/2026-09-08-cataloage-v1.md).
+NotebookLM (redenumit Gemini Notebook) nu poate fi încorporat într-un site terț și nu are API pe cont personal. De aceea, pe lângă linkul spre notebook, hub-ul are **chatul propriu**: PDF-urile fiecărui catalog se indexează în Gemini File Search, colegii pun întrebări direct pe pagina catalogului și primesc răspunsuri cu citări la articol și pagină, iar hub-ul numără întrebările per persoană, aplică limite pe zi și poate bloca. Deciziile: [`docs/plans/2026-09-08-cataloage-v1.md`](docs/plans/2026-09-08-cataloage-v1.md) (hub) și [`docs/plans/2026-09-08-cataloage-v2-chat.md`](docs/plans/2026-09-08-cataloage-v2-chat.md) (chat, consum, limite).
 
 ## Cum funcționează
 
@@ -13,12 +13,15 @@ NotebookLM (redenumit Gemini Notebook) nu poate fi încorporat într-un site ter
 - **Admin fără JavaScript**: formulare clasice (POST + 303). Doar încărcarea fișierelor cere JavaScript: corpul brut (nu multipart) se streamează în R2, cu progres.
 - **Fișierele** se servesc din R2 cu `Range` (206), ca `<audio>` să meargă și în Safari. PDF-urile se deschid inline sau se descarcă cu `?descarca=1`.
 - Catalogul se **arhivează**, nu se șterge (`ON DELETE RESTRICT` pe surse și audio).
+- **Chat cu citări (Gemini File Search)**: fiecare catalog are un „magazin” la Google, creat la prima indexare; fiecare PDF încărcat devine un document acolo (Files API + import, cu metadate `sursa`/`titlu`), automat după upload. Întrebările merg la `generateContent` cu unealta `file_search`; citările vin din `groundingMetadata` (sursă + pagină) și deschid PDF-ul la pagina respectivă. Modelul și limita implicită se aleg din `/admin/consum`.
+- **Consum și limite**: fiecare întrebare se scrie în `intrebari` (email, tokeni, cost estimat, stare). Limita pe zi e implicită (setări) sau per persoană; peste limită, 429. Un utilizator blocat primește 403 pe orice pagină (middleware). Fiecare coleg își vede consumul la `/consum`.
+- **Confidențialitate**: cheia Gemini trebuie să fie pe nivelul plătit (proiect cu facturare); pe nivelul gratuit Google poate folosi datele pentru antrenare.
 
 ## Dezvoltare locală
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars   # DEV_EMAIL=dev@local, ADMIN_EMAILS=dev@local; nu se comite
+cp .dev.vars.example .dev.vars   # DEV_EMAIL, ADMIN_EMAILS, GEMINI_API_KEY; nu se comite
 npm run migrate:local
 npm run dev:worker               # build + wrangler dev pe http://localhost:8787
 ```
@@ -36,8 +39,14 @@ Stare (8 septembrie 2026): făcută. D1 `ai` (id în `wrangler.jsonc`), bucket R
 
 1. `npx wrangler d1 create ai` → `database_id` în `wrangler.jsonc`; `npx wrangler r2 bucket create ai-fisiere`; `npm run migrate:remote`.
 2. Zero Trust → Access → Applications → Self-hosted: nume `Cataloage`, domeniu `ai.dumitru.cloud`, sesiune 1 lună, doar One-time PIN. Policy „Colegi”: Allow, Include → Emails. Copiază **Application Audience (AUD) Tag**.
-3. `wrangler.jsonc`: `vars.ACCESS_TEAM_DOMAIN` și `vars.ADMIN_EMAILS`; apoi `npx wrangler secret put ACCESS_AUD`. `DEV_EMAIL` nu se pune **niciodată** pe Worker.
+3. `wrangler.jsonc`: `vars.ACCESS_TEAM_DOMAIN` și `vars.ADMIN_EMAILS`; apoi `npx wrangler secret put ACCESS_AUD` și `npx wrangler secret put GEMINI_API_KEY` (cheie din Google AI Studio, pe un proiect cu facturare). `DEV_EMAIL` nu se pune **niciodată** pe Worker.
 4. `npm run deploy`. Domeniul custom (DNS + certificat) apare din `routes` la primul deploy. `*.workers.dev` rămâne activ, dar cererile de acolo nu au JWT și primesc 403.
+
+### Chat
+
+- Sursele cu PDF se indexează singure după upload (insigna „indexat” în Admin); „Reindexează” reface documentul. Sursele doar cu link nu intră în chat până nu li se pune PDF-ul.
+- `/admin/consum`: întrebări per persoană (azi / 7 / 30 zile), tokeni, cost estimat, limită per persoană, blocare, limita implicită și modelul.
+- Costuri orientative (sept. 2026): Gemini 3.5 Flash-Lite ≈ 0,3 cenți per întrebare; indexare 0,15 $ per milion de tokeni, o singură dată.
 
 ### Colegi noi
 
@@ -62,7 +71,12 @@ src/lib/fisiere.ts              R2: chei, tipuri permise, verificare upload, ras
 src/lib/admin.ts                esteAdmin(email, ADMIN_EMAILS)
 src/lib/identitate.ts           cine face cererea: Access JWT | DEV_EMAIL | 503
 src/middleware.ts               identitate + poarta de admin, Cache-Control: no-store
-src/pages/                      / (grila), c/[slug], acces, f/pdf, f/audio, admin/*, api/admin/*
+src/lib/gemini.ts               Gemini File Search prin REST: magazine, documente, intrebari cu citari, cost
+src/lib/consum.ts               jurnalul intrebarilor, limite per utilizator, blocare, raport
+src/lib/indexare.ts             R2 + D1 + Gemini: porneste/verifica/scoate indexarea unei surse
+src/pages/                      / (grila), c/[slug] (cu chat), consum, acces, f/pdf, f/audio, admin/*, api/*
+src/pages/api/chat/             POST intrebare (limite + jurnal), GET ramase
 src/pages/admin/actiuni/        toate actiunile din formulare (POST + 303)
-src/scripts/incarcare.ts        client: upload PDF/audio cu progres, durata audio, confirmari
+src/scripts/incarcare.ts        client: upload PDF/audio cu progres, indexare, confirmari
+src/scripts/chat.ts             client: chatul de pe pagina catalogului (istoric in sessionStorage)
 ```

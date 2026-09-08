@@ -2,3 +2,5 @@
 DEV_EMAIL=dev@local
 # Cine poate intra la /admin (lista separata prin virgula). In productie se pune in wrangler.jsonc, vars.ADMIN_EMAILS.
 ADMIN_EMAILS=dev@local
+# Cheia Gemini API (Google AI Studio, proiect cu facturare). Fara ea, chatul si indexarea raspund 503.
+GEMINI_API_KEY=

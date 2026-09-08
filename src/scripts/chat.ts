@@ -37,17 +37,23 @@ function pornesteChat(el: HTMLElement) {
     return `<div class="citari">${etichete.join("")}</div>`;
   }
 
-  // Cel mai nou schimb primul, imediat sub caseta; caseta ramane mereu in acelasi loc.
+  const corp = (s: Schimb) => `<div class="raspuns proza">${randeazaMarkdown(s.raspuns)}</div>${htmlCitari(s.citari)}`;
+
+  // Sub caseta: ultimul schimb desfasurat; cele anterioare doar ca intrebari (linkuri),
+  // fiecare se deschide la clic. Caseta ramane mereu in acelasi loc.
   function randeaza(nou = false) {
-    lista.innerHTML = [...istoric]
-      .reverse()
-      .map(
-        (s, i) =>
-          `<article class="schimb${nou && i === 0 ? " nou" : ""}"><p class="intrebare">${esc(s.intrebare)}</p>` +
-          `<div class="raspuns proza">${randeazaMarkdown(s.raspuns)}</div>${htmlCitari(s.citari)}</article>`
-      )
-      .join("");
-    if (sterge) sterge.hidden = istoric.length === 0;
+    const [ultimul, ...vechi] = [...istoric].reverse();
+    if (!ultimul) { lista.innerHTML = ""; if (sterge) sterge.hidden = true; return; }
+    let html =
+      `<article class="schimb${nou ? " nou" : ""}"><p class="intrebare">${esc(ultimul.intrebare)}</p>${corp(ultimul)}</article>`;
+    if (vechi.length) {
+      html +=
+        `<section class="anterioare"><h3>Întrebări anterioare</h3>` +
+        vechi.map((s) => `<details class="vechi"><summary>${esc(s.intrebare)}</summary>${corp(s)}</details>`).join("") +
+        `</section>`;
+    }
+    lista.innerHTML = html;
+    if (sterge) sterge.hidden = false;
   }
 
   function stare(text: string, fel: "" | "eroare" = "") {

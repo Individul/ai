@@ -78,5 +78,19 @@ const admin = Astro.locals.admin;
   .chat .ramase.eroare { color: var(--coral); }
   .chat button.text { background: none; border: 0; padding: 0; color: var(--faint); font-size: 13px; font-weight: 600; cursor: pointer; }
   .chat button.text:hover { color: var(--text); }
+  /* Intrebarile anterioare: doar textul, ca linkuri; raspunsul se deschide la clic */
+  .chat .anterioare { display: flex; flex-direction: column; gap: 6px; padding-top: 22px; border-top: 1px solid var(--line); }
+  .chat .anterioare h3 { color: var(--faint); font-family: var(--body); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .chat details.vechi summary {
+    cursor: pointer; list-style: none; color: var(--muted); font-size: 15px; font-weight: 600; line-height: 1.4; padding: 4px 0;
+    text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color 0.15s, text-decoration-color 0.15s;
+  }
+  .chat details.vechi summary::-webkit-details-marker { display: none; }
+  .chat details.vechi summary::before { content: "›"; display: inline-block; width: 16px; color: var(--faint); transition: transform 0.15s; }
+  .chat details.vechi[open] summary::before { transform: rotate(90deg); }
+  .chat details.vechi summary:hover { color: var(--text); text-decoration-color: var(--accent, var(--violet)); }
+  .chat details.vechi[open] summary { color: var(--text); }
+  .chat details.vechi .raspuns { padding: 8px 0 12px 16px; font-size: 15px; }
+  .chat details.vechi .citari { padding: 0 0 14px 16px; }
   @media (max-width: 560px) { .chat .schimb .intrebare { font-size: 17px; } }
 </style>

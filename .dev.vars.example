@@ -1,0 +1,4 @@
+# Copiaza in .dev.vars (niciodata comis). Identitatea folosita local, in lipsa Cloudflare Access.
+DEV_EMAIL=dev@local
+# Cine poate intra la /admin (lista separata prin virgula). In productie se pune in wrangler.jsonc, vars.ADMIN_EMAILS.
+ADMIN_EMAILS=dev@local

@@ -1,0 +1,35 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"compatibility_date": "2026-09-03",
+	"compatibility_flags": ["global_fetch_strictly_public"],
+	"name": "ai",
+	"main": "@astrojs/cloudflare/entrypoints/server",
+	// Adaugarea unei rute dezactiveaza implicit URL-ul workers.dev; il pastram activ.
+	// E sigur: cererile spre *.workers.dev nu trec prin Access, deci nu au JWT -> 403.
+	"workers_dev": true,
+	// Domeniul public. Cloudflare creeaza singur inregistrarea DNS si certificatul.
+	"routes": [{ "pattern": "ai.dumitru.cloud", "custom_domain": true }],
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "ai",
+			"database_id": "95702324-a75d-4b8b-bb60-23e13bfc20cd"
+		}
+	],
+	// Fisierele (PDF-uri sursa, Audio Overview-uri). D1 tine doar metadatele.
+	"r2_buckets": [{ "binding": "FISIERE", "bucket_name": "ai-fisiere" }],
+	"vars": {
+		// Echipa Cloudflare Access, aceeasi ca la notite.
+		// ACCESS_AUD e secret: `npx wrangler secret put ACCESS_AUD`. DEV_EMAIL nu se pune NICIODATA aici.
+		"ACCESS_TEAM_DOMAIN": "wandering-firefly-46cf.cloudflareaccess.com",
+		// Cine vede /admin si poate scrie. Lista separata prin virgula; goala = nimeni.
+		"ADMIN_EMAILS": "prisacarudumitru@gmail.com"
+	},
+	"observability": {
+		"enabled": true
+	}
+}

@@ -1,0 +1,175 @@
+---
+// Editarea unui catalog: campurile lui, sursele (cu PDF) si audio-urile.
+import { env } from "cloudflare:workers";
+import Base from "../../../layouts/Base.astro";
+import FormularCatalog from "../../../components/FormularCatalog.astro";
+import { citesteCatalog, listeazaAudio, listeazaSurse } from "../../../lib/db";
+import { ETICHETE_TIP, TIPURI_SURSA, fmtDurata, fmtMarime } from "../../../lib/validare";
+import { aziChisinau, fmtMoment } from "../../../lib/data";
+
+const id = Astro.params.id ?? "";
+const catalog = await citesteCatalog(env.DB, id);
+if (!catalog) return new Response(null, { status: 404 });
+const [surse, audio] = await Promise.all([listeazaSurse(env.DB, id), listeazaAudio(env.DB, id)]);
+const eroare = Astro.url.searchParams.get("eroare");
+const ok = Astro.url.searchParams.has("ok");
+const act = (cale: string) => `/admin/actiuni/${cale}`;
+---
+
+<Base title={`${catalog.titlu} · Admin`}>
+  <p class="cale"><a href="/admin">Administrare</a> / {catalog.titlu}</p>
+  <header class="antet">
+    <h1>{catalog.titlu}</h1>
+    <a class="buton" href={`/c/${catalog.slug}`}>Vezi pagina →</a>
+  </header>
+
+  {eroare && <p class="mesaj eroare">{eroare}</p>}
+  {ok && <p class="mesaj ok">Salvat.</p>}
+
+  <form method="post" action={act(`catalog/${id}`)} class="formular">
+    <input type="hidden" name="baza" value={catalog.actualizat_la} />
+    <FormularCatalog catalog={catalog} />
+    <div class="butoane">
+      <button class="buton principal" type="submit">Salvează</button>
+      {catalog.stare === "arhivat" ? (
+        <button class="buton" type="submit" formaction={act(`catalog/${id}/stare`)} name="stare" value="in_lucru">Dezarhivează</button>
+      ) : (
+        <button class="buton periculos" type="submit" formaction={act(`catalog/${id}/stare`)} name="stare" value="arhivat">Arhivează</button>
+      )}
+      <span class="ultima">actualizat {fmtMoment(catalog.actualizat_la)} · /c/{catalog.slug}</span>
+    </div>
+  </form>
+
+  <section class="sectiune" id="surse">
+    <h2>Surse <span class="numar">{surse.length}</span></h2>
+    <ul class="randuri">
+      {surse.map((s, i) => (
+        <li>
+          <form method="post" action={act(`sursa/${s.id}`)} class="campuri-inline">
+            <div class="grila-sursa">
+              <input name="titlu" required maxlength="200" value={s.titlu} aria-label="Titlu" />
+              <select name="tip" aria-label="Tip">
+                {TIPURI_SURSA.map((t) => <option value={t} selected={s.tip === t}>{ETICHETE_TIP[t]}</option>)}
+              </select>
+              <input name="numar" maxlength="100" value={s.numar ?? ""} placeholder="nr." aria-label="Număr" />
+              <input name="data_emiterii" type="date" value={s.data_emiterii ?? ""} aria-label="Data emiterii" />
+              <input name="url" type="url" value={s.url ?? ""} placeholder="https://legis.md/…" aria-label="Link" class="lat" />
+            </div>
+            <div class="butoane">
+              <button class="buton mic" type="submit">Salvează</button>
+              <button class="buton mic" type="submit" formaction={act(`sursa/${s.id}/muta?dir=sus`)} disabled={i === 0} aria-label="Mai sus">↑</button>
+              <button class="buton mic" type="submit" formaction={act(`sursa/${s.id}/muta?dir=jos`)} disabled={i === surse.length - 1} aria-label="Mai jos">↓</button>
+              <button class="buton mic periculos" type="submit" formaction={act(`sursa/${s.id}/sterge`)} data-confirma="Ștergi sursa (și PDF-ul ei)?">Șterge</button>
+            </div>
+          </form>
+          <form class="fisier" onsubmit="return false">
+            {s.fisier_nume ? (
+              <>
+                <a class="buton mic" href={`/f/pdf/${s.id}`} target="_blank" rel="noopener">PDF: {s.fisier_nume} ({fmtMarime(s.fisier_marime ?? 0)})</a>
+                <label class="buton mic" data-cere-js hidden>înlocuiește <input type="file" accept="application/pdf" data-pdf-sursa={s.id} hidden /></label>
+              </>
+            ) : (
+              <label class="buton mic" data-cere-js hidden>+ PDF <input type="file" accept="application/pdf" data-pdf-sursa={s.id} hidden /></label>
+            )}
+            <span data-fara-js class="fara-js">Încărcarea de fișiere cere JavaScript.</span>
+            <output data-stare class="stare-incarcare"></output>
+          </form>
+        </li>
+      ))}
+    </ul>
+
+    <form method="post" action={act("sursa")} class="campuri-inline noua">
+      <input type="hidden" name="catalog_id" value={id} />
+      <h3>Sursă nouă</h3>
+      <div class="grila-sursa">
+        <input name="titlu" required maxlength="200" placeholder="Titlul actului" aria-label="Titlu" />
+        <select name="tip" aria-label="Tip">
+          {TIPURI_SURSA.map((t) => <option value={t}>{ETICHETE_TIP[t]}</option>)}
+        </select>
+        <input name="numar" maxlength="100" placeholder="nr." aria-label="Număr" />
+        <input name="data_emiterii" type="date" aria-label="Data emiterii" />
+        <input name="url" type="url" placeholder="https://legis.md/…" aria-label="Link" class="lat" />
+      </div>
+      <div class="butoane"><button class="buton" type="submit">Adaugă sursa</button> <small>PDF-ul se pune după, din rândul sursei.</small></div>
+    </form>
+  </section>
+
+  <section class="sectiune" id="audio">
+    <h2>Rezumate audio <span class="numar">{audio.length}</span></h2>
+    <ul class="randuri">
+      {audio.map((a, i) => (
+        <li>
+          <form method="post" action={act(`audio/${a.id}`)} class="campuri-inline">
+            <div class="grila-audio">
+              <input name="titlu" required maxlength="200" value={a.titlu} aria-label="Titlu" />
+              <input name="data" type="date" required value={a.data} aria-label="Data" />
+              <input name="durata_s" type="number" min="0" max="86400" value={a.durata_s ?? ""} placeholder="secunde" aria-label="Durata (secunde)" />
+              <input name="descriere" maxlength="2000" value={a.descriere} placeholder="descriere" aria-label="Descriere" class="lat" />
+            </div>
+            <div class="butoane">
+              <button class="buton mic" type="submit">Salvează</button>
+              <button class="buton mic" type="submit" formaction={act(`audio/${a.id}/muta?dir=sus`)} disabled={i === 0} aria-label="Mai sus">↑</button>
+              <button class="buton mic" type="submit" formaction={act(`audio/${a.id}/muta?dir=jos`)} disabled={i === audio.length - 1} aria-label="Mai jos">↓</button>
+              <button class="buton mic periculos" type="submit" formaction={act(`audio/${a.id}/sterge`)} data-confirma="Ștergi rezumatul audio?">Șterge</button>
+              <span class="meta">{a.fisier_nume} · {fmtMarime(a.marime)}{a.durata_s !== null && ` · ${fmtDurata(a.durata_s)}`}</span>
+            </div>
+          </form>
+        </li>
+      ))}
+    </ul>
+
+    <form class="campuri-inline noua" data-audio-nou={id} data-cere-js hidden>
+      <h3>Rezumat audio nou</h3>
+      <div class="grila-audio">
+        <input name="titlu" required maxlength="200" placeholder="Titlul rezumatului" aria-label="Titlu" />
+        <input name="data" type="date" required value={aziChisinau()} aria-label="Data" />
+        <input name="fisier" type="file" accept="audio/*" required aria-label="Fișier audio" />
+        <input name="descriere" maxlength="2000" placeholder="descriere (opțional)" aria-label="Descriere" class="lat" />
+      </div>
+      <div class="butoane">
+        <button class="buton" type="submit">Încarcă</button>
+        <output data-stare class="stare-incarcare"></output>
+        <small>MP3, M4A sau WAV, până la 95 MB. Descarcă Audio Overview-ul din NotebookLM și încarcă-l aici.</small>
+      </div>
+    </form>
+    <p data-fara-js class="fara-js">Încărcarea de fișiere cere JavaScript.</p>
+  </section>
+</Base>
+
+<script>
+  import "../../../scripts/incarcare";
+</script>
+
+<style>
+  .cale { color: var(--muted); font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .cale a:hover { color: var(--violet); }
+  .antet { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .formular { display: flex; flex-direction: column; gap: 20px; }
+  .butoane { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .butoane small, .meta { color: var(--faint); font-size: 13px; }
+  .ultima { margin-left: auto; color: var(--faint); font-size: 13px; font-weight: 600; }
+  .sectiune { margin-top: 44px; display: flex; flex-direction: column; gap: 14px; }
+  .sectiune h2 { display: flex; align-items: baseline; gap: 10px; }
+  .numar { color: var(--faint); font-size: 15px; font-weight: 600; }
+  .randuri { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .randuri li {
+    display: flex; flex-direction: column; gap: 10px; padding: 14px 16px;
+    border-radius: 16px; background: var(--bg-2); border: 1px solid var(--line);
+  }
+  .campuri-inline { display: flex; flex-direction: column; gap: 10px; }
+  .grila-sursa { display: grid; grid-template-columns: 2fr 1fr 80px 150px; gap: 8px; }
+  .grila-audio { display: grid; grid-template-columns: 2fr 150px 1fr; gap: 8px; }
+  .grila-sursa .lat, .grila-audio .lat { grid-column: 1 / -1; }
+  .noua { padding: 16px; border-radius: 16px; border: 1px dashed var(--line); }
+  .noua h3 { color: var(--muted); font-size: 14px; }
+  .fisier { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .fisier label { cursor: pointer; }
+  .fara-js { color: var(--faint); font-size: 13px; }
+  .stare-incarcare { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .stare-incarcare.ok { color: var(--live); }
+  .stare-incarcare.eroare { color: var(--coral); }
+  @media (max-width: 640px) {
+    .grila-sursa, .grila-audio { grid-template-columns: 1fr 1fr; }
+    .ultima { margin-left: 0; }
+  }
+</style>

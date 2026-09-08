@@ -1,0 +1,27 @@
+---
+import Base from "../../../layouts/Base.astro";
+import FormularCatalog from "../../../components/FormularCatalog.astro";
+
+const eroare = Astro.url.searchParams.get("eroare");
+---
+
+<Base title="Catalog nou · Admin">
+  <p class="cale"><a href="/admin">Administrare</a> / Catalog nou</p>
+  <h1>Catalog nou</h1>
+  {eroare && <p class="mesaj eroare">{eroare}</p>}
+  <form method="post" action="/admin/actiuni/catalog" class="formular">
+    <FormularCatalog />
+    <div class="butoane">
+      <button class="buton principal" type="submit">Creează catalogul</button>
+      <a class="buton" href="/admin">Renunță</a>
+    </div>
+  </form>
+</Base>
+
+<style>
+  .cale { color: var(--muted); font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .cale a:hover { color: var(--violet); }
+  h1 { margin-bottom: 20px; }
+  .formular { display: flex; flex-direction: column; gap: 20px; }
+  .butoane { display: flex; gap: 10px; }
+</style>

@@ -1,0 +1,66 @@
+---
+// Campurile unui catalog, folosite si la creare, si la editare.
+import type { Catalog } from "../lib/db";
+import { CULORI, ETICHETE_PICTOGRAMA, ETICHETE_STARE, PICTOGRAME, STARI } from "../lib/validare";
+
+interface Props {
+  catalog?: Catalog;
+}
+const { catalog: c } = Astro.props;
+---
+
+<div class="campuri">
+  <label>
+    <span>Titlu</span>
+    <input name="titlu" required maxlength="200" value={c?.titlu ?? ""} placeholder="Legislația penală" />
+  </label>
+  <label>
+    <span>Descriere</span>
+    <textarea name="descriere" rows="3" maxlength="2000" placeholder="Ce acte adună catalogul, pentru cine e.">{c?.descriere ?? ""}</textarea>
+  </label>
+  <label>
+    <span>Link NotebookLM</span>
+    <input name="url_notebook" type="url" value={c?.url_notebook ?? ""} placeholder="https://notebooklm.google.com/notebook/…" />
+    <small>Gol = „Notebook în pregătire”. Partajează notebook-ul din NotebookLM pe adresele Google ale colegilor.</small>
+  </label>
+  <div class="rand">
+    <label>
+      <span>Pictogramă</span>
+      <select name="pictograma">
+        {PICTOGRAME.map((p) => <option value={p} selected={(c?.pictograma ?? "carte") === p}>{ETICHETE_PICTOGRAMA[p]}</option>)}
+      </select>
+    </label>
+    <label>
+      <span>Culoare</span>
+      <select name="culoare">
+        {CULORI.map((k) => <option value={k} selected={(c?.culoare ?? "violet") === k}>{k}</option>)}
+      </select>
+    </label>
+    <label>
+      <span>Stare</span>
+      <select name="stare">
+        {STARI.map((s) => <option value={s} selected={(c?.stare ?? "in_lucru") === s}>{ETICHETE_STARE[s]}</option>)}
+      </select>
+    </label>
+  </div>
+  <label>
+    <span>Note de utilizare (Markdown)</span>
+    <textarea name="note_utilizare" rows="6" maxlength="20000" placeholder="## Întrebări utile&#10;- Ce pedeapsă prevede art. 186?">{c?.note_utilizare ?? ""}</textarea>
+  </label>
+</div>
+
+<style is:global>
+  .campuri { display: flex; flex-direction: column; gap: 16px; }
+  .campuri label, .campuri-inline label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
+  .campuri small { font-weight: 500; color: var(--faint); }
+  .campuri .rand { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .campuri input, .campuri textarea, .campuri select,
+  .campuri-inline input, .campuri-inline select, .campuri-inline textarea {
+    width: 100%; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg-3); color: var(--text); font-size: 15px; font-weight: 500;
+  }
+  .campuri textarea { resize: vertical; font-family: var(--body); }
+  .campuri input:focus, .campuri textarea:focus, .campuri select:focus,
+  .campuri-inline input:focus, .campuri-inline select:focus, .campuri-inline textarea:focus { border-color: var(--violet); outline: none; }
+  @media (max-width: 560px) { .campuri .rand { grid-template-columns: 1fr; } }
+</style>

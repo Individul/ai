@@ -55,6 +55,8 @@ export function verificaUpload(fel: FelFisier, cerere: Request): VerificareUploa
 // Unele PDF-uri (ex. cele generate de legis.md cu mPDF) au cativa octeti de gunoi inaintea
 // antetului "%PDF". Cititoarele ii tolereaza, dar indexarea Google esueaza. Cautam antetul in
 // primii 4 KB si sarim peste ce e inainte; lungimea noua = marime - offset.
+// Fluxul rezultat trece printr-un FixedLengthStream: R2 (si Files API) refuza fluxurile fara
+// lungime cunoscuta ("Provided readable stream must have a known length").
 export const CAUTARE_ANTET = 4096;
 
 export async function curataPdf(corp: ReadableStream<Uint8Array>, marime: number): Promise<{ corp: ReadableStream<Uint8Array>; marime: number; taiat: number }> {
@@ -80,7 +82,8 @@ export async function curataPdf(corp: ReadableStream<Uint8Array>, marime: number
     },
     cancel() { return reader.cancel(); },
   });
-  return { corp: corpNou, marime: marime - taiat, taiat };
+  const marimeNoua = marime - taiat;
+  return { corp: corpNou.pipeThrough(new FixedLengthStream(marimeNoua)), marime: marimeNoua, taiat };
 }
 
 function concat(bucati: Uint8Array[]): Uint8Array {

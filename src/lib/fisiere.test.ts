@@ -76,6 +76,15 @@ describe("curataPdf", () => {
     });
   const text = (s: string) => new TextEncoder().encode(s);
 
+  it("corpul curatat are lungime cunoscuta, deci R2 il accepta", async () => {
+    const brut = text("gunoi\n%PDF-1.4\nabc");
+    const r = await curataPdf(flux(brut), brut.length);
+    await env.FISIERE.put("pdf/curat", r.corp, { httpMetadata: { contentType: "application/pdf" } });
+    const obj = await env.FISIERE.get("pdf/curat");
+    expect(obj?.size).toBe(r.marime);
+    expect(await obj!.text()).toBe("%PDF-1.4\nabc");
+  });
+
   it("taie gunoiul dinaintea antetului %PDF si corecteaza marimea", async () => {
     const brut = text("q 10.500 0 0 12 cm /I1 Do Q\n%PDF-1.4\n1 0 obj<<>>endobj\n%%EOF");
     const r = await curataPdf(flux(brut), brut.length);

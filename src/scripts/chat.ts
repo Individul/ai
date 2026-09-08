@@ -1,5 +1,6 @@
 // Chatul de pe pagina catalogului. Istoricul vine de pe server (jurnalul propriu al catalogului),
-// deci ramane pe orice tab si dupa reincarcare. "Sterge conversatia" doar il ascunde din pagina:
+// deci ramane pe orice tab si dupa reincarcare: intai ultimele 5 intrebari, apoi cate 10 mai vechi
+// la "arata intrebari mai vechi", grupate pe zile. "Sterge conversatia" doar il ascunde din pagina:
 // se retine local momentul stergerii, iar tot ce e mai vechi nu se mai arata si nu mai intra in
 // contextul trimis modelului. Randarea escapeaza tot; raspunsul e Markdown minimal, randat sigur.
 
@@ -21,11 +22,25 @@ function pornesteChat(el: HTMLElement) {
   const lista = el.querySelector<HTMLElement>("[data-schimburi]")!;
   const contor = el.querySelector<HTMLElement>("[data-ramase]")!;
   const sterge = el.querySelector<HTMLButtonElement>("[data-sterge]");
+  const maiMulte = el.querySelector<HTMLButtonElement>("[data-mai-multe]");
   const cheieSters = `chat:${catalog}:sters`;
 
   let istoric: Schimb[] = [];
+  let maiVechiPeServer = false;
   const stersPanaLa = (): string => { try { return localStorage.getItem(cheieSters) ?? ""; } catch { return ""; } };
   const vizibile = () => istoric.filter((s) => s.creat_la > stersPanaLa());
+
+  // "Azi", "Ieri" sau data, in fusul browserului (colegii sunt in acelasi fus).
+  function ziua(iso: string): string {
+    const d = new Date(iso);
+    const azi = new Date();
+    const ieri = new Date(azi);
+    ieri.setDate(azi.getDate() - 1);
+    const aceeasi = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    if (aceeasi(d, azi)) return "Azi";
+    if (aceeasi(d, ieri)) return "Ieri";
+    return d.toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: d.getFullYear() === azi.getFullYear() ? undefined : "numeric" });
+  }
 
   const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
@@ -42,19 +57,50 @@ function pornesteChat(el: HTMLElement) {
 
   const corp = (s: Schimb) => `<div class="raspuns proza">${randeazaMarkdown(s.raspuns)}</div>${htmlCitari(s.citari)}`;
 
-  // Sub caseta: toate intrebarile ca linkuri, cea mai noua prima; raspunsul se deschide la clic.
-  // Raspunsul abia primit e deschis automat. Caseta ramane mereu in acelasi loc.
+  // Sub caseta: intrebarile ca linkuri, cea mai noua prima, grupate pe zile; raspunsul se deschide
+  // la clic. Raspunsul abia primit e deschis automat. Caseta ramane mereu in acelasi loc.
   function randeaza(nou = false) {
     const de = vizibile();
-    if (!de.length) { lista.innerHTML = ""; if (sterge) sterge.hidden = true; return; }
-    lista.innerHTML =
-      `<section class="anterioare"><h3>Întrebări</h3>` +
-      [...de].reverse()
-        .map((s, i) => `<details class="vechi${nou && i === 0 ? " nou" : ""}"${nou && i === 0 ? " open" : ""}><summary>${esc(s.intrebare)}</summary>${corp(s)}</details>`)
-        .join("") +
-      `</section>`;
+    if (!de.length) { lista.innerHTML = ""; if (sterge) sterge.hidden = true; if (maiMulte) maiMulte.hidden = true; return; }
+    const grupuri: { zi: string; schimburi: Schimb[] }[] = [];
+    for (const s of [...de].reverse()) {
+      const zi = ziua(s.creat_la);
+      const ultim = grupuri[grupuri.length - 1];
+      if (ultim && ultim.zi === zi) ultim.schimburi.push(s);
+      else grupuri.push({ zi, schimburi: [s] });
+    }
+    lista.innerHTML = grupuri
+      .map((g, gi) =>
+        `<section class="anterioare"><h3>${esc(g.zi)}</h3>` +
+        g.schimburi
+          .map((s, i) => {
+            const primul = nou && gi === 0 && i === 0;
+            return `<details class="vechi${primul ? " nou" : ""}"${primul ? " open" : ""}><summary>${esc(s.intrebare)}</summary>${corp(s)}</details>`;
+          })
+          .join("") +
+        `</section>`)
+      .join("");
     if (sterge) sterge.hidden = false;
+    // Mai vechi decat momentul stergerii nu are rost sa aducem: oricum nu s-ar arata.
+    if (maiMulte) maiMulte.hidden = !maiVechiPeServer || (istoric[0]?.creat_la ?? "") <= stersPanaLa();
   }
+
+  // Aduce `n` intrebari de pe server, mai vechi decat cea mai veche pe care o avem.
+  async function incarcaIstoric(n: number): Promise<void> {
+    const inainte = istoric[0]?.creat_la;
+    const r = await fetch(`/api/chat/istoric?catalog=${encodeURIComponent(catalog)}&n=${n}${inainte ? `&inainte=${encodeURIComponent(inainte)}` : ""}`);
+    if (!r.ok) return;
+    const d = (await r.json()) as { istoric: Schimb[]; mai_vechi: boolean };
+    istoric = [...d.istoric, ...istoric];
+    maiVechiPeServer = d.mai_vechi;
+  }
+
+  maiMulte?.addEventListener("click", async () => {
+    maiMulte.disabled = true;
+    try { await incarcaIstoric(10); } catch { /* ramane cum e */ }
+    maiMulte.disabled = false;
+    randeaza();
+  });
 
   function stare(text: string, fel: "" | "eroare" = "") {
     contor.textContent = text;
@@ -116,12 +162,9 @@ function pornesteChat(el: HTMLElement) {
     randeaza();
   });
 
-  // Istoricul de pe server, apoi contorul.
+  // Ultimele 5 intrebari de pe server, apoi contorul.
   (async () => {
-    try {
-      const r = await fetch(`/api/chat/istoric?catalog=${encodeURIComponent(catalog)}`);
-      if (r.ok) istoric = ((await r.json()) as { istoric: Schimb[] }).istoric;
-    } catch { /* ramane gol */ }
+    try { await incarcaIstoric(5); } catch { /* ramane gol */ }
     randeaza();
   })();
   void actualizeazaRamase();

@@ -191,15 +191,19 @@ export async function istoricUtilizator(db: D1Database, email: string, n = 50): 
 }
 
 // Intrebarile reusite ale unui utilizator intr-un catalog, cele mai noi `n`, in ordine cronologica.
-export async function istoricCatalog(db: D1Database, email: string, catalogId: string, n = 30): Promise<Intrebare[]> {
+// Cu `inainte` (un `creat_la`), doar cele strict mai vechi: pagina urmatoare pentru "arata mai multe".
+export async function istoricCatalog(
+  db: D1Database, email: string, catalogId: string, n = 30, inainte?: string
+): Promise<Intrebare[]> {
   const r = await db
     .prepare(
       `SELECT ${COL_INTREBARE} FROM (
-         SELECT ${COL_INTREBARE} FROM intrebari WHERE email = ? AND catalog_id = ? AND stare = 'ok'
-         ORDER BY creat_la DESC LIMIT ?
+         SELECT ${COL_INTREBARE} FROM intrebari
+         WHERE email = ?1 AND catalog_id = ?2 AND stare = 'ok' AND (?4 IS NULL OR creat_la < ?4)
+         ORDER BY creat_la DESC LIMIT ?3
        ) ORDER BY creat_la ASC`
     )
-    .bind(email, catalogId, n)
+    .bind(email, catalogId, n, inainte ?? null)
     .all<Intrebare>();
   return r.results;
 }

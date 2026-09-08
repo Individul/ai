@@ -79,8 +79,8 @@ src/lib/text.ts                 textul extras din PDF, in R2 sub text/{sursa}: v
 src/lib/consum.ts               jurnalul intrebarilor, limite per utilizator, blocare, raport, credite
 src/lib/indexare.ts             R2 + D1 + Gemini: porneste/verifica/scoate indexarea unei surse
 src/pages/                      / (grila), c/[slug] (cu chat), consum, acces, f/pdf, f/audio, admin/*, api/*
-src/pages/api/chat/             POST intrebare (limite + jurnal), GET ramase
+src/pages/api/chat/             POST intrebare (limite + jurnal), GET ramase, GET istoric (paginat: n, inainte)
 src/pages/admin/actiuni/        toate actiunile din formulare (POST + 303)
 src/scripts/incarcare.ts        client: upload PDF/audio cu progres, extragere text (pdf.js), indexare, confirmari
-src/scripts/chat.ts             client: chatul de pe pagina catalogului (istoric in sessionStorage)
+src/scripts/chat.ts             client: chatul de pe pagina catalogului (ultimele 5 intrebari, apoi cate 10 mai vechi, pe zile)
 ```

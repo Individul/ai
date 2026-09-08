@@ -36,6 +36,7 @@ const admin = Astro.locals.admin;
         <p class="lamurire">Răspunsurile vin doar din actele catalogului, cu trimitere la articol și la pagina din PDF. Verifică întotdeauna în act.</p>
       </form>
       <div class="schimburi" data-schimburi></div>
+      <button type="button" class="text mai-multe" data-mai-multe hidden>arată întrebări mai vechi</button>
       <noscript><p class="lamurire">Chatul cere JavaScript.</p></noscript>
     </>
   )}
@@ -81,10 +82,13 @@ const admin = Astro.locals.admin;
   .chat .ramase.eroare { color: var(--coral); }
   .chat button.text { background: none; border: 0; padding: 0; color: var(--faint); font-size: 13px; font-weight: 600; cursor: pointer; }
   .chat button.text:hover { color: var(--text); }
-  /* Intrebarile anterioare: doar textul, ca linkuri; raspunsul se deschide la clic */
+  /* Intrebarile anterioare: grupate pe zile, doar textul, ca linkuri; raspunsul se deschide la clic */
   .chat .anterioare { display: flex; flex-direction: column; gap: 6px; }
+  .chat .anterioare + .anterioare { margin-top: 18px; }
   .chat details.nou { animation: apare 0.25s ease-out; }
   .chat .anterioare h3 { color: var(--faint); font-family: var(--body); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .chat .mai-multe { align-self: flex-start; margin-top: -12px; }
+  .chat .mai-multe:disabled { opacity: 0.5; cursor: default; }
   .chat details.vechi summary {
     cursor: pointer; list-style: none; color: var(--muted); font-size: 15px; font-weight: 600; line-height: 1.4; padding: 4px 0;
     text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color 0.15s, text-decoration-color 0.15s;

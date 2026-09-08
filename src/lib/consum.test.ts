@@ -166,3 +166,18 @@ describe("fmtCredite", () => {
     expect(fmtCredite(10000)).toBe("10.000");
   });
 });
+
+describe("istoricCatalog, paginat", () => {
+  it("cu `inainte` intoarce doar intrebarile mai vechi decat momentul dat, tot cronologic", async () => {
+    const c = await creeazaCatalog(env.DB, "c5", { titlu: "C5" });
+    const i1 = await intrebare(A, c.id, "2026-09-05");
+    const i2 = await intrebare(A, c.id, "2026-09-06");
+    const i3 = await intrebare(A, c.id, "2026-09-07");
+    const i4 = await intrebare(A, c.id, "2026-09-08");
+    const ultimele = await istoricCatalog(env.DB, A, c.id, 2);
+    expect(ultimele.map((i) => i.id)).toEqual([i3.id, i4.id]);
+    const maiVechi = await istoricCatalog(env.DB, A, c.id, 2, ultimele[0]!.creat_la);
+    expect(maiVechi.map((i) => i.id)).toEqual([i1.id, i2.id]);
+    expect(await istoricCatalog(env.DB, A, c.id, 2, maiVechi[0]!.creat_la)).toEqual([]);
+  });
+});

@@ -30,14 +30,12 @@ const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) :
 <Base title={`${catalog.titlu} · Cataloage`}>
   <article class:list={["catalog", `culoare-${catalog.culoare}`]}>
     <header class="antet">
-      <div class="icon"><Pictograma nume={catalog.pictograma} marime={34} /></div>
-      <div class="titluri">
-        <div class="rand">
-          <h1>{catalog.titlu}</h1>
-          <span class:list={["insigna", catalog.stare]}>{ETICHETE_STARE[catalog.stare]}</span>
-        </div>
-        {catalog.descriere && <p class="descriere">{catalog.descriere}</p>}
+      <div class="rand">
+        <div class="icon"><Pictograma nume={catalog.pictograma} marime={22} /></div>
+        <span class:list={["insigna", catalog.stare]}>{ETICHETE_STARE[catalog.stare]}</span>
       </div>
+      <h1>{catalog.titlu}</h1>
+      {catalog.descriere && <p class="descriere">{catalog.descriere}</p>}
     </header>
 
     <Chat catalogId={catalog.id} indexate={indexate} ramase={Math.max(0, limita - folosite)} limita={limita} />
@@ -47,10 +45,12 @@ const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) :
       <ListaSurse surse={surse} />
     </section>
 
-    <section class="sectiune">
-      <h2>Rezumate audio <span class="numar">{audio.length}</span></h2>
-      <ListaAudio audio={audio} />
-    </section>
+    {audio.length > 0 && (
+      <section class="sectiune">
+        <h2>Rezumate audio <span class="numar">{audio.length}</span></h2>
+        <ListaAudio audio={audio} />
+      </section>
+    )}
 
     {note && (
       <section class="sectiune">
@@ -64,20 +64,21 @@ const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) :
 </Base>
 
 <style>
-  .antet { display: flex; gap: 18px; align-items: flex-start; }
+  .antet { display: flex; flex-direction: column; gap: 12px; }
+  .antet .rand { display: flex; align-items: center; gap: 12px; }
   .icon {
-    flex: none; width: 60px; height: 60px; border-radius: 18px; display: grid; place-items: center;
+    width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
     background: var(--accent); color: #16121D;
   }
-  .titluri { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-  .rand { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-  .descriere { color: var(--text-2); font-size: 17px; }
-  .sectiune { margin-top: 36px; display: flex; flex-direction: column; gap: 14px; }
-  .sectiune h2 { display: flex; align-items: baseline; gap: 10px; }
-  .numar { color: var(--faint); font-size: 15px; font-weight: 600; }
-  .ultima { margin-top: 40px; color: var(--faint); font-size: 13px; font-weight: 600; }
+  h1 { font-size: 40px; letter-spacing: -0.02em; }
+  .descriere { color: var(--muted); font-size: 17px; max-width: 60ch; }
+  .sectiune { margin-top: 56px; display: flex; flex-direction: column; gap: 18px; }
+  .sectiune h2 { display: flex; align-items: baseline; gap: 10px; font-size: 20px; }
+  .numar { color: var(--faint); font-size: 14px; font-weight: 600; }
+  .ultima { margin-top: 56px; color: var(--faint); font-size: 13px; font-weight: 600; }
   @media (max-width: 560px) {
-    .antet { flex-direction: column; }
-    h1 { font-size: 28px; }
+    h1 { font-size: 30px; }
+    .descriere { font-size: 16px; }
+    .sectiune { margin-top: 44px; }
   }
 </style>

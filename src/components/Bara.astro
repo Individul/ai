@@ -41,8 +41,11 @@ const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsW
   .suma { margin-left: 6px; font-size: 12px; font-weight: 700; color: var(--faint); font-variant-numeric: tabular-nums; }
   nav a.activ .suma, nav a:hover .suma { color: inherit; opacity: 0.75; }
   nav a.admin.activ { background: rgba(244, 135, 106, 0.12); }
-  @media (max-width: 560px) {
+  @media (max-width: 640px) {
     .bara { gap: 10px; padding: 0 14px; }
+    nav { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; margin-right: -14px; padding-right: 14px; }
+    nav::-webkit-scrollbar { display: none; }
     nav a { padding: 0 9px; font-size: 13px; }
+    .suma { display: none; }
   }
 </style>

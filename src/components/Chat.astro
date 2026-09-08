@@ -1,6 +1,6 @@
 ---
-// Sectiunea "Intreaba catalogul" de pe pagina catalogului. Fara JavaScript arata doar
-// lamurirea; scriptul (chat.ts) porneste formularul.
+// Chatul catalogului: caseta de intrebare e elementul principal al paginii. Raspunsurile curg
+// ca text, fara chenare; citarile sunt linkuri discrete. Fara JavaScript ramane doar lamurirea.
 interface Props {
   catalogId: string;
   indexate: number;   // surse cu document in Gemini
@@ -12,33 +12,29 @@ const admin = Astro.locals.admin;
 ---
 
 <section class="chat" id="chat" data-chat={indexate > 0 ? catalogId : undefined}>
-  <h2>Întreabă catalogul</h2>
   {indexate === 0 ? (
-    <>
-      <p class="gol">Catalogul nu are încă documente indexate. Întrebările se pot pune după ce se adaugă PDF-urile actelor.</p>
+    <div class="gol">
+      <p>Catalogul nu are încă documente indexate. Întrebările se pot pune după ce se adaugă PDF-urile actelor.</p>
       {admin && (
         <p class="pas-admin">
-          Ești administrator: <a class="buton" href={`/admin/cataloage/${catalogId}#surse`}>Adaugă sursele și PDF-urile →</a>
+          <a class="buton" href={`/admin/cataloage/${catalogId}#surse`}>Adaugă sursele și PDF-urile →</a>
           <small>La fiecare sursă apeși „+ PDF”; indexarea pornește singură.</small>
         </p>
       )}
-    </>
+    </div>
   ) : (
     <>
-      <p class="lamurire">
-        Răspunsurile vin doar din documentele catalogului, cu trimitere la articol și la pagina din PDF.
-        Verifică întotdeauna în actul citat.
-      </p>
       <div class="schimburi" data-schimburi></div>
       <form class="intrebare">
-        <textarea name="intrebare" rows="2" maxlength="2000" placeholder="Ex.: Ce condiții cere liberarea condiționată?" aria-label="Întrebarea ta" required></textarea>
+        <textarea name="intrebare" rows="2" maxlength="2000" placeholder="Întreabă catalogul… de exemplu: ce condiții cere liberarea condiționată?" aria-label="Întrebarea ta" required></textarea>
         <div class="rand">
           <output class="ramase" data-ramase>{ramase} din {limita} întrebări rămase azi</output>
-          <button type="button" class="buton mic" data-sterge hidden>Șterge conversația</button>
+          <button type="button" class="text" data-sterge hidden>șterge conversația</button>
           <button type="submit" class="buton principal" disabled={ramase === 0}>Întreabă</button>
         </div>
+        <p class="lamurire">Răspunsurile vin doar din actele catalogului, cu trimitere la articol și la pagina din PDF. Verifică întotdeauna în act.</p>
       </form>
-      <noscript><p class="gol">Chatul cere JavaScript.</p></noscript>
+      <noscript><p class="lamurire">Chatul cere JavaScript.</p></noscript>
     </>
   )}
 </section>
@@ -48,28 +44,37 @@ const admin = Astro.locals.admin;
 </script>
 
 <style is:global>
-  .chat { margin-top: 36px; display: flex; flex-direction: column; gap: 14px; }
-  .chat .gol, .chat .lamurire { color: var(--muted); font-size: 14px; }
+  .chat { margin-top: 36px; display: flex; flex-direction: column; gap: 28px; }
+  .chat .gol { display: flex; flex-direction: column; gap: 14px; color: var(--muted); font-size: 15px; }
   .chat .pas-admin { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--text-2); font-size: 14px; }
   .chat .pas-admin small { color: var(--faint); flex-basis: 100%; }
-  .chat .schimburi { display: flex; flex-direction: column; gap: 14px; }
-  .chat .schimb { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 18px; background: var(--bg-2); border: 1px solid var(--line); }
-  .chat .intrebare-text, .chat .schimb .intrebare { font-weight: 700; color: var(--accent, var(--violet)); white-space: pre-wrap; }
-  .chat .schimb .raspuns { font-size: 15.5px; }
+  .chat .lamurire { color: var(--faint); font-size: 13px; line-height: 1.5; }
+
+  /* Schimburi: intrebarea ca titlu mic, raspunsul ca text, o linie subtire intre ele */
+  .chat .schimburi { display: flex; flex-direction: column; gap: 32px; }
+  .chat .schimburi:empty { display: none; }
+  .chat .schimb { display: flex; flex-direction: column; gap: 10px; }
+  .chat .schimb .intrebare { font-family: var(--display); font-weight: 600; font-size: 19px; line-height: 1.3; color: var(--text); white-space: pre-wrap; }
+  .chat .schimb .raspuns { font-size: 16px; color: var(--text-2); }
   .chat .schimb .raspuns p:last-child { margin-bottom: 0; }
-  .chat .citari { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chat .citare {
-    display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
-    background: rgba(var(--accent-rgb, 179, 147, 242), 0.14); color: var(--accent, var(--violet)); border: 1px solid rgba(var(--accent-rgb, 179, 147, 242), 0.3);
-  }
-  a.citare:hover { filter: brightness(1.15); }
-  .chat form.intrebare { display: flex; flex-direction: column; gap: 10px; }
+  .chat .citari { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px; font-size: 13px; }
+  .chat .citari::before { content: "Surse:"; color: var(--faint); font-weight: 600; }
+  .chat .citare { color: var(--accent, var(--violet)); font-weight: 600; text-decoration: underline; text-decoration-color: rgba(var(--accent-rgb, 179, 147, 242), 0.35); text-underline-offset: 3px; }
+  a.citare:hover { text-decoration-color: currentColor; }
+
+  /* Caseta de intrebare */
+  .chat form.intrebare { display: flex; flex-direction: column; gap: 12px; }
   .chat textarea {
-    width: 100%; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg-3);
-    color: var(--text); font-size: 16px; font-family: var(--body); resize: vertical; min-height: 64px;
+    width: 100%; padding: 16px 18px; border-radius: 16px; border: 1px solid var(--line); background: var(--bg-2);
+    color: var(--text); font-size: 17px; font-family: var(--body); line-height: 1.5; resize: vertical; min-height: 84px;
+    transition: border-color 0.15s;
   }
+  .chat textarea::placeholder { color: var(--faint); }
   .chat textarea:focus { border-color: var(--accent, var(--violet)); outline: none; }
-  .chat .rand { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .chat .ramase { color: var(--muted); font-size: 13px; font-weight: 600; margin-right: auto; }
+  .chat .rand { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .chat .ramase { color: var(--faint); font-size: 13px; font-weight: 600; margin-right: auto; }
   .chat .ramase.eroare { color: var(--coral); }
+  .chat button.text { background: none; border: 0; padding: 0; color: var(--faint); font-size: 13px; font-weight: 600; cursor: pointer; }
+  .chat button.text:hover { color: var(--text); }
+  @media (max-width: 560px) { .chat .schimb .intrebare { font-size: 17px; } }
 </style>

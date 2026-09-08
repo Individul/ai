@@ -1,6 +1,6 @@
 ---
-// Audio Overview-urile unui catalog, redabile in pagina. preload="none": fisierele sunt mari
-// si protejate; browserul le cere doar la play (cu Range, deci serverul raspunde 206).
+// Rezumatele audio ale unui catalog: rand simplu, player dedesubt. preload="none": fisierele
+// sunt mari si protejate; browserul le cere doar la play (cu Range, deci serverul raspunde 206).
 import type { Audio } from "../lib/db";
 import { fmtDurata, fmtMarime } from "../lib/validare";
 import { fmtZi } from "../lib/data";
@@ -26,7 +26,7 @@ const { audio } = Astro.props;
               <span>{fmtMarime(a.marime)}</span>
             </span>
           </div>
-          <a class="buton mic" href={`/f/audio/${a.id}?descarca=1`} title="Descarcă" aria-label={`Descarcă ${a.fisier_nume}`}>↓</a>
+          <a class="actiune" href={`/f/audio/${a.id}?descarca=1`} title={`Descarcă ${a.fisier_nume}`}>descarcă ↓</a>
         </div>
         {a.descriere && <p class="descriere">{a.descriere}</p>}
         <audio controls preload="none" src={`/f/audio/${a.id}`}></audio>
@@ -37,15 +37,14 @@ const { audio } = Astro.props;
 
 <style>
   .gol { color: var(--muted); }
-  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
-  li {
-    display: flex; flex-direction: column; gap: 10px; padding: 16px 18px;
-    border-radius: 18px; background: var(--bg-2); border: 1px solid var(--line);
-  }
-  .cap { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .titlu { font-weight: 600; }
-  .meta { display: flex; gap: 12px; color: var(--muted); font-size: 13px; }
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 22px; }
+  li { display: flex; flex-direction: column; gap: 8px; }
+  .cap { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .titlu { font-weight: 600; font-size: 16px; }
+  .meta { display: flex; gap: 12px; color: var(--faint); font-size: 13px; }
+  .actiune { flex: none; font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .actiune:hover { color: var(--text); }
   .descriere { color: var(--text-2); font-size: 14px; }
   audio { width: 100%; height: 40px; }
 </style>

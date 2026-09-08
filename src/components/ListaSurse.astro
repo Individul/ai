@@ -1,5 +1,6 @@
 ---
-// Sursele unui catalog, grupate pe tip, in ordinea vocabularului.
+// Sursele unui catalog: lista simpla, grupata pe tip. Titlul deschide PDF-ul (daca exista);
+// descarcarea si linkul extern sunt actiuni discrete la capatul randului.
 import type { Sursa } from "../lib/db";
 import { ETICHETE_TIP, TIPURI_SURSA, fmtMarime } from "../lib/validare";
 import { fmtZi } from "../lib/data";
@@ -24,22 +25,21 @@ const grupuri = TIPURI_SURSA
           {g.surse.map((s) => (
             <li>
               <div class="text">
-                <span class="titlu">{s.titlu}</span>
+                {s.fisier_nume ? (
+                  <a class="titlu" href={`/f/pdf/${s.id}`} target="_blank" rel="noopener">{s.titlu}</a>
+                ) : (
+                  <span class="titlu">{s.titlu}</span>
+                )}
                 <span class="meta">
                   {s.numar && <span>nr. {s.numar}</span>}
                   {s.data_emiterii && <span>{fmtZi(s.data_emiterii)}</span>}
+                  {s.fisier_nume && <span>PDF, {fmtMarime(s.fisier_marime ?? 0)}</span>}
+                  {s.fisier_nume && s.indexare === "gata" && <span class="in-chat">în chat</span>}
                 </span>
               </div>
-              <div class="linkuri">
-                {s.url && (
-                  <a class="buton mic" href={s.url} target="_blank" rel="noopener noreferrer">Link</a>
-                )}
-                {s.fisier_nume && (
-                  <>
-                    <a class="buton mic" href={`/f/pdf/${s.id}`} target="_blank" rel="noopener">PDF ({fmtMarime(s.fisier_marime ?? 0)})</a>
-                    <a class="buton mic" href={`/f/pdf/${s.id}?descarca=1`} title="Descarcă" aria-label={`Descarcă ${s.fisier_nume}`}>↓</a>
-                  </>
-                )}
+              <div class="actiuni">
+                {s.url && <a href={s.url} target="_blank" rel="noopener noreferrer" title="Pagina actului">link ↗</a>}
+                {s.fisier_nume && <a href={`/f/pdf/${s.id}?descarca=1`} title={`Descarcă ${s.fisier_nume}`}>descarcă ↓</a>}
               </div>
             </li>
           ))}
@@ -51,19 +51,19 @@ const grupuri = TIPURI_SURSA
 
 <style>
   .gol { color: var(--muted); }
-  .grupuri { display: flex; flex-direction: column; gap: 22px; }
-  .grup h3 { color: var(--accent, var(--violet)); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
-  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-  li {
-    display: flex; align-items: center; justify-content: space-between; gap: 16px;
-    padding: 12px 0; border-top: 1px solid var(--line);
-  }
-  li:last-child { border-bottom: 1px solid var(--line); }
-  .text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .titlu { font-weight: 600; }
-  .meta { display: flex; gap: 12px; color: var(--muted); font-size: 13px; }
-  .linkuri { display: flex; gap: 6px; flex: none; }
+  .grupuri { display: flex; flex-direction: column; gap: 26px; }
+  .grup h3 { color: var(--faint); font-family: var(--body); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+  li { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+  .text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .titlu { font-weight: 600; font-size: 16px; }
+  a.titlu { text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color 0.15s; }
+  a.titlu:hover { text-decoration-color: var(--accent, var(--violet)); color: var(--accent, var(--violet)); }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--faint); font-size: 13px; }
+  .in-chat { color: var(--live); font-weight: 600; }
+  .actiuni { display: flex; gap: 14px; flex: none; font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .actiuni a:hover { color: var(--text); }
   @media (max-width: 560px) {
-    li { flex-direction: column; align-items: flex-start; gap: 8px; }
+    li { flex-direction: column; align-items: flex-start; gap: 6px; }
   }
 </style>

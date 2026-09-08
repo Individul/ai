@@ -18,11 +18,6 @@ const { catalog: c } = Astro.props;
     <span>Descriere</span>
     <textarea name="descriere" rows="3" maxlength="2000" placeholder="Ce acte adună catalogul, pentru cine e.">{c?.descriere ?? ""}</textarea>
   </label>
-  <label>
-    <span>Link NotebookLM</span>
-    <input name="url_notebook" type="url" value={c?.url_notebook ?? ""} placeholder="https://notebook.google.com/notebook/…" />
-    <small>Copiază adresa din bara browserului când ai notebook-ul deschis (notebook.google.com/notebook/…). Gol = „Notebook în pregătire”. Partajează notebook-ul din NotebookLM pe adresele Google ale colegilor.</small>
-  </label>
   <div class="rand">
     <label>
       <span>Pictogramă</span>

@@ -1,5 +1,5 @@
 ---
-// Pagina unui catalog: notebook, surse grupate pe tip, audio, note de utilizare.
+// Pagina unui catalog: chat, surse grupate pe tip, audio, note de utilizare.
 import { env } from "cloudflare:workers";
 import Base from "../../layouts/Base.astro";
 import Pictograma from "../../components/Pictograma.astro";
@@ -24,7 +24,6 @@ const [surse, audio, folosite, limita] = await Promise.all([
   intrebariAzi(env.DB, email, aziChisinau()), limitaPentru(env.DB, email),
 ]);
 const indexate = catalog.magazin ? surse.filter((s) => s.indexare === "gata").length : 0;
-const areNotebook = catalog.url_notebook !== "";
 const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) : "";
 ---
 
@@ -40,22 +39,6 @@ const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) :
         {catalog.descriere && <p class="descriere">{catalog.descriere}</p>}
       </div>
     </header>
-
-    <div class="notebook">
-      {areNotebook ? (
-        <a class="buton principal" href={catalog.url_notebook} target="_blank" rel="noopener noreferrer">
-          Deschide în NotebookLM
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>
-        </a>
-      ) : (
-        <span class="buton principal" aria-disabled="true">Notebook în pregătire</span>
-      )}
-      <p class="lamurire">
-        Notebook-ul se deschide pe notebook.google.com (NotebookLM) și cere un cont Google adăugat la el.
-        Poți întreba și direct aici, mai jos, fără cont Google.
-        <a href="/acces">Cum obțin acces?</a>
-      </p>
-    </div>
 
     <Chat catalogId={catalog.id} indexate={indexate} ramase={Math.max(0, limita - folosite)} limita={limita} />
 
@@ -89,9 +72,6 @@ const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) :
   .titluri { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .rand { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
   .descriere { color: var(--text-2); font-size: 17px; }
-  .notebook { margin: 28px 0 8px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
-  .lamurire { color: var(--muted); font-size: 14px; }
-  .lamurire a { color: var(--violet); text-decoration: underline; text-underline-offset: 3px; margin-left: 4px; }
   .sectiune { margin-top: 36px; display: flex; flex-direction: column; gap: 14px; }
   .sectiune h2 { display: flex; align-items: baseline; gap: 10px; }
   .numar { color: var(--faint); font-size: 15px; font-weight: 600; }

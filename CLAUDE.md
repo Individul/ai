@@ -1,6 +1,6 @@
 # Cataloage
 
-Hub de cataloage de legislație pentru colegi (ai.dumitru.cloud). Astro `output: 'server'` pe Cloudflare Workers, D1 pentru date, R2 pentru fișiere, Cloudflare Access pentru autentificare, Gemini File Search pentru chatul cu citări. NotebookLM nu se integrează (nu are API pe cont personal): hub-ul trimite spre notebook, găzduiește ce s-a descărcat de acolo și are chatul propriu peste PDF-urile din R2. Planurile: `docs/plans/2026-09-08-cataloage-v1.md` (hub), `docs/plans/2026-09-08-cataloage-v2-chat.md` (chat, consum, limite).
+Hub de cataloage de legislație pentru colegi (ai.dumitru.cloud). Astro `output: 'server'` pe Cloudflare Workers, D1 pentru date, R2 pentru fișiere, Cloudflare Access pentru autentificare, Gemini File Search pentru chatul cu citări. NotebookLM nu se integrează (nu are API pe cont personal) și a fost scos din UI în v2; chatul e propriu, peste PDF-urile din R2 (coloana `url_notebook` a rămas în schemă, nefolosită). Planurile: `docs/plans/2026-09-08-cataloage-v1.md` (hub), `docs/plans/2026-09-08-cataloage-v2-chat.md` (chat, consum, limite).
 
 ## Convenții
 

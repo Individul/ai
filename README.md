@@ -1,8 +1,8 @@
 # Cataloage
 
-Cataloage de legislație penitenciară pentru colegi, la [ai.dumitru.cloud](https://ai.dumitru.cloud). Fiecare catalog (Legislația penală, Legislația contravențională, Ordine penitenciare…) are un notebook NotebookLM în care se pun întrebări și se primesc răspunsuri cu trimitere la articol. Hub-ul organizează cataloagele, găzduiește sursele (cu PDF) și rezumatele audio (Audio Overview) descărcate din NotebookLM, și trimite spre notebook.
+Cataloage de legislație penitenciară pentru colegi, la [ai.dumitru.cloud](https://ai.dumitru.cloud). Fiecare catalog (Legislația penală, Legislația contravențională, Ordine penitenciare…) adună actele în PDF; colegii pun întrebări direct pe pagina catalogului și primesc răspunsuri cu citări la articol și la pagina din act. Hub-ul găzduiește sursele și rezumatele audio, numără întrebările per persoană, aplică limite pe zi și poate bloca.
 
-NotebookLM (redenumit Gemini Notebook) nu poate fi încorporat într-un site terț și nu are API pe cont personal. De aceea, pe lângă linkul spre notebook, hub-ul are **chatul propriu**: PDF-urile fiecărui catalog se indexează în Gemini File Search, colegii pun întrebări direct pe pagina catalogului și primesc răspunsuri cu citări la articol și pagină, iar hub-ul numără întrebările per persoană, aplică limite pe zi și poate bloca. Deciziile: [`docs/plans/2026-09-08-cataloage-v1.md`](docs/plans/2026-09-08-cataloage-v1.md) (hub) și [`docs/plans/2026-09-08-cataloage-v2-chat.md`](docs/plans/2026-09-08-cataloage-v2-chat.md) (chat, consum, limite).
+Istoric: v1 trimitea spre notebook-uri NotebookLM (fără API pe cont personal, deci fără control per persoană); v2 a adus chatul propriu peste Gemini File Search, iar butonul și linkul NotebookLM au fost scoase (coloana `url_notebook` a rămas în schemă, nefolosită). Deciziile: [`docs/plans/2026-09-08-cataloage-v1.md`](docs/plans/2026-09-08-cataloage-v1.md) și [`docs/plans/2026-09-08-cataloage-v2-chat.md`](docs/plans/2026-09-08-cataloage-v2-chat.md).
 
 ## Cum funcționează
 
@@ -50,8 +50,7 @@ Stare (8 septembrie 2026): făcută. D1 `ai` (id în `wrangler.jsonc`), bucket R
 
 ### Colegi noi
 
-- **Pe hub**: adaugă adresa în policy-ul aplicației Access (Zero Trust → Access → Applications → Cataloage → Policies).
-- **În notebook**: în NotebookLM, Share → adaugă adresa Google a colegului (Viewer) la fiecare catalog de care are nevoie. Poate fi altă adresă decât cea de pe hub.
+- Adaugă adresa în policy-ul aplicației Access (Zero Trust → Access → Applications → Cataloage → Policies). Apare în `/admin/consum` după prima vizită.
 
 ### Verificare după deploy
 

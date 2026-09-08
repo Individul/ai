@@ -5,6 +5,7 @@
 // contextul trimis modelului. Randarea escapeaza tot; raspunsul e Markdown minimal, randat sigur.
 
 import { randeazaMarkdown } from "../lib/markdown";
+import { fmtDurata } from "../lib/validare";
 
 interface Citare { sursa_id: string | null; titlu: string; pagina: number | null }
 interface Schimb { intrebare: string; raspuns: string; citari: Citare[]; creat_la: string }
@@ -123,7 +124,11 @@ function pornesteChat(el: HTMLElement) {
     if (!intrebare) return;
     buton.disabled = true;
     camp.disabled = true;
-    stare(asteptare);
+    // Cronometru cat timp modelul lucreaza: la contexte mari trec minute si omul vrea sa vada ca merge.
+    const pornit = Date.now();
+    const scurs = () => fmtDurata((Date.now() - pornit) / 1000);
+    stare(`${asteptare} · 0:00`);
+    const cronometru = setInterval(() => stare(`${asteptare} · ${scurs()}`), 1000);
     try {
       const r = await fetch("/api/chat", {
         method: "POST",
@@ -131,6 +136,7 @@ function pornesteChat(el: HTMLElement) {
         body: JSON.stringify({ catalog, intrebare, istoric: vizibile().slice(-8).map((s) => ({ intrebare: s.intrebare, raspuns: s.raspuns })) }),
       });
       const d = (await r.json()) as { raspuns?: string; citari?: Citare[]; ramase?: number; limita?: number; eroare?: string };
+      clearInterval(cronometru);
       if (!r.ok || !d.raspuns) {
         stare(d.eroare ?? `Eroare ${r.status}.`, "eroare");
         if (r.status !== 429) { camp.disabled = false; buton.disabled = false; }
@@ -141,12 +147,13 @@ function pornesteChat(el: HTMLElement) {
       randeaza(true);
       camp.value = "";
       lista.firstElementChild?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      stare(`${d.ramase ?? "?"} din ${d.limita ?? "?"} întrebări rămase azi`);
+      stare(`${d.ramase ?? "?"} din ${d.limita ?? "?"} întrebări rămase azi · răspuns în ${scurs()}`);
       buton.disabled = d.ramase === 0;
     } catch (e) {
       stare((e as Error).message || "Conexiunea a picat.", "eroare");
       buton.disabled = false;
     } finally {
+      clearInterval(cronometru);
       camp.disabled = false;
       if (!buton.disabled) camp.focus();
     }

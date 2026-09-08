@@ -79,7 +79,8 @@ const admin = Astro.locals.admin;
   .chat button.text { background: none; border: 0; padding: 0; color: var(--faint); font-size: 13px; font-weight: 600; cursor: pointer; }
   .chat button.text:hover { color: var(--text); }
   /* Intrebarile anterioare: doar textul, ca linkuri; raspunsul se deschide la clic */
-  .chat .anterioare { display: flex; flex-direction: column; gap: 6px; padding-top: 22px; border-top: 1px solid var(--line); }
+  .chat .anterioare { display: flex; flex-direction: column; gap: 6px; }
+  .chat details.nou { animation: apare 0.25s ease-out; }
   .chat .anterioare h3 { color: var(--faint); font-family: var(--body); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
   .chat details.vechi summary {
     cursor: pointer; list-style: none; color: var(--muted); font-size: 15px; font-weight: 600; line-height: 1.4; padding: 4px 0;

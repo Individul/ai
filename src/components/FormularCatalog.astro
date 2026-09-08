@@ -40,19 +40,19 @@ const { catalog: c } = Astro.props;
   </div>
   <label>
     <span>Note de utilizare (Markdown)</span>
-    <textarea name="note_utilizare" rows="6" maxlength="20000" placeholder="## Întrebări utile&#10;- Ce pedeapsă prevede art. 186?">{c?.note_utilizare ?? ""}</textarea>
+    <textarea name="note_utilizare" rows="4" maxlength="20000" placeholder="## Întrebări utile&#10;- Ce pedeapsă prevede art. 186?">{c?.note_utilizare ?? ""}</textarea>
   </label>
 </div>
 
 <style is:global>
-  .campuri { display: flex; flex-direction: column; gap: 16px; }
-  .campuri label, .campuri-inline label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
+  .campuri { display: flex; flex-direction: column; gap: 14px; }
+  .campuri label, .campuri-inline label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; }
   .campuri small { font-weight: 500; color: var(--faint); }
   .campuri .rand { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   .campuri input, .campuri textarea, .campuri select,
   .campuri-inline input, .campuri-inline select, .campuri-inline textarea {
-    width: 100%; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line);
-    background: var(--bg-3); color: var(--text); font-size: 15px; font-weight: 500;
+    width: 100%; padding: 8px 11px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg-2); color: var(--text); font-size: 14.5px; font-weight: 500; text-transform: none; letter-spacing: 0;
   }
   .campuri textarea { resize: vertical; font-family: var(--body); }
   .campuri input:focus, .campuri textarea:focus, .campuri select:focus,

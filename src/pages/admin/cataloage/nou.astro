@@ -13,15 +13,17 @@ const eroare = Astro.url.searchParams.get("eroare");
     <FormularCatalog />
     <div class="butoane">
       <button class="buton principal" type="submit">Creează catalogul</button>
-      <a class="buton" href="/admin">Renunță</a>
+      <a class="renunta" href="/admin">renunță</a>
     </div>
   </form>
 </Base>
 
 <style>
-  .cale { color: var(--muted); font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-  .cale a:hover { color: var(--violet); }
+  .cale { color: var(--faint); font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .cale a:hover { color: var(--text); }
   h1 { margin-bottom: 20px; }
   .formular { display: flex; flex-direction: column; gap: 20px; }
-  .butoane { display: flex; gap: 10px; }
+  .butoane { display: flex; align-items: center; gap: 16px; }
+  .renunta { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .renunta:hover { color: var(--text); }
 </style>

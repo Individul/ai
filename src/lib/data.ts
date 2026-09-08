@@ -31,3 +31,9 @@ export function aziChisinau(acum: Date = new Date()): string {
     timeZone: FUS, year: "numeric", month: "2-digit", day: "2-digit",
   }).format(acum);
 }
+
+// Ziua cu `n` zile inainte, pe UTC (zilele sunt siruri YYYY-MM-DD fara fus).
+export function ziMinus(zi: string, n: number): string {
+  const [a, l, z] = zi.split("-").map(Number) as [number, number, number];
+  return new Date(Date.UTC(a, l - 1, z - n)).toISOString().slice(0, 10);
+}

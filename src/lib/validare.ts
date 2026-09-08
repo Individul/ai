@@ -21,6 +21,17 @@ export const ETICHETE_PICTOGRAMA: Record<Pictograma, string> = {
   carte: "Carte", balanta: "Balanță", ciocan: "Ciocan", document: "Document", lacat: "Lacăt", cheie: "Cheie",
 };
 
+// Modelele Gemini disponibile in Admin si tarifele lor ($ per milion de tokeni, sept. 2026;
+// 3.8 Flash creste la 1,50 / 7,50 de la 1 ian. 2027).
+export const TARIFE: Record<string, { intrare: number; iesire: number; eticheta: string }> = {
+  "gemini-3.5-flash-lite": { intrare: 0.30, iesire: 2.50, eticheta: "Gemini 3.5 Flash-Lite (cel mai ieftin)" },
+  "gemini-3.8-flash": { intrare: 0.75, iesire: 3.75, eticheta: "Gemini 3.8 Flash (mai bun)" },
+  "gemini-3.5-flash": { intrare: 1.50, iesire: 9.00, eticheta: "Gemini 3.5 Flash" },
+};
+export const MODELE = Object.keys(TARIFE);
+export function esteModel(s: string): boolean { return s in TARIFE; }
+
+export const LIMITA_INTREBARE = 2000;
 export const LIMITA_TITLU = 200;
 export const LIMITA_DESCRIERE = 2000;
 export const LIMITA_NOTE = 20_000;

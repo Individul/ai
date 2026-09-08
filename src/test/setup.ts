@@ -10,9 +10,13 @@ const { TEST_MIGRATIONS } = env as unknown as { TEST_MIGRATIONS: D1Migration[] }
 await applyD1Migrations(env.DB, TEST_MIGRATIONS);
 
 beforeEach(async () => {
+  await env.DB.exec("DELETE FROM intrebari");
+  await env.DB.exec("DELETE FROM utilizatori");
   await env.DB.exec("DELETE FROM audio");
   await env.DB.exec("DELETE FROM surse");
   await env.DB.exec("DELETE FROM cataloage");
+  await env.DB.exec("DELETE FROM setari");
+  await env.DB.exec("INSERT INTO setari VALUES ('limita_zi_implicita', '15'), ('model', 'gemini-3.5-flash-lite')");
   const obiecte = await env.FISIERE.list();
   if (obiecte.objects.length) await env.FISIERE.delete(obiecte.objects.map((o) => o.key));
 });

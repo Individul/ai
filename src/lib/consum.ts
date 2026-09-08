@@ -244,8 +244,10 @@ export async function costUltimele30Zile(db: D1Database, azi: string): Promise<n
   return r?.c ?? 0;
 }
 
-// 3600 -> "0,36 ¢"; 1_250_000 -> "1,25 $"
+// Mereu in dolari: sub un dolar cu patru zecimale (3600 -> "0,0036 $"), de la un dolar cu doua
+// (1_250_000 -> "1,25 $"). Zero ramane "0 $".
 export function fmtCost(microdolari: number): string {
-  if (microdolari < 10_000) return `${(microdolari / 10_000).toFixed(2).replace(".", ",")} ¢`;
-  return `${(microdolari / 1_000_000).toFixed(2).replace(".", ",")} $`;
+  if (microdolari === 0) return "0 $";
+  const d = microdolari / 1_000_000;
+  return `${(d < 1 ? d.toFixed(4) : d.toFixed(2)).replace(".", ",")} $`;
 }

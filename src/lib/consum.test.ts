@@ -94,8 +94,10 @@ describe("jurnal si raport", () => {
   });
 
   it("formateaza costul", () => {
-    expect(fmtCost(3600)).toBe("0,36 ¢");
+    expect(fmtCost(3600)).toBe("0,0036 $");
+    expect(fmtCost(7100)).toBe("0,0071 $");
     expect(fmtCost(1_250_000)).toBe("1,25 $");
+    expect(fmtCost(0)).toBe("0 $");
   });
 });
 

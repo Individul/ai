@@ -7,7 +7,7 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { citesteSursa, seteazaFisierSursa } from "../../../../../lib/db";
-import { cheieR2, numeFisierCurat, verificaUpload } from "../../../../../lib/fisiere";
+import { cheieR2, curataPdf, numeFisierCurat, verificaUpload } from "../../../../../lib/fisiere";
 import { scoateDinIndex } from "../../../../../lib/indexare";
 import { eroare, json } from "../../../../../lib/api";
 
@@ -28,8 +28,10 @@ export const PUT: APIRoute = async ({ params, request }) => {
   const nume = numeFisierCurat(request.headers.get("x-nume-fisier"), `${sursa.titlu}.pdf`);
   // PDF nou = document nou la Google; cel vechi (daca era) se scoate, iar clientul porneste indexarea.
   if (sursa.doc_google || sursa.indexare !== "neindexat") await scoateDinIndex(env, sursa);
-  await env.FISIERE.put(cheieR2("pdf", id), request.body, { httpMetadata: { contentType: v.tip } });
-  const actualizata = await seteazaFisierSursa(env.DB, id, nume, v.marime);
+  // Antetul %PDF trebuie sa fie primul octet; altfel Google nu poate indexa fisierul.
+  const curat = await curataPdf(request.body, v.marime);
+  await env.FISIERE.put(cheieR2("pdf", id), curat.corp, { httpMetadata: { contentType: v.tip } });
+  const actualizata = await seteazaFisierSursa(env.DB, id, nume, curat.marime);
   if (!actualizata) {
     await env.FISIERE.delete(cheieR2("pdf", id));
     return eroare(404, "Sursa a dispărut între timp.");

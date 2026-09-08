@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { numeFisierCurat, serveste, tipMimePermis, verificaUpload } from "./fisiere";
+import { curataPdf, numeFisierCurat, serveste, tipMimePermis, verificaUpload } from "./fisiere";
 
 const cerere = (headers: Record<string, string> = {}) => new Request("https://ai.dumitru.cloud/f/x", { headers });
 
@@ -66,5 +66,34 @@ describe("numeFisierCurat", () => {
     expect(numeFisierCurat("..%2F..%2Fetc%2Fpasswd", "x.pdf")).toBe("....etcpasswd");
     expect(numeFisierCurat("%E0%A4%A", "x.pdf")).toBe("x.pdf");
     expect(numeFisierCurat(null, "x.pdf")).toBe("x.pdf");
+  });
+});
+
+describe("curataPdf", () => {
+  const flux = (octeti: Uint8Array, bucata = 7) =>
+    new ReadableStream<Uint8Array>({
+      start(c) { for (let i = 0; i < octeti.length; i += bucata) c.enqueue(octeti.subarray(i, i + bucata)); c.close(); },
+    });
+  const text = (s: string) => new TextEncoder().encode(s);
+
+  it("taie gunoiul dinaintea antetului %PDF si corecteaza marimea", async () => {
+    const brut = text("q 10.500 0 0 12 cm /I1 Do Q\n%PDF-1.4\n1 0 obj<<>>endobj\n%%EOF");
+    const r = await curataPdf(flux(brut), brut.length);
+    const rezultat = new Uint8Array(await new Response(r.corp).arrayBuffer());
+    expect(r.taiat).toBe(brut.indexOf(0x25));
+    expect(new TextDecoder().decode(rezultat.subarray(0, 8))).toBe("%PDF-1.4");
+    expect(rezultat.length).toBe(r.marime);
+    expect(r.marime).toBe(brut.length - r.taiat);
+  });
+
+  it("lasa neatins un PDF corect si unul fara antet in primii 4 KB", async () => {
+    const bun = text("%PDF-1.7\nabc");
+    const r = await curataPdf(flux(bun), bun.length);
+    expect(r.taiat).toBe(0);
+    expect(new Uint8Array(await new Response(r.corp).arrayBuffer())).toEqual(bun);
+    const fara = new Uint8Array(5000).fill(0x41);
+    const r2 = await curataPdf(flux(fara, 1000), fara.length);
+    expect(r2.taiat).toBe(0);
+    expect((await new Response(r2.corp).arrayBuffer()).byteLength).toBe(5000);
   });
 });

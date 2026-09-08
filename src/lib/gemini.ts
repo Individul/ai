@@ -143,6 +143,20 @@ export function interpreteazaOperatie(d: any, magazin: string): StareOperatie {
   return { done: true, document: String(id).includes("/") ? String(id) : `${magazin}/documents/${id}` };
 }
 
+// STATE_ACTIVE -> "activ", STATE_FAILED -> "esuat", altfel (PENDING sau inca inexistent) -> "in_curs".
+export async function stareDocument(cheie: string, document: string): Promise<"activ" | "esuat" | "in_curs"> {
+  try {
+    const d = await apel(cheie, `/v1beta/${document}`);
+    const stare = String(d?.state ?? "");
+    if (stare === "STATE_ACTIVE") return "activ";
+    if (stare === "STATE_FAILED") return "esuat";
+    return "in_curs";
+  } catch (e) {
+    if (e instanceof EroareGemini && e.status === 404) return "in_curs";
+    throw e;
+  }
+}
+
 export async function stergeDocument(cheie: string, document: string): Promise<void> {
   try {
     await apel(cheie, `/v1beta/${document}?force=true`, { method: "DELETE" });

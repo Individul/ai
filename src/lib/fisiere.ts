@@ -52,6 +52,54 @@ export function verificaUpload(fel: FelFisier, cerere: Request): VerificareUploa
   return { ok: true, tip, marime: lungime };
 }
 
+// Unele PDF-uri (ex. cele generate de legis.md cu mPDF) au cativa octeti de gunoi inaintea
+// antetului "%PDF". Cititoarele ii tolereaza, dar indexarea Google esueaza. Cautam antetul in
+// primii 4 KB si sarim peste ce e inainte; lungimea noua = marime - offset.
+export const CAUTARE_ANTET = 4096;
+
+export async function curataPdf(corp: ReadableStream<Uint8Array>, marime: number): Promise<{ corp: ReadableStream<Uint8Array>; marime: number; taiat: number }> {
+  const reader = corp.getReader();
+  const bucati: Uint8Array[] = [];
+  let citit = 0;
+  while (citit < CAUTARE_ANTET) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    bucati.push(value);
+    citit += value.length;
+  }
+  const inceput = concat(bucati);
+  const offset = gasesteAntet(inceput);
+  const taiat = offset > 0 ? offset : 0;
+  const rest = inceput.subarray(taiat);
+  const corpNou = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (rest.length && !(this as any).dat) { (this as any).dat = true; controller.enqueue(rest); return; }
+      const { value, done } = await reader.read();
+      if (done) { controller.close(); return; }
+      controller.enqueue(value);
+    },
+    cancel() { return reader.cancel(); },
+  });
+  return { corp: corpNou, marime: marime - taiat, taiat };
+}
+
+function concat(bucati: Uint8Array[]): Uint8Array {
+  const total = bucati.reduce((s, b) => s + b.length, 0);
+  const out = new Uint8Array(total);
+  let i = 0;
+  for (const b of bucati) { out.set(b, i); i += b.length; }
+  return out;
+}
+
+// Offsetul lui "%PDF" in primii octeti; 0 daca e la inceput; -1 daca nu se gaseste (lasam neatins).
+export function gasesteAntet(octeti: Uint8Array): number {
+  const s = [0x25, 0x50, 0x44, 0x46]; // %PDF
+  for (let i = 0; i + 4 <= Math.min(octeti.length, CAUTARE_ANTET); i++) {
+    if (octeti[i] === s[0] && octeti[i + 1] === s[1] && octeti[i + 2] === s[2] && octeti[i + 3] === s[3]) return i;
+  }
+  return -1;
+}
+
 // Raspuns HTTP pentru un obiect citit din R2. Cu `partial` (clientul a trimis Range si R2 l-a
 // aplicat) iese 206 cu Content-Range; altfel 200 cu tot corpul. `obj.range` singur nu ajunge:
 // R2 local il pune si cand nu s-a cerut nimic.

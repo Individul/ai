@@ -71,9 +71,7 @@ const act = (cale: string) => `/admin/actiuni/${cale}`;
                 <a class="buton mic" href={`/f/pdf/${s.id}`} target="_blank" rel="noopener">PDF: {s.fisier_nume} ({fmtMarime(s.fisier_marime ?? 0)})</a>
                 <label class="buton mic" data-cere-js hidden>înlocuiește <input type="file" accept="application/pdf" data-pdf-sursa={s.id} hidden /></label>
                 <span class:list={["indexare", s.indexare]} data-indexare={s.id} title={s.indexare_mesaj ?? ""}>{ETICHETE_INDEXARE[s.indexare]}</span>
-                {s.indexare !== "in_curs" && (
-                  <button type="button" class="buton mic" data-indexeaza={s.id} data-cere-js hidden>{s.indexare === "gata" ? "Reindexează" : "Indexează"}</button>
-                )}
+                <button type="button" class="buton mic" data-indexeaza={s.id} data-cere-js hidden>{s.indexare === "neindexat" ? "Indexează" : "Reindexează"}</button>
               </>
             ) : (
               <label class="buton mic" data-cere-js hidden>+ PDF <input type="file" accept="application/pdf" data-pdf-sursa={s.id} hidden /></label>

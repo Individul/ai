@@ -2,8 +2,8 @@
 // de aici, ca regulile (magazin per catalog, stari, curatare) sa fie intr-un singur loc.
 
 import { citesteCatalog, seteazaIndexare, seteazaMagazin, type Sursa } from "./db";
-import { cheieR2 } from "./fisiere";
-import { creeazaMagazin, incarcaDocument, stareOperatie, stergeDocument, EroareGemini } from "./gemini";
+import { cheieR2, curataPdf } from "./fisiere";
+import { creeazaMagazin, incarcaDocument, stareDocument, stergeDocument, EroareGemini } from "./gemini";
 import { slug } from "./validare";
 
 export interface Mediu {
@@ -36,7 +36,9 @@ export async function pornesteIndexarea(env: Mediu, sursa: Sursa): Promise<void>
   const obj = await env.FISIERE.get(cheieR2("pdf", sursa.id));
   if (!obj) throw new Error("PDF-ul lipsește din stocare");
   try {
-    const operatie = await incarcaDocument(cheie, magazin, obj.body, obj.size, obj.httpMetadata?.contentType ?? "application/pdf", {
+    // Fisierele incarcate inainte de curatare pot avea gunoi inaintea antetului %PDF.
+    const curat = await curataPdf(obj.body, obj.size);
+    const operatie = await incarcaDocument(cheie, magazin, curat.corp, curat.marime, obj.httpMetadata?.contentType ?? "application/pdf", {
       sursaId: sursa.id,
       titlu: sursa.titlu,
     });
@@ -47,19 +49,26 @@ export async function pornesteIndexarea(env: Mediu, sursa: Sursa): Promise<void>
   }
 }
 
-// Interogheaza operatia; la final scrie starea. Intoarce starea curenta a sursei.
+// Citeste starea documentului la Google (operatia nu raporteaza esecul). Documentul are
+// acelasi id ca operatia de import. La final scrie starea; la esec sterge documentul stricat.
 export async function verificaIndexarea(env: Mediu, sursa: Sursa): Promise<{ indexare: Sursa["indexare"]; mesaj: string | null }> {
   if (sursa.indexare !== "in_curs" || !sursa.operatie_google) return { indexare: sursa.indexare, mesaj: sursa.indexare_mesaj };
   const catalog = await citesteCatalog(env.DB, sursa.catalog_id);
   const magazin = catalog?.magazin ?? "";
-  const s = await stareOperatie(cheieGemini(env), magazin, sursa.operatie_google);
-  if (!s.done) return { indexare: "in_curs", mesaj: null };
-  if ("eroare" in s) {
-    await seteazaIndexare(env.DB, sursa.id, { indexare: "eroare", indexare_mesaj: s.eroare });
-    return { indexare: "eroare", mesaj: s.eroare };
+  const document = `${magazin}/documents/${sursa.operatie_google.split("/").pop()}`;
+  const cheie = cheieGemini(env);
+  const s = await stareDocument(cheie, document);
+  if (s === "activ") {
+    await seteazaIndexare(env.DB, sursa.id, { indexare: "gata", doc_google: document });
+    return { indexare: "gata", mesaj: null };
   }
-  await seteazaIndexare(env.DB, sursa.id, { indexare: "gata", doc_google: s.document });
-  return { indexare: "gata", mesaj: null };
+  if (s === "esuat") {
+    const mesaj = "Google nu a putut procesa PDF-ul (fișier stricat sau scanat fără text). Încearcă „Reindexează” sau alt PDF.";
+    try { await stergeDocument(cheie, document); } catch { /* ramane orfan, il vom curata la reindexare */ }
+    await seteazaIndexare(env.DB, sursa.id, { indexare: "eroare", indexare_mesaj: mesaj });
+    return { indexare: "eroare", mesaj };
+  }
+  return { indexare: "in_curs", mesaj: null };
 }
 
 // Scoate documentul de la Google (PDF sters sau inlocuit). Nu arunca daca nu exista cheie:

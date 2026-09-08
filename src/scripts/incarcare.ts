@@ -2,7 +2,28 @@
 // sa il streameze in R2 fara sa il tina in memorie. XMLHttpRequest, nu fetch: doar el da
 // progres la upload. La succes, pagina se reincarca (serverul e sursa adevarului).
 
+import { PDFDocument } from "pdf-lib";
+
 interface Raspuns { status: number; corp: string }
+
+// PDF-urile de la legis.md (mPDF) au gunoi inaintea antetului si o structura pe care indexarea
+// Google o refuza. Rescrierea cu pdf-lib (acelasi continut, alta structura) le face acceptate.
+// Daca pdf-lib nu poate citi fisierul, il trimitem cum e; serverul mai curata antetul.
+async function normalizeazaPdf(fisier: File, progres: (t: string) => void): Promise<File> {
+  try {
+    progres("se pregătește fișierul…");
+    let octeti = new Uint8Array(await fisier.arrayBuffer());
+    const antet = [0x25, 0x50, 0x44, 0x46]; // %PDF
+    for (let i = 0; i + 4 <= Math.min(octeti.length, 4096); i++) {
+      if (antet.every((b, k) => octeti[i + k] === b)) { if (i > 0) octeti = octeti.subarray(i); break; }
+    }
+    const doc = await PDFDocument.load(octeti, { ignoreEncryption: true, updateMetadata: false });
+    const rescris = await doc.save({ useObjectStreams: false });
+    return new File([rescris], fisier.name, { type: "application/pdf" });
+  } catch {
+    return fisier;
+  }
+}
 
 function trimite(url: string, fisier: File, antete: Record<string, string>, progres: (p: number) => void): Promise<Raspuns> {
   return new Promise((rezolva, respinge) => {
@@ -52,7 +73,8 @@ for (const input of document.querySelectorAll<HTMLInputElement>("input[data-pdf-
     input.disabled = true;
     stare(iesire, "se încarcă… 0%");
     try {
-      const r = await trimite(`/api/admin/surse/${id}/fisier`, fisier, {
+      const pregatit = await normalizeazaPdf(fisier, (t) => stare(iesire, t));
+      const r = await trimite(`/api/admin/surse/${id}/fisier`, pregatit, {
         "content-type": "application/pdf",
         "x-nume-fisier": antet(fisier.name),
       }, (p) => stare(iesire, `se încarcă… ${Math.round(p * 100)}%`));

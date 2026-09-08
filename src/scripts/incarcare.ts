@@ -19,7 +19,8 @@ async function normalizeazaPdf(fisier: File, progres: (t: string) => void): Prom
     }
     const doc = await PDFDocument.load(octeti, { ignoreEncryption: true, updateMetadata: false });
     const rescris = await doc.save({ useObjectStreams: false });
-    return new File([rescris], fisier.name, { type: "application/pdf" });
+    const tampon = rescris.buffer.slice(rescris.byteOffset, rescris.byteOffset + rescris.byteLength) as ArrayBuffer;
+    return new File([tampon], fisier.name, { type: "application/pdf" });
   } catch {
     return fisier;
   }

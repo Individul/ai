@@ -88,8 +88,8 @@ async function indexeaza(id: string, iesire: HTMLElement | null): Promise<void> 
     const d = (await s.json()) as { indexare: string; mesaj: string | null };
     if (d.indexare === "gata") { stare(iesire, "indexat", "ok"); return; }
     if (d.indexare === "eroare") { stare(iesire, d.mesaj ?? "eroare la indexare", "eroare"); return; }
-    const s = (i + 1) * 3;
-    stare(iesire, `se indexează… (${s < 60 ? `${s}s` : `${Math.floor(s / 60)} min`}; la acte mari durează până la 10 minute)`);
+    const secunde = (i + 1) * 3;
+    stare(iesire, `se indexează… (${secunde < 60 ? `${secunde}s` : `${Math.floor(secunde / 60)} min`}; la acte mari durează până la 10 minute)`);
   }
   stare(iesire, "încă se indexează; reîncarcă pagina mai târziu");
 }

@@ -51,9 +51,10 @@ export function ziValida(s: string): boolean {
   return d.getUTCFullYear() === a && d.getUTCMonth() === l - 1 && d.getUTCDate() === z;
 }
 
-// Gol (notebook in pregatire) sau un link de NotebookLM.
+// Gol (notebook in pregatire) sau un link de NotebookLM. Google a redenumit produsul
+// "Gemini Notebook" si a mutat adresa pe notebook.google.com; acceptam ambele domenii.
 export function urlNotebookValid(url: string): boolean {
-  return url === "" || /^https:\/\/notebooklm\.google\.com\/[^\s]*$/.test(url);
+  return url === "" || /^https:\/\/(notebooklm|notebook)\.google\.com\/[^\s]*$/.test(url);
 }
 
 // Linkurile externe ale surselor: doar http(s).
@@ -101,7 +102,7 @@ export function valideazaCatalog(f: Record<string, string | undefined>): Validat
   const stare = camp(f, "stare") || "in_lucru";
   if (!esteStare(stare)) return { ok: false, eroare: "Stare necunoscută." };
   const url_notebook = camp(f, "url_notebook");
-  if (!urlNotebookValid(url_notebook)) return { ok: false, eroare: "Linkul trebuie să fie de la notebooklm.google.com (sau gol)." };
+  if (!urlNotebookValid(url_notebook)) return { ok: false, eroare: "Linkul trebuie să fie de la notebook.google.com sau notebooklm.google.com (sau gol)." };
   const note_utilizare = (f.note_utilizare ?? "").replace(/\r\n?/g, "\n").trim();
   if (note_utilizare.length > LIMITA_NOTE) return { ok: false, eroare: "Notele de utilizare sunt prea lungi." };
   return { ok: true, date: { titlu, descriere, pictograma, culoare, stare, url_notebook, note_utilizare } };

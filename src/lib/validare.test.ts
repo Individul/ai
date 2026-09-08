@@ -23,9 +23,11 @@ describe("ziValida", () => {
 });
 
 describe("urlNotebookValid", () => {
-  it("accepta gol sau notebooklm.google.com, nimic altceva", () => {
+  it("accepta gol, notebook.google.com sau notebooklm.google.com, nimic altceva", () => {
     expect(urlNotebookValid("")).toBe(true);
     expect(urlNotebookValid("https://notebooklm.google.com/notebook/abc-123")).toBe(true);
+    expect(urlNotebookValid("https://notebook.google.com/notebook/4561b153-6ab8-4658-8a66-f4ab1e027821")).toBe(true);
+    expect(urlNotebookValid("https://notebook.google.com.evil.md/x")).toBe(false);
     expect(urlNotebookValid("http://notebooklm.google.com/notebook/abc")).toBe(false);
     expect(urlNotebookValid("https://evil.com/notebooklm.google.com")).toBe(false);
     expect(urlNotebookValid("javascript:alert(1)")).toBe(false);

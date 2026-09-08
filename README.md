@@ -2,7 +2,7 @@
 
 Cataloage de legislație penitenciară pentru colegi, la [ai.dumitru.cloud](https://ai.dumitru.cloud). Fiecare catalog (Legislația penală, Legislația contravențională, Ordine penitenciare…) adună actele în PDF; colegii pun întrebări direct pe pagina catalogului și primesc răspunsuri cu citări la articol și la pagina din act. Hub-ul găzduiește sursele și rezumatele audio, numără întrebările per persoană, aplică limite pe zi și poate bloca.
 
-Istoric: v1 trimitea spre notebook-uri NotebookLM (fără API pe cont personal, deci fără control per persoană); v2 a adus chatul propriu peste Gemini File Search, iar butonul și linkul NotebookLM au fost scoase (coloana `url_notebook` a rămas în schemă, nefolosită). Deciziile: [`docs/plans/2026-09-08-cataloage-v1.md`](docs/plans/2026-09-08-cataloage-v1.md) și [`docs/plans/2026-09-08-cataloage-v2-chat.md`](docs/plans/2026-09-08-cataloage-v2-chat.md).
+Istoric: v1 trimitea spre notebook-uri NotebookLM (fără API pe cont personal, deci fără control per persoană); v2 a adus chatul propriu peste Gemini File Search, iar butonul și linkul NotebookLM au fost scoase (coloana `url_notebook` a rămas în schemă, nefolosită); v3 a adăugat un al doilea motor, Z.AI (GLM) din planul de coding, cu textul extras din PDF-uri. Deciziile: [`docs/plans/2026-09-08-cataloage-v1.md`](docs/plans/2026-09-08-cataloage-v1.md), [`docs/plans/2026-09-08-cataloage-v2-chat.md`](docs/plans/2026-09-08-cataloage-v2-chat.md) și [`docs/plans/2026-09-08-cataloage-v3-zai.md`](docs/plans/2026-09-08-cataloage-v3-zai.md).
 
 ## Cum funcționează
 
@@ -14,14 +14,15 @@ Istoric: v1 trimitea spre notebook-uri NotebookLM (fără API pe cont personal, 
 - **Fișierele** se servesc din R2 cu `Range` (206), ca `<audio>` să meargă și în Safari. PDF-urile se deschid inline sau se descarcă cu `?descarca=1`.
 - Catalogul se **arhivează**, nu se șterge (`ON DELETE RESTRICT` pe surse și audio).
 - **Chat cu citări (Gemini File Search)**: fiecare catalog are un „magazin” la Google, creat la prima indexare; fiecare PDF încărcat devine un document acolo (Files API + import, cu metadate `sursa`/`titlu`), automat după upload. Întrebările merg la `generateContent` cu unealta `file_search`; citările vin din `groundingMetadata` (sursă + pagină) și deschid PDF-ul la pagina respectivă. Modelul și limita implicită se aleg din `/admin/consum`.
-- **Consum și limite**: fiecare întrebare se scrie în `intrebari` (email, tokeni, cost estimat, stare). Limita pe zi e implicită (setări) sau per persoană; peste limită, 429. Un utilizator blocat primește 403 pe orice pagină (middleware). Fiecare coleg își vede consumul la `/consum`.
-- **Confidențialitate**: cheia Gemini trebuie să fie pe nivelul plătit (proiect cu facturare); pe nivelul gratuit Google poate folosi datele pentru antrenare.
+- **Chat pe Z.AI (GLM)**: dacă modelul ales e `glm-*`, întrebarea merge la endpointul planului de coding Z.AI (OpenAI-compatibil, fără File Search). Textul PDF-ului se extrage în browser cu pdf.js la upload (sau din „Extrage textul”) și stă în R2 sub `text/{sursa}`; la întrebare, dacă tot catalogul încape în bugetul de context (implicit 3.000.000 de caractere, din Admin), modelul primește tot textul, altfel paginile care se potrivesc cu întrebarea. Citările vin ca `[Titlu, pag. N]` și deschid PDF-ul la pagină. Consumul se măsoară în creditele planului (formula Z.AI), afișate în Admin față de cota săptămânală. Fără streaming: la contexte mari răspunsul poate dura minute.
+- **Consum și limite**: fiecare întrebare se scrie în `intrebari` (email, tokeni, cost estimat, credite Z.AI, stare). Limita pe zi e implicită (setări) sau per persoană; peste limită, 429. Un utilizator blocat primește 403 pe orice pagină (middleware). Fiecare coleg își vede consumul la `/consum`.
+- **Confidențialitate**: cheia Gemini trebuie să fie pe nivelul plătit (proiect cu facturare); pe nivelul gratuit Google poate folosi datele pentru antrenare. Pe Z.AI textul actelor ajunge la Zhipu (China); planul de coding e, după documentația lor, limitat la unelte suportate oficial, iar folosirea din hub e un risc asumat.
 
 ## Dezvoltare locală
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars   # DEV_EMAIL, ADMIN_EMAILS, GEMINI_API_KEY; nu se comite
+cp .dev.vars.example .dev.vars   # DEV_EMAIL, ADMIN_EMAILS, GEMINI_API_KEY, ZAI_API_KEY; nu se comite
 npm run migrate:local
 npm run dev:worker               # build + wrangler dev pe http://localhost:8787
 ```
@@ -39,14 +40,14 @@ Stare (8 septembrie 2026): făcută. D1 `ai` (id în `wrangler.jsonc`), bucket R
 
 1. `npx wrangler d1 create ai` → `database_id` în `wrangler.jsonc`; `npx wrangler r2 bucket create ai-fisiere`; `npm run migrate:remote`.
 2. Zero Trust → Access → Applications → Self-hosted: nume `Cataloage`, domeniu `ai.dumitru.cloud`, sesiune 1 lună, doar One-time PIN. Policy „Colegi”: Allow, Include → Emails. Copiază **Application Audience (AUD) Tag**.
-3. `wrangler.jsonc`: `vars.ACCESS_TEAM_DOMAIN` și `vars.ADMIN_EMAILS`; apoi `npx wrangler secret put ACCESS_AUD` și `npx wrangler secret put GEMINI_API_KEY` (cheie din Google AI Studio, pe un proiect cu facturare). `DEV_EMAIL` nu se pune **niciodată** pe Worker.
+3. `wrangler.jsonc`: `vars.ACCESS_TEAM_DOMAIN` și `vars.ADMIN_EMAILS`; apoi `npx wrangler secret put ACCESS_AUD`, `npx wrangler secret put GEMINI_API_KEY` (cheie din Google AI Studio, pe un proiect cu facturare) și `npx wrangler secret put ZAI_API_KEY` (consola z.ai, planul de coding). `DEV_EMAIL` nu se pune **niciodată** pe Worker.
 4. `npm run deploy`. Domeniul custom (DNS + certificat) apare din `routes` la primul deploy. `*.workers.dev` rămâne activ, dar cererile de acolo nu au JWT și primesc 403.
 
 ### Chat
 
-- Sursele cu PDF se indexează singure după upload (insigna „indexat” în Admin); „Reindexează” reface documentul. Sursele doar cu link nu intră în chat până nu li se pune PDF-ul.
-- `/admin/consum`: întrebări per persoană (azi / 7 / 30 zile), tokeni, cost estimat, limită per persoană, blocare, limita implicită și modelul.
-- Costuri orientative (sept. 2026): Gemini 3.5 Flash-Lite ≈ 0,3 cenți per întrebare; indexare 0,15 $ per milion de tokeni, o singură dată.
+- Sursele cu PDF se pregătesc singure după upload: textul se extrage în browser („text: N pag.”), apoi se indexează la Gemini („Gemini: indexat”); „Reindexează” le reface pe amândouă. Sursele încărcate înainte de v3 primesc text din butonul „Extrage textul pentru N surse”. Sursele doar cu link nu intră în chat până nu li se pune PDF-ul; PDF-urile scanate au „fără text” și nu intră în chatul pe Z.AI.
+- `/admin/consum`: întrebări per persoană (azi / 7 / 30 zile), tokeni, cost estimat, credite Z.AI pe 7 zile, limită per persoană, blocare, limita implicită, modelul (Gemini sau GLM) și bugetul de context pentru GLM.
+- Costuri orientative (sept. 2026): Gemini 3.5 Flash-Lite ≈ 0,3 cenți per întrebare; indexare 0,15 $ per milion de tokeni, o singură dată. GLM-5.3-Flash din planul Lite: (tokeni intrare × 2,3 + din cache × 0,56 + ieșire × 8) / 10.000 credite, din 2.000 la 5 ore și 10.000 pe săptămână; la 3.000.000 de caractere de context ≈ 230 de credite per întrebare.
 
 ### Colegi noi
 
@@ -71,11 +72,15 @@ src/lib/admin.ts                esteAdmin(email, ADMIN_EMAILS)
 src/lib/identitate.ts           cine face cererea: Access JWT | DEV_EMAIL | 503
 src/middleware.ts               identitate + poarta de admin, Cache-Control: no-store
 src/lib/gemini.ts               Gemini File Search prin REST: magazine, documente, intrebari cu citari, cost
-src/lib/consum.ts               jurnalul intrebarilor, limite per utilizator, blocare, raport
+src/lib/zai.ts                  Z.AI (GLM) prin REST: cererea, raspunsul, creditele planului de coding
+src/lib/motor.ts                alege motorul dupa model; raspunde() (Gemini sau Z.AI, cu retry la context prea lung)
+src/lib/context.ts              contextul pentru GLM: integral sau filtrat pe cuvinte (TF-IDF); citari [Titlu, pag. N]
+src/lib/text.ts                 textul extras din PDF, in R2 sub text/{sursa}: validare, scriere, citire
+src/lib/consum.ts               jurnalul intrebarilor, limite per utilizator, blocare, raport, credite
 src/lib/indexare.ts             R2 + D1 + Gemini: porneste/verifica/scoate indexarea unei surse
 src/pages/                      / (grila), c/[slug] (cu chat), consum, acces, f/pdf, f/audio, admin/*, api/*
 src/pages/api/chat/             POST intrebare (limite + jurnal), GET ramase
 src/pages/admin/actiuni/        toate actiunile din formulare (POST + 303)
-src/scripts/incarcare.ts        client: upload PDF/audio cu progres, indexare, confirmari
+src/scripts/incarcare.ts        client: upload PDF/audio cu progres, extragere text (pdf.js), indexare, confirmari
 src/scripts/chat.ts             client: chatul de pe pagina catalogului (istoric in sessionStorage)
 ```

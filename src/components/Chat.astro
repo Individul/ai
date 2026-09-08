@@ -1,24 +1,26 @@
 ---
 // Chatul catalogului: caseta de intrebare e elementul principal al paginii. Raspunsurile curg
 // ca text, fara chenare; citarile sunt linkuri discrete. Fara JavaScript ramane doar lamurirea.
+import type { Motor } from "../lib/validare";
 interface Props {
   catalogId: string;
-  indexate: number;   // surse cu document in Gemini
+  disponibile: number;   // surse pe care motorul ales le poate citi
+  motor: Motor;          // scriptul arata alta stare de asteptare la Z.AI (contexte mari, minute)
   ramase: number;
   limita: number;
 }
-const { catalogId, indexate, ramase, limita } = Astro.props;
+const { catalogId, disponibile, motor, ramase, limita } = Astro.props;
 const admin = Astro.locals.admin;
 ---
 
-<section class="chat" id="chat" data-chat={indexate > 0 ? catalogId : undefined}>
-  {indexate === 0 ? (
+<section class="chat" id="chat" data-chat={disponibile > 0 ? catalogId : undefined} data-motor={motor}>
+  {disponibile === 0 ? (
     <div class="gol">
-      <p>Catalogul nu are încă documente indexate. Întrebările se pot pune după ce se adaugă PDF-urile actelor.</p>
+      <p>Catalogul nu are încă documente pregătite pentru chat. Întrebările se pot pune după ce se adaugă PDF-urile actelor.</p>
       {admin && (
         <p class="pas-admin">
           <a class="buton" href={`/admin/cataloage/${catalogId}#surse`}>Adaugă sursele și PDF-urile →</a>
-          <small>La fiecare sursă apeși „+ PDF”; indexarea pornește singură.</small>
+          <small>La fiecare sursă apeși „+ PDF”; extragerea textului și indexarea pornesc singure.</small>
         </p>
       )}
     </div>

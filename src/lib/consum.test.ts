@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { creeazaCatalog } from "./db";
 import {
   atingeVizita, citesteUtilizator, consumUtilizator, costUltimele30Zile, esteBlocat, fmtCost, inregistreazaIntrebare, intrebariAzi, istoricCatalog,
-  istoricUtilizator, limitaPentru, raportUtilizatori, seteazaSetare, seteazaUtilizator,
+  istoricUtilizator, limitaPentru, raportUtilizatori, seteazaSetare, seteazaUtilizator, citesteBuget, crediteUltimele7Zile, fmtCredite,
 } from "./consum";
 
 const A = "a@exemplu.md";
@@ -13,11 +13,11 @@ async function catalog() {
   return creeazaCatalog(env.DB, "c", { titlu: "C" });
 }
 
-function intrebare(email: string, catalogId: string, zi: string, stare: "ok" | "eroare" | "refuzat" = "ok") {
+function intrebare(email: string, catalogId: string, zi: string, stare: "ok" | "eroare" | "refuzat" = "ok", credite = 0) {
   return inregistreazaIntrebare(env.DB, {
     email, catalog_id: catalogId, zi, intrebare: "Ce spune art. 5?", raspuns: "Vizite de 2 ori pe luna.",
     citari: [{ sursa_id: "s1", titlu: "Ordinul 123", pagina: 1 }], model: "gemini-3.5-flash-lite",
-    tokens_intrare: 7000, tokens_iesire: 600, cost_microdolari: 3600, stare, durata_ms: 1200,
+    tokens_intrare: 7000, tokens_iesire: 600, cost_microdolari: 3600, credite, stare, durata_ms: 1200,
   });
 }
 
@@ -126,5 +126,43 @@ describe("istoricCatalog", () => {
     await intrebare(B, c.id, "2026-09-08");
     expect((await istoricCatalog(env.DB, A, c.id)).map((i) => i.id)).toEqual([i1.id, i2.id]);
     expect((await istoricCatalog(env.DB, A, c.id, 1)).map((i) => i.id)).toEqual([i2.id]);
+  });
+});
+
+describe("credite Z.AI si buget", () => {
+  it("agrega creditele pe 7 si 30 de zile, per utilizator si in total", async () => {
+    const c = await catalog();
+    await intrebare(A, c.id, "2026-09-08", "ok", 23.5);
+    await intrebare(A, c.id, "2026-09-03", "ok", 10);      // in 7 zile
+    await intrebare(A, c.id, "2026-08-20", "ok", 100);     // doar in 30 zile
+    await intrebare(A, c.id, "2026-09-08", "eroare", 0);
+    await intrebare(B, c.id, "2026-09-08", "ok", 1.25);
+    const raport = await raportUtilizatori(env.DB, "2026-09-08");
+    expect(raport.find((r) => r.email === A)).toMatchObject({ credite_7: 33.5, credite_30: 133.5 });
+    expect(raport.find((r) => r.email === B)).toMatchObject({ credite_7: 1.25, credite_30: 1.25 });
+    expect(await crediteUltimele7Zile(env.DB, "2026-09-08")).toBe(34.75);
+    expect((await istoricUtilizator(env.DB, A)).map((i) => i.credite)).toEqual([0, 100, 10, 23.5]);
+  });
+
+  it("citeste bugetul de context din setari, cu implicit si limite", async () => {
+    expect(await citesteBuget(env.DB)).toBe(3_000_000);
+    await seteazaSetare(env.DB, "buget_context", "50000");
+    expect(await citesteBuget(env.DB)).toBe(50_000);
+    await seteazaSetare(env.DB, "buget_context", "abc");
+    expect(await citesteBuget(env.DB)).toBe(3_000_000);
+    await seteazaSetare(env.DB, "buget_context", "99999999");
+    expect(await citesteBuget(env.DB)).toBe(3_000_000);
+    await seteazaSetare(env.DB, "buget_context", "5");
+    expect(await citesteBuget(env.DB)).toBe(3_000_000);
+  });
+});
+
+describe("fmtCredite", () => {
+  it("o zecimala, virgula zecimala si punct la mii", () => {
+    expect(fmtCredite(0)).toBe("0");
+    expect(fmtCredite(0.25)).toBe("0,3");
+    expect(fmtCredite(33.5)).toBe("33,5");
+    expect(fmtCredite(1234.56)).toBe("1.234,6");
+    expect(fmtCredite(10000)).toBe("10.000");
   });
 });

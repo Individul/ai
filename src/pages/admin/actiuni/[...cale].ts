@@ -16,7 +16,7 @@
 //   audio/:id/sterge
 //   audio/:id/muta?dir=sus|jos
 //   utilizator/:email          limita_zi, blocat, nota (pagina /admin/consum)
-//   setari                     limita_zi_implicita, model
+//   setari                     limita_zi_implicita, model, buget_context
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import {
@@ -25,7 +25,10 @@ import {
 } from "../../../lib/db";
 import { cheieR2 } from "../../../lib/fisiere";
 import { scoateDinIndex } from "../../../lib/indexare";
-import { esteModel, esteStare, slug, valideazaAudio, valideazaCatalog, valideazaSursa } from "../../../lib/validare";
+import { stergeText } from "../../../lib/text";
+import {
+  LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, esteModel, esteStare, slug, valideazaAudio, valideazaCatalog, valideazaSursa,
+} from "../../../lib/validare";
 import { seteazaSetare, seteazaUtilizator } from "../../../lib/consum";
 
 const text = (s: string, status: number, extra: Record<string, string> = {}) =>
@@ -112,6 +115,7 @@ export const POST: APIRoute = async ({ params, request, url, redirect }) => {
     }
     if (actiune === "sterge") {
       if (sursa.doc_google) await scoateDinIndex(env, sursa);
+      if (sursa.text_caractere !== null) await stergeText(env.FISIERE, id);
       if (sursa.fisier_nume) await env.FISIERE.delete(cheieR2("pdf", id));
       await stergeSursa(env.DB, id);
       return inapoi({ ok: true });
@@ -171,8 +175,13 @@ export const POST: APIRoute = async ({ params, request, url, redirect }) => {
     if (!Number.isInteger(limita) || limita < 0 || limita > 10_000) return laConsum({ eroare: "Limita implicită trebuie să fie un număr întreg." });
     const model = (f.model ?? "").trim();
     if (!esteModel(model)) return laConsum({ eroare: "Model necunoscut." });
+    const buget = Number((f.buget_context ?? "").replace(/[.\s]/g, ""));
+    if (!Number.isInteger(buget) || buget < LIMITA_BUGET_MIN || buget > LIMITA_BUGET_MAX) {
+      return laConsum({ eroare: `Bugetul de context trebuie să fie între ${LIMITA_BUGET_MIN} și ${LIMITA_BUGET_MAX} de caractere.` });
+    }
     await seteazaSetare(env.DB, "limita_zi_implicita", String(limita));
     await seteazaSetare(env.DB, "model", model);
+    await seteazaSetare(env.DB, "buget_context", String(buget));
     return laConsum({ ok: true });
   }
 

@@ -21,15 +21,33 @@ export const ETICHETE_PICTOGRAMA: Record<Pictograma, string> = {
   carte: "Carte", balanta: "Balanță", ciocan: "Ciocan", document: "Document", lacat: "Lacăt", cheie: "Cheie",
 };
 
-// Modelele Gemini disponibile in Admin si tarifele lor ($ per milion de tokeni, sept. 2026;
-// 3.8 Flash creste la 1,50 / 7,50 de la 1 ian. 2027).
-export const TARIFE: Record<string, { intrare: number; iesire: number; eticheta: string }> = {
-  "gemini-3.5-flash-lite": { intrare: 0.30, iesire: 2.50, eticheta: "Gemini 3.5 Flash-Lite (cel mai ieftin)" },
-  "gemini-3.8-flash": { intrare: 0.75, iesire: 3.75, eticheta: "Gemini 3.8 Flash (mai bun)" },
-  "gemini-3.5-flash": { intrare: 1.50, iesire: 9.00, eticheta: "Gemini 3.5 Flash" },
+// Modelele disponibile in Admin; modelul decide motorul. Tarifele: $ per milion de tokeni, sept. 2026
+// (3.8 Flash creste la 1,50 / 7,50 de la 1 ian. 2027). Modelele Z.AI (GLM) se platesc din planul de
+// coding, masurat in credite: (intrare x i + cache x c + iesire x o) / 10.000 (docs.z.ai/devpack/overview);
+// tariful lor in $ e cel public (api.z.ai), doar orientativ.
+export type Motor = "gemini" | "zai";
+export interface Tarif {
+  motor: Motor;
+  intrare: number;
+  iesire: number;
+  eticheta: string;
+  credite?: { intrare: number; cache: number; iesire: number };
+}
+export const TARIFE: Record<string, Tarif> = {
+  "gemini-3.5-flash-lite": { motor: "gemini", intrare: 0.30, iesire: 2.50, eticheta: "Gemini 3.5 Flash-Lite (cel mai ieftin)" },
+  "gemini-3.8-flash": { motor: "gemini", intrare: 0.75, iesire: 3.75, eticheta: "Gemini 3.8 Flash (mai bun)" },
+  "gemini-3.5-flash": { motor: "gemini", intrare: 1.50, iesire: 9.00, eticheta: "Gemini 3.5 Flash" },
+  "glm-5.3-flash": { motor: "zai", intrare: 0.15, iesire: 0.50, eticheta: "GLM-5.3-Flash · Z.AI, planul de coding", credite: { intrare: 2.3, cache: 0.56, iesire: 8 } },
+  "glm-5.3": { motor: "zai", intrare: 1.40, iesire: 4.40, eticheta: "GLM-5.3 · Z.AI, planul de coding (scump în credite)", credite: { intrare: 6.9, cache: 1.7, iesire: 24 } },
 };
 export const MODELE = Object.keys(TARIFE);
 export function esteModel(s: string): boolean { return s in TARIFE; }
+export function motorModel(model: string): Motor | null { return TARIFE[model]?.motor ?? null; }
+
+// Bugetul de context pentru GLM (caractere trimise modelului), setabil din Admin.
+// 3 M caractere ~ 1 M tokeni, plafonul GLM-5.3 / 5.3-Flash.
+export const LIMITA_BUGET_MIN = 10_000;
+export const LIMITA_BUGET_MAX = 3_000_000;
 
 export const LIMITA_INTREBARE = 2000;
 export const LIMITA_TITLU = 200;

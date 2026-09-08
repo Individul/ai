@@ -1,16 +1,19 @@
 // POST /api/chat { catalog, intrebare, istoric: [{intrebare, raspuns}] }
-// Intrebarea unui coleg catre catalogul dat: verifica limita zilnica, intreaba Gemini File Search,
-// scrie in jurnal si intoarce raspunsul cu citari si cate intrebari mai are azi.
+// Intrebarea unui coleg catre catalogul dat: verifica limita zilnica, intreaba motorul ales in Admin
+// (Gemini File Search sau Z.AI cu textul extras), scrie in jurnal si intoarce raspunsul cu citari
+// si cate intrebari mai are azi.
 //
 // Blocarea si identitatea sunt in middleware. Istoricul vine de la client (stateless).
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
-import { citesteCatalog, surseIndexate } from "../../../lib/db";
-import { citesteSetare, inregistreazaIntrebare, intrebariAzi, limitaPentru } from "../../../lib/consum";
-import { costMicrodolari, intreaba, EroareGemini, type Schimb } from "../../../lib/gemini";
+import { citesteCatalog, listeazaSurse } from "../../../lib/db";
+import { citesteBuget, citesteSetare, inregistreazaIntrebare, intrebariAzi, limitaPentru } from "../../../lib/consum";
+import { EroareGemini, type Schimb } from "../../../lib/gemini";
+import { EroareZai } from "../../../lib/zai";
+import { disponibilePentruChat, raspunde } from "../../../lib/motor";
 import { citesteJson, eroare, json } from "../../../lib/api";
 import { aziChisinau } from "../../../lib/data";
-import { LIMITA_INTREBARE, esteModel } from "../../../lib/validare";
+import { LIMITA_INTREBARE, esteModel, motorModel } from "../../../lib/validare";
 
 interface Corp {
   catalog?: string;
@@ -30,10 +33,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const catalog = await citesteCatalog(env.DB, c.date.catalog ?? "");
   if (!catalog || (catalog.stare === "arhivat" && !locals.admin)) return eroare(404, "Catalogul nu există.");
-  if (!catalog.magazin || (await surseIndexate(env.DB, catalog.id)) === 0) {
-    return eroare(409, "Catalogul nu are încă documente indexate.");
+
+  let model = await citesteSetare(env.DB, "model");
+  if (!esteModel(model)) model = "gemini-3.5-flash-lite";
+  const motor = motorModel(model) ?? "gemini";
+  const surse = await listeazaSurse(env.DB, catalog.id);
+  if (disponibilePentruChat(motor, catalog.magazin, surse) === 0) {
+    return eroare(409, "Catalogul nu are încă documente pregătite pentru chat.");
   }
-  if (!env.GEMINI_API_KEY) return eroare(503, "Chatul nu este configurat încă pe server.");
+  if (!(motor === "zai" ? env.ZAI_API_KEY : env.GEMINI_API_KEY)) return eroare(503, "Chatul nu este configurat încă pe server.");
 
   const zi = aziChisinau();
   const email = locals.email;
@@ -41,30 +49,29 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (folosite >= limita) {
     await inregistreazaIntrebare(env.DB, {
       email, catalog_id: catalog.id, zi, intrebare, raspuns: "", citari: [], model: "",
-      tokens_intrare: 0, tokens_iesire: 0, cost_microdolari: 0, stare: "refuzat", durata_ms: null,
+      tokens_intrare: 0, tokens_iesire: 0, cost_microdolari: 0, credite: 0, stare: "refuzat", durata_ms: null,
     });
     return json({ eroare: `Ai atins limita de ${limita} întrebări pe zi. Revino mâine.`, ramase: 0, limita }, 429);
   }
 
-  let model = await citesteSetare(env.DB, "model");
-  if (!esteModel(model)) model = "gemini-3.5-flash-lite";
+  const buget = await citesteBuget(env.DB);
   const start = Date.now();
   try {
-    const r = await intreaba(env.GEMINI_API_KEY, { model, magazin: catalog.magazin, istoric, intrebare });
+    const r = await raspunde(env, { model, catalog, istoric, intrebare, buget });
     const durata_ms = Date.now() - start;
     await inregistreazaIntrebare(env.DB, {
       email, catalog_id: catalog.id, zi, intrebare, raspuns: r.text, citari: r.citari, model,
       tokens_intrare: r.tokens_intrare, tokens_iesire: r.tokens_iesire,
-      cost_microdolari: costMicrodolari(model, r.tokens_intrare, r.tokens_iesire), stare: "ok", durata_ms,
+      cost_microdolari: r.cost_microdolari, credite: r.credite, stare: "ok", durata_ms,
     });
-    return json({ raspuns: r.text, citari: r.citari, ramase: Math.max(0, limita - folosite - 1), limita, model });
+    return json({ raspuns: r.text, citari: r.citari, ramase: Math.max(0, limita - folosite - 1), limita, model, mod: r.mod });
   } catch (e) {
     const mesaj = (e as Error).message;
     await inregistreazaIntrebare(env.DB, {
       email, catalog_id: catalog.id, zi, intrebare, raspuns: `[eroare] ${mesaj}`, citari: [], model,
-      tokens_intrare: 0, tokens_iesire: 0, cost_microdolari: 0, stare: "eroare", durata_ms: Date.now() - start,
+      tokens_intrare: 0, tokens_iesire: 0, cost_microdolari: 0, credite: 0, stare: "eroare", durata_ms: Date.now() - start,
     });
-    const status = e instanceof EroareGemini && e.status === 503 ? 503 : 502;
+    const status = (e instanceof EroareGemini || e instanceof EroareZai) && e.status === 503 ? 503 : 502;
     return eroare(status, `Nu am putut obține răspunsul: ${mesaj}`);
   }
 };

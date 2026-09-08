@@ -17,6 +17,10 @@ declare namespace Cloudflare {
     ADMIN_EMAILS?: string;
     // Cheia Gemini API (secret pe Worker, .dev.vars local). Fara ea, chatul si indexarea raspund 503.
     GEMINI_API_KEY?: string;
+    // Cheia Z.AI (secret pe Worker, .dev.vars local), pentru modelele GLM alese din Admin. Fara ea,
+    // chatul pe GLM raspunde 503. ZAI_API_BASE e optional: implicit endpointul planului de coding.
+    ZAI_API_KEY?: string;
+    ZAI_API_BASE?: string;
     // Doar in .dev.vars, pentru dezvoltare locala. Ignorat in productie.
     DEV_EMAIL?: string;
   }

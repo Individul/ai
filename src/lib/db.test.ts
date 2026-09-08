@@ -5,6 +5,7 @@ import {
   creeazaCatalog, listeazaAudio, listeazaCataloage, listeazaSurse, mutaCatalog, mutaSursa,
   seteazaFisierSursa, stergeAudio, stergeSursa,
 } from "./db";
+import { citesteSursa, seteazaText, surseCuText } from "./db";
 
 const SURSA = { titlu: "Codul penal", tip: "cod" as const, numar: "985", data_emiterii: "2002-04-18", url: null };
 
@@ -128,5 +129,24 @@ describe("audio", () => {
         { tip_mime: "audio/mpeg", fisier_nume: "x.mp3", marime: 1 }
       )
     ).rejects.toThrow();
+  });
+});
+
+describe("text extras", () => {
+  it("retine contoarele textului, le sterge cu null si numara sursele cu text", async () => {
+    const c = await creeazaCatalog(env.DB, "t", { titlu: "T" });
+    const s1 = await adaugaSursa(env.DB, c.id, SURSA);
+    const s2 = await adaugaSursa(env.DB, c.id, { ...SURSA, titlu: "Scanat" });
+    expect(s1.text_pagini).toBeNull();
+    expect(s1.text_caractere).toBeNull();
+    expect(await surseCuText(env.DB, c.id)).toBe(0);
+    await seteazaText(env.DB, s1.id, { pagini: 12, caractere: 30_000 });
+    await seteazaText(env.DB, s2.id, { pagini: 0, caractere: 0 }); // PDF scanat: extras, dar fara text
+    expect(await citesteSursa(env.DB, s1.id)).toMatchObject({ text_pagini: 12, text_caractere: 30_000 });
+    expect(await citesteSursa(env.DB, s2.id)).toMatchObject({ text_pagini: 0, text_caractere: 0 });
+    expect(await surseCuText(env.DB, c.id)).toBe(1);
+    await seteazaText(env.DB, s1.id, null);
+    expect(await citesteSursa(env.DB, s1.id)).toMatchObject({ text_pagini: null, text_caractere: null });
+    expect(await surseCuText(env.DB, c.id)).toBe(0);
   });
 });

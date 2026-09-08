@@ -7,9 +7,10 @@ import ListaSurse from "../../components/ListaSurse.astro";
 import ListaAudio from "../../components/ListaAudio.astro";
 import Chat from "../../components/Chat.astro";
 import { citesteCatalogDupaSlug, listeazaAudio, listeazaSurse } from "../../lib/db";
-import { intrebariAzi, limitaPentru } from "../../lib/consum";
+import { citesteSetare, intrebariAzi, limitaPentru } from "../../lib/consum";
 import { aziChisinau } from "../../lib/data";
-import { ETICHETE_STARE } from "../../lib/validare";
+import { disponibilePentruChat } from "../../lib/motor";
+import { ETICHETE_STARE, motorModel } from "../../lib/validare";
 import { randeazaMarkdown } from "../../lib/markdown";
 import { fmtMoment } from "../../lib/data";
 
@@ -19,11 +20,13 @@ if (!catalog || (catalog.stare === "arhivat" && !Astro.locals.admin)) {
   return new Response(null, { status: 404 });
 }
 const email = Astro.locals.email;
-const [surse, audio, folosite, limita] = await Promise.all([
+const [surse, audio, folosite, limita, model] = await Promise.all([
   listeazaSurse(env.DB, catalog.id), listeazaAudio(env.DB, catalog.id),
-  intrebariAzi(env.DB, email, aziChisinau()), limitaPentru(env.DB, email),
+  intrebariAzi(env.DB, email, aziChisinau()), limitaPentru(env.DB, email), citesteSetare(env.DB, "model"),
 ]);
-const indexate = catalog.magazin ? surse.filter((s) => s.indexare === "gata").length : 0;
+// Chatul e disponibil cand motorul ales in Admin are ce citi (Gemini: indexate; Z.AI: cu text extras).
+const motor = motorModel(model) ?? "gemini";
+const disponibile = disponibilePentruChat(motor, catalog.magazin, surse);
 const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) : "";
 ---
 
@@ -38,7 +41,7 @@ const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) :
       {catalog.descriere && <p class="descriere">{catalog.descriere}</p>}
     </header>
 
-    <Chat catalogId={catalog.id} indexate={indexate} ramase={Math.max(0, limita - folosite)} limita={limita} />
+    <Chat catalogId={catalog.id} disponibile={disponibile} motor={motor} ramase={Math.max(0, limita - folosite)} limita={limita} />
 
     <section class="sectiune">
       <h2>Surse <span class="numar">{surse.length}</span></h2>

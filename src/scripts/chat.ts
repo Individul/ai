@@ -13,6 +13,8 @@ if (sectiune) pornesteChat(sectiune);
 
 function pornesteChat(el: HTMLElement) {
   const catalog = el.dataset.chat ?? "";
+  // Z.AI primeste textul catalogului intreg: raspunsul poate dura minute, iar omul trebuie sa stie.
+  const asteptare = el.dataset.motor === "zai" ? "se citește catalogul… poate dura 1–3 minute" : "se caută în documente…";
   const form = el.querySelector<HTMLFormElement>("form")!;
   const camp = form.querySelector<HTMLTextAreaElement>("textarea")!;
   const buton = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
@@ -75,7 +77,7 @@ function pornesteChat(el: HTMLElement) {
     if (!intrebare) return;
     buton.disabled = true;
     camp.disabled = true;
-    stare("se caută în documente…");
+    stare(asteptare);
     try {
       const r = await fetch("/api/chat", {
         method: "POST",

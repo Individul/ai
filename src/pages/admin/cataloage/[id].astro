@@ -8,6 +8,9 @@ import { citesteCatalog, listeazaAudio, listeazaSurse } from "../../../lib/db";
 import { ETICHETE_TIP, TIPURI_SURSA, fmtDurata, fmtMarime } from "../../../lib/validare";
 import { aziChisinau, fmtMoment, fmtZi } from "../../../lib/data";
 import { verificaIndexarea } from "../../../lib/indexare";
+import { citesteSetare } from "../../../lib/consum";
+import { disponibilePentruChat } from "../../../lib/motor";
+import { motorModel } from "../../../lib/validare";
 
 const id = Astro.params.id ?? "";
 const catalog = await citesteCatalog(env.DB, id);
@@ -18,11 +21,17 @@ if (surse.some((s) => s.indexare === "in_curs") && env.GEMINI_API_KEY) {
   await Promise.all(surse.filter((s) => s.indexare === "in_curs").map((s) => verificaIndexarea(env, s).catch(() => null)));
   surse = await listeazaSurse(env.DB, id);
 }
-const indexate = surse.filter((s) => s.indexare === "gata").length;
+// "In chat" = utilizabile de motorul ales in Admin (Gemini: indexate; Z.AI: cu text extras).
+const motor = motorModel(await citesteSetare(env.DB, "model")) ?? "gemini";
+const disponibile = disponibilePentruChat(motor, catalog.magazin, surse);
+// Surse cu PDF incarcat inainte de motorul Z.AI: textul li se poate extrage dintr-un singur buton.
+const faraText = surse.filter((s) => s.fisier_nume && s.text_caractere === null).map((s) => s.id);
 const eroare = Astro.url.searchParams.get("eroare");
 const ok = Astro.url.searchParams.has("ok");
 const act = (cale: string) => `/admin/actiuni/${cale}`;
-const ETICHETE_INDEXARE = { neindexat: "neindexat", in_curs: "se indexează…", gata: "în chat", eroare: "eroare la indexare" } as const;
+const ETICHETE_INDEXARE = { neindexat: "Gemini: neindexat", in_curs: "Gemini: se indexează…", gata: "Gemini: indexat", eroare: "Gemini: eroare la indexare" } as const;
+const etichetaText = (s: (typeof surse)[number]) =>
+  s.text_caractere === null ? "text neextras" : s.text_caractere === 0 ? "fără text (PDF scanat?)" : `text: ${s.text_pagini} pag.`;
 ---
 
 <Base title={`${catalog.titlu} · Admin`}>
@@ -50,7 +59,14 @@ const ETICHETE_INDEXARE = { neindexat: "neindexat", in_curs: "se indexează…",
   </form>
 
   <section class="sectiune" id="surse">
-    <h2>Surse <span class="numar">{surse.length}{surse.length > 0 && ` · ${indexate} în chat`}</span></h2>
+    <h2>Surse <span class="numar">{surse.length}{surse.length > 0 && ` · ${disponibile} în chat (${motor === "zai" ? "Z.AI" : "Gemini"})`}</span></h2>
+    {faraText.length > 0 && (
+      <p class="extrage" data-cere-js hidden>
+        <button type="button" class="buton mic" data-extrage-toate={faraText.join(",")}>Extrage textul pentru {faraText.length} {faraText.length === 1 ? "sursă" : "surse"}</button>
+        <output data-stare class="stare-incarcare"></output>
+        <small>Textul e necesar chatului pe Z.AI; se extrage în browser din PDF-urile deja încărcate.</small>
+      </p>
+    )}
     <ul class="randuri">
       {surse.map((s, i) => (
         <li>
@@ -61,7 +77,12 @@ const ETICHETE_INDEXARE = { neindexat: "neindexat", in_curs: "se indexează…",
               <span class="meta">
                 {s.numar && <span>nr. {s.numar}</span>}
                 {s.data_emiterii && <span>{fmtZi(s.data_emiterii)}</span>}
-                {s.fisier_nume ? <span class:list={["indexare", s.indexare]} data-indexare={s.id} title={s.indexare_mesaj ?? ""}>{ETICHETE_INDEXARE[s.indexare]}</span> : <span class="fara">fără PDF</span>}
+                {s.fisier_nume ? (
+                  <>
+                    <span class:list={["text", { gata: (s.text_caractere ?? 0) > 0, lipsa: !(s.text_caractere ?? 0) }]}>{etichetaText(s)}</span>
+                    <span class:list={["indexare", s.indexare]} data-indexare={s.id} title={s.indexare_mesaj ?? ""}>{ETICHETE_INDEXARE[s.indexare]}</span>
+                  </>
+                ) : <span class="fara">fără PDF</span>}
               </span>
               <span class="deschide">editează</span>
             </summary>
@@ -222,6 +243,11 @@ const ETICHETE_INDEXARE = { neindexat: "neindexat", in_curs: "se indexează…",
   .stare-incarcare.ok { color: var(--live); }
   .stare-incarcare.eroare { color: var(--coral); }
   .indexare { font-weight: 700; }
+  .text { font-weight: 700; }
+  .text.gata { color: var(--live); }
+  .text.lipsa { color: var(--faint); }
+  .extrage { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 4px 0 10px; }
+  .extrage small { color: var(--faint); font-size: 13px; }
   .indexare.gata { color: var(--live); }
   .indexare.in_curs { color: var(--wip); }
   .indexare.eroare { color: var(--coral); }

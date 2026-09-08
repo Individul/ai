@@ -16,7 +16,7 @@ beforeEach(async () => {
   await env.DB.exec("DELETE FROM surse");
   await env.DB.exec("DELETE FROM cataloage");
   await env.DB.exec("DELETE FROM setari");
-  await env.DB.exec("INSERT INTO setari VALUES ('limita_zi_implicita', '15'), ('model', 'gemini-3.5-flash-lite')");
+  await env.DB.exec("INSERT INTO setari VALUES ('limita_zi_implicita', '15'), ('model', 'gemini-3.5-flash-lite'), ('buget_context', '3000000')");
   const obiecte = await env.FISIERE.list();
   if (obiecte.objects.length) await env.FISIERE.delete(obiecte.objects.map((o) => o.key));
 });

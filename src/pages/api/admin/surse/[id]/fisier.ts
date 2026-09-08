@@ -6,10 +6,17 @@
 // cererea fara preflight (pe care nu il acceptam); in plus verificam Sec-Fetch-Site.
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
-import { citesteSursa, seteazaFisierSursa } from "../../../../../lib/db";
+import { citesteSursa, seteazaFisierSursa, seteazaText } from "../../../../../lib/db";
 import { cheieR2, curataPdf, numeFisierCurat, verificaUpload } from "../../../../../lib/fisiere";
 import { scoateDinIndex } from "../../../../../lib/indexare";
+import { stergeText } from "../../../../../lib/text";
 import { eroare, json } from "../../../../../lib/api";
+
+// PDF nou sau sters = textul vechi nu mai e valabil: obiectul din R2 pleaca inaintea contoarelor.
+async function scoateTextul(id: string): Promise<void> {
+  await stergeText(env.FISIERE, id);
+  await seteazaText(env.DB, id, null);
+}
 
 const origineStraina = (request: Request) => {
   const s = request.headers.get("sec-fetch-site");
@@ -28,6 +35,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
   const nume = numeFisierCurat(request.headers.get("x-nume-fisier"), `${sursa.titlu}.pdf`);
   // PDF nou = document nou la Google; cel vechi (daca era) se scoate, iar clientul porneste indexarea.
   if (sursa.doc_google || sursa.indexare !== "neindexat") await scoateDinIndex(env, sursa);
+  if (sursa.text_caractere !== null) await scoateTextul(id);
   // Antetul %PDF trebuie sa fie primul octet; altfel Google nu poate indexa fisierul.
   const curat = await curataPdf(request.body, v.marime);
   await env.FISIERE.put(cheieR2("pdf", id), curat.corp, { httpMetadata: { contentType: v.tip } });
@@ -45,6 +53,7 @@ export const DELETE: APIRoute = async ({ params, request }) => {
   const sursa = await citesteSursa(env.DB, id);
   if (!sursa) return eroare(404, "Sursa nu există.");
   await scoateDinIndex(env, sursa);
+  await scoateTextul(id);
   await env.FISIERE.delete(cheieR2("pdf", id));
   await seteazaFisierSursa(env.DB, id, null, null);
   return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });

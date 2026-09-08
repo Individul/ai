@@ -3,6 +3,7 @@
 
 import { acum } from "./db";
 import { ziMinus } from "./data";
+import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN } from "./validare";
 
 export interface Utilizator {
   email: string;
@@ -31,6 +32,7 @@ export interface Intrebare {
   tokens_intrare: number;
   tokens_iesire: number;
   cost_microdolari: number;
+  credite: number;      // creditele planului Z.AI; 0 la Gemini
   stare: "ok" | "eroare" | "refuzat";
   durata_ms: number | null;
   creat_la: string;
@@ -46,6 +48,8 @@ export interface RandRaport {
   tokens_iesire: number;
   cost_microdolari: number;
   cost_30_microdolari: number;
+  credite_7: number;
+  credite_30: number;
   limita_zi: number | null;
   blocat: number;
   nota: string | null;
@@ -55,6 +59,7 @@ export interface RandRaport {
 export const SETARI_IMPLICITE: Record<string, string> = {
   limita_zi_implicita: "15",
   model: "gemini-3.5-flash-lite",
+  buget_context: String(LIMITA_BUGET_MAX),
 };
 
 // ---------------------------------------------------------------- setari
@@ -74,6 +79,12 @@ export async function seteazaSetare(db: D1Database, cheie: string, valoare: stri
 export async function limitaImplicita(db: D1Database): Promise<number> {
   const n = Number(await citesteSetare(db, "limita_zi_implicita"));
   return Number.isInteger(n) && n >= 0 ? n : 15;
+}
+
+// Caracterele trimise modelului GLM la o intrebare; in afara limitelor se revine la implicit.
+export async function citesteBuget(db: D1Database): Promise<number> {
+  const n = Number(await citesteSetare(db, "buget_context"));
+  return Number.isInteger(n) && n >= LIMITA_BUGET_MIN && n <= LIMITA_BUGET_MAX ? n : LIMITA_BUGET_MAX;
 }
 
 // ---------------------------------------------------------------- utilizatori
@@ -128,7 +139,7 @@ export async function seteazaUtilizator(
 // ---------------------------------------------------------------- intrebari
 
 const COL_INTREBARE =
-  "id, email, catalog_id, zi, intrebare, raspuns, citari, model, tokens_intrare, tokens_iesire, cost_microdolari, stare, durata_ms, creat_la";
+  "id, email, catalog_id, zi, intrebare, raspuns, citari, model, tokens_intrare, tokens_iesire, cost_microdolari, credite, stare, durata_ms, creat_la";
 
 // Doar intrebarile reusite conteaza la limita; erorile noastre nu se pun in carca omului.
 export async function intrebariAzi(db: D1Database, email: string, zi: string): Promise<number> {
@@ -150,6 +161,7 @@ export interface IntrebareNoua {
   tokens_intrare: number;
   tokens_iesire: number;
   cost_microdolari: number;
+  credite: number;
   stare: "ok" | "eroare" | "refuzat";
   durata_ms: number | null;
 }
@@ -158,11 +170,11 @@ export async function inregistreazaIntrebare(db: D1Database, i: IntrebareNoua): 
   const id = crypto.randomUUID();
   await db
     .prepare(
-      `INSERT INTO intrebari (${COL_INTREBARE}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO intrebari (${COL_INTREBARE}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id, i.email, i.catalog_id, i.zi, i.intrebare, i.raspuns, JSON.stringify(i.citari), i.model,
-      i.tokens_intrare, i.tokens_iesire, i.cost_microdolari, i.stare, i.durata_ms, acum()
+      i.tokens_intrare, i.tokens_iesire, i.cost_microdolari, i.credite, i.stare, i.durata_ms, acum()
     )
     .run();
   const r = await db.prepare(`SELECT ${COL_INTREBARE} FROM intrebari WHERE id = ?`).bind(id).first<Intrebare>();
@@ -212,6 +224,8 @@ export async function raportUtilizatori(db: D1Database, azi: string): Promise<Ra
               coalesce(sum(i.tokens_iesire), 0) AS tokens_iesire,
               coalesce(sum(i.cost_microdolari), 0) AS cost_microdolari,
               coalesce(sum(CASE WHEN i.zi >= ?3 THEN i.cost_microdolari ELSE 0 END), 0) AS cost_30_microdolari,
+              coalesce(sum(CASE WHEN i.zi >= ?2 THEN i.credite ELSE 0 END), 0) AS credite_7,
+              coalesce(sum(CASE WHEN i.zi >= ?3 THEN i.credite ELSE 0 END), 0) AS credite_30,
               u.limita_zi, coalesce(u.blocat, 0) AS blocat, u.nota, u.ultima_vizita
        FROM emailuri e
        LEFT JOIN intrebari i ON i.email = e.email
@@ -261,6 +275,15 @@ export async function costPropriu(db: D1Database, email: string): Promise<number
   return r?.c ?? 0;
 }
 
+// Creditele Z.AI consumate de toti in ultimele 7 zile (planul are cota saptamanala), pentru antetul raportului.
+export async function crediteUltimele7Zile(db: D1Database, azi: string): Promise<number> {
+  const r = await db
+    .prepare("SELECT coalesce(sum(credite), 0) AS c FROM intrebari WHERE zi >= ?")
+    .bind(ziMinus(azi, 6))
+    .first<{ c: number }>();
+  return r?.c ?? 0;
+}
+
 // Costul total (microdolari) al intrebarilor din ultimele 30 de zile, pentru antetul raportului.
 export async function costUltimele30Zile(db: D1Database, azi: string): Promise<number> {
   const r = await db
@@ -276,4 +299,12 @@ export function fmtCost(microdolari: number): string {
   if (microdolari === 0) return "0 $";
   const d = microdolari / 1_000_000;
   return `${(d < 1 ? d.toFixed(4) : d.toFixed(2)).replace(".", ",")} $`;
+}
+
+// Creditele planului Z.AI: 33.5 -> "33,5"; 1234.56 -> "1.234,6"; intregii fara zecimale.
+export function fmtCredite(credite: number): string {
+  const rotunjit = Math.round(credite * 10) / 10;
+  const [intreg, zecimal] = rotunjit.toFixed(1).split(".") as [string, string];
+  const cuMii = intreg.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return zecimal === "0" ? cuMii : `${cuMii},${zecimal}`;
 }

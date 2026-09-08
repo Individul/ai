@@ -38,6 +38,8 @@ export interface Sursa {
   indexare: StareIndexare;
   indexare_mesaj: string | null;
   operatie_google: string | null;  // operations/... cat timp e in_curs
+  text_pagini: number | null;      // pagini cu text in text/{id} (R2); NULL = neextras; 0 = PDF scanat
+  text_caractere: number | null;
   ordine: number;
   creat_la: string;
   actualizat_la: string;
@@ -65,7 +67,7 @@ export type RezultatActualizare<T> =
   | { ok: false; motiv: "conflict"; rand: T };
 
 const COL_CATALOG = "id, slug, titlu, descriere, pictograma, culoare, stare, url_notebook, note_utilizare, ordine, magazin, creat_la, actualizat_la";
-const COL_SURSA = "id, catalog_id, titlu, tip, numar, data_emiterii, url, fisier_nume, fisier_marime, doc_google, indexare, indexare_mesaj, operatie_google, ordine, creat_la, actualizat_la";
+const COL_SURSA = "id, catalog_id, titlu, tip, numar, data_emiterii, url, fisier_nume, fisier_marime, doc_google, indexare, indexare_mesaj, operatie_google, text_pagini, text_caractere, ordine, creat_la, actualizat_la";
 const COL_AUDIO = "id, catalog_id, titlu, descriere, durata_s, data, tip_mime, fisier_nume, marime, ordine, creat_la";
 
 // Timp strict crescator: in Workers `Date.now()` poate sta pe loc intr-o cerere, iar
@@ -293,6 +295,25 @@ export async function seteazaIndexare(
     .prepare("UPDATE surse SET indexare = ?, doc_google = ?, operatie_google = ?, indexare_mesaj = ? WHERE id = ?")
     .bind(i.indexare, i.doc_google ?? null, i.operatie_google ?? null, i.indexare_mesaj ?? null, id)
     .run();
+}
+
+// Contoarele textului extras (obiectul text/{id} din R2, scris inainte). null = text sters / neextras.
+export async function seteazaText(
+  db: D1Database, id: string, t: { pagini: number; caractere: number } | null
+): Promise<void> {
+  await db
+    .prepare("UPDATE surse SET text_pagini = ?, text_caractere = ? WHERE id = ?")
+    .bind(t?.pagini ?? null, t?.caractere ?? null, id)
+    .run();
+}
+
+// Sursele cu text extras nevid, pe care motorul Z.AI le poate citi.
+export async function surseCuText(db: D1Database, catalogId: string): Promise<number> {
+  const r = await db
+    .prepare("SELECT count(*) AS n FROM surse WHERE catalog_id = ? AND text_caractere > 0")
+    .bind(catalogId)
+    .first<{ n: number }>();
+  return r?.n ?? 0;
 }
 
 // Doar randul; obiectul din R2 se sterge inainte, de cine apeleaza.

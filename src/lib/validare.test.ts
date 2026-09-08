@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   fmtDurata, fmtMarime, slug, urlNotebookValid, valideazaAudio, valideazaCatalog, valideazaSursa, ziValida,
 } from "./validare";
+import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, motorModel, TARIFE } from "./validare";
 
 describe("slug", () => {
   it("scoate diacriticele si pune cratime", () => {
@@ -83,5 +84,25 @@ describe("valideazaAudio", () => {
       .toEqual({ ok: true, date: { titlu: "Rezumat", descriere: "", data: "2026-09-08", durata_s: 754 } });
     expect(valideazaAudio({ titlu: "Rezumat", data: "azi" })).toMatchObject({ ok: false });
     expect(valideazaAudio({ titlu: "Rezumat", data: "2026-09-08", durata_s: "-1" })).toMatchObject({ ok: false });
+  });
+});
+
+describe("modele si motoare", () => {
+  it("deduce motorul din model", () => {
+    expect(motorModel("gemini-3.5-flash-lite")).toBe("gemini");
+    expect(motorModel("glm-5.3-flash")).toBe("zai");
+    expect(motorModel("necunoscut")).toBeNull();
+  });
+
+  it("modelele Z.AI au tariful public si multiplicatorii de credite ai planului de coding", () => {
+    expect(TARIFE["glm-5.3-flash"]).toMatchObject({ motor: "zai", intrare: 0.15, iesire: 0.5, credite: { intrare: 2.3, cache: 0.56, iesire: 8 } });
+    expect(TARIFE["glm-5.3"]).toMatchObject({ motor: "zai", intrare: 1.4, iesire: 4.4, credite: { intrare: 6.9, cache: 1.7, iesire: 24 } });
+    expect(TARIFE["gemini-3.5-flash-lite"]).toMatchObject({ motor: "gemini" });
+    expect(TARIFE["gemini-3.5-flash-lite"]).not.toHaveProperty("credite");
+  });
+
+  it("bugetul de context are limite fixe", () => {
+    expect(LIMITA_BUGET_MIN).toBe(10_000);
+    expect(LIMITA_BUGET_MAX).toBe(3_000_000);
   });
 });

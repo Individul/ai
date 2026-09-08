@@ -2,14 +2,25 @@
 // Admin: consumul per utilizator, limite, blocare, setari (limita implicita, model).
 import { env } from "cloudflare:workers";
 import Base from "../../layouts/Base.astro";
-import { citesteSetare, costUltimele30Zile, fmtCost, limitaImplicita, raportUtilizatori } from "../../lib/consum";
+import {
+  citesteBuget, citesteSetare, costUltimele30Zile, crediteUltimele7Zile, fmtCost, fmtCredite, limitaImplicita, raportUtilizatori,
+} from "../../lib/consum";
 import { aziChisinau, fmtZi } from "../../lib/data";
-import { MODELE, TARIFE } from "../../lib/validare";
+import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, MODELE, TARIFE, motorModel } from "../../lib/validare";
 
 const azi = aziChisinau();
-const [raport, limita, model, cost30] = await Promise.all([
+const [raport, limita, model, cost30, credite7, buget] = await Promise.all([
   raportUtilizatori(env.DB, azi), limitaImplicita(env.DB), citesteSetare(env.DB, "model"), costUltimele30Zile(env.DB, azi),
+  crediteUltimele7Zile(env.DB, azi), citesteBuget(env.DB),
 ]);
+const motor = motorModel(model) ?? "gemini";
+// Planul Lite Z.AI: 2.000 de credite la 5 ore, 10.000 pe saptamana, pentru toti la un loc.
+const COTA_SAPTAMANA = 10_000;
+const descriereModel = (m: string) => {
+  const t = TARIFE[m]!;
+  const tarif = `${t.intrare.toFixed(2)} / ${t.iesire.toFixed(2)} $ per M tokeni`;
+  return t.credite ? `${t.eticheta} · ${tarif} orientativ · credite ×${t.credite.intrare} / ×${t.credite.iesire}` : `${t.eticheta} · ${tarif}`;
+};
 const eroare = Astro.url.searchParams.get("eroare");
 const ok = Astro.url.searchParams.has("ok");
 const totalAzi = raport.reduce((s, r) => s + r.azi, 0);
@@ -25,6 +36,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
       <span><strong>{totalAzi}</strong> întrebări azi</span>
       <span><strong>{total30}</strong> în 30 de zile</span>
       <span><strong>{fmtCost(cost30)}</strong> cost în 30 de zile</span>
+      <span><strong>{fmtCredite(credite7)}</strong> credite Z.AI în 7 zile, din {fmtCredite(COTA_SAPTAMANA)}</span>
     </div>
   </header>
 
@@ -39,11 +51,21 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
     <label>
       <span>Model</span>
       <select name="model">
-        {MODELE.map((m) => <option value={m} selected={m === model}>{TARIFE[m]!.eticheta} · {TARIFE[m]!.intrare.toFixed(2)} / {TARIFE[m]!.iesire.toFixed(2)} $ per M tokeni</option>)}
+        {MODELE.map((m) => <option value={m} selected={m === model}>{descriereModel(m)}</option>)}
       </select>
+    </label>
+    <label>
+      <span>Buget context Z.AI (caractere)</span>
+      <input name="buget_context" type="number" min={LIMITA_BUGET_MIN} max={LIMITA_BUGET_MAX} step="10000" value={buget} required />
     </label>
     <button class="buton" type="submit">Salvează setările</button>
   </form>
+  <p class="lamurire sus">
+    Motorul activ: <strong>{motor === "zai" ? "Z.AI (GLM)" : "Gemini File Search"}</strong>.{" "}
+    {motor === "zai"
+      ? "GLM primește textul întregului catalog dacă încape în buget, altfel paginile care se potrivesc cu întrebarea. La 3.000.000 de caractere (≈ 1 M tokeni) o întrebare pe GLM-5.3-Flash costă ≈ 230 de credite din cota planului Lite (2.000 la 5 ore, 10.000 pe săptămână, pentru toți)."
+      : "Modelele GLM cer textul extras din PDF-uri (se face la upload sau din „Extrage textul” în pagina catalogului)."}
+  </p>
 
   <h2>Utilizatori <span class="numar">{raport.length}</span></h2>
   {raport.length === 0 ? (
@@ -54,7 +76,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
         <thead>
           <tr>
             <th>E-mail</th><th class="nr">Azi</th><th class="nr">7 zile</th><th class="nr">30 zile</th><th class="nr">Total</th>
-            <th class="nr">Tokeni</th><th class="nr">Cost 30 z.</th><th>Ultima vizită</th><th>Limită / zi</th><th>Blocat</th><th>Notă</th><th></th>
+            <th class="nr">Tokeni</th><th class="nr">Cost 30 z.</th><th class="nr">Credite 7 z.</th><th>Ultima vizită</th><th>Limită / zi</th><th>Blocat</th><th>Notă</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -68,6 +90,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
               <td class="nr">{r.total}</td>
               <td class="nr" title={`${r.tokens_intrare} intrare · ${r.tokens_iesire} ieșire`}>{fmtTokeni(r.tokens_intrare + r.tokens_iesire)}</td>
               <td class="nr">{fmtCost(r.cost_30_microdolari)}</td>
+              <td class="nr" title={`${fmtCredite(r.credite_30)} în 30 de zile`}>{fmtCredite(r.credite_7)}</td>
               <td>{r.ultima_vizita ? fmtZi(r.ultima_vizita) : "—"}</td>
               <td><input form={`f-${r.email}`} name="limita_zi" type="number" min="0" max="10000" value={r.limita_zi ?? ""} placeholder={`implicit ${limita}`} aria-label="Limită pe zi" /></td>
               <td><label class="bifa"><input form={`f-${r.email}`} name="blocat" type="checkbox" value="1" checked={r.blocat === 1} /> blocat</label></td>
@@ -80,7 +103,8 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
     </div>
   )}
   <p class="lamurire">
-    Costul e estimat din tokenii raportați de Google și tarifele modelului. Limita goală înseamnă limita implicită.
+    Costul e estimat din tokenii raportați de model și tariful lui public; pe GLM se plătește din planul de coding Z.AI, în credite:
+    (tokeni intrare × 2,3 + din cache × 0,56 + ieșire × 8) / 10.000 la Flash. Limita goală înseamnă limita implicită.
     Un utilizator blocat nu mai poate deschide nicio pagină; adminul nu poate fi blocat.
   </p>
 </Base>
@@ -97,6 +121,8 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
     padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font-size: 14px; text-transform: none; letter-spacing: 0;
   }
   .setari input { width: 120px; }
+  .setari input[name=buget_context] { width: 150px; }
+  .lamurire.sus { margin: -22px 0 32px; }
   h2 { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
   .numar { color: var(--faint); font-size: 15px; font-weight: 600; }
   .gol { color: var(--muted); }

@@ -8,3 +8,5 @@ GEMINI_API_KEY=
 ZAI_API_KEY=
 # Optional: alt endpoint OpenAI-compatibil (implicit https://api.z.ai/api/coding/paas/v4, al planului de coding).
 # ZAI_API_BASE=
+# Cheia DeepSeek (platform.deepseek.com, sold preplatit). Fara ea, chatul pe modelele deepseek-* raspunde 503.
+DEEPSEEK_API_KEY=

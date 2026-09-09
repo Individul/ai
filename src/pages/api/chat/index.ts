@@ -1,7 +1,7 @@
 // POST /api/chat { catalog, intrebare, istoric: [{intrebare, raspuns}] }
 // Intrebarea unui coleg catre catalogul dat: verifica limita zilnica, intreaba motorul ales in Admin
-// (Gemini File Search sau Z.AI cu textul extras), scrie in jurnal si intoarce raspunsul cu citari
-// si cate intrebari mai are azi.
+// (Gemini File Search, sau Z.AI / DeepSeek cu textul extras), scrie in jurnal si intoarce raspunsul
+// cu citari si cate intrebari mai are azi.
 //
 // Blocarea si identitatea sunt in middleware. Istoricul vine de la client (stateless).
 import type { APIRoute } from "astro";
@@ -10,7 +10,7 @@ import { citesteCatalog, listeazaSurse } from "../../../lib/db";
 import { citesteBuget, citesteSetare, inregistreazaIntrebare, intrebariAzi, limitaPentru } from "../../../lib/consum";
 import { EroareGemini, type Schimb } from "../../../lib/gemini";
 import { EroareZai } from "../../../lib/zai";
-import { disponibilePentruChat, raspunde } from "../../../lib/motor";
+import { cheieMotor, disponibilePentruChat, raspunde } from "../../../lib/motor";
 import { citesteJson, eroare, json } from "../../../lib/api";
 import { aziChisinau } from "../../../lib/data";
 import { LIMITA_INTREBARE, esteModel, motorModel } from "../../../lib/validare";
@@ -41,7 +41,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (disponibilePentruChat(motor, catalog.magazin, surse) === 0) {
     return eroare(409, "Culegerea nu are încă documente pregătite pentru chat.");
   }
-  if (!(motor === "zai" ? env.ZAI_API_KEY : env.GEMINI_API_KEY)) return eroare(503, "Chatul nu este configurat încă pe server.");
+  if (!cheieMotor(env, motor)) return eroare(503, "Chatul nu este configurat încă pe server.");
 
   const zi = aziChisinau();
   const email = locals.email;

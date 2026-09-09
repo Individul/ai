@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { construiesteCerereZai, crediteZai, EroareZai, extrageCota, extrageRaspunsZai, PROMPT_SISTEM_ZAI } from "./zai";
+import { BAZA_DEEPSEEK, construiesteCerereZai, crediteZai, EroareZai, extrageCota, extrageRaspunsZai, PROMPT_SISTEM_ZAI } from "./zai";
 import { costMicrodolari } from "./gemini";
 
 // Raspuns real de la api.z.ai/api/coding/paas/v4 (8 sept. 2026), cu gandire adaugata ca sa vedem ca o ignoram.
@@ -94,5 +94,30 @@ describe("extrageCota", () => {
   it("fara date intoarce null; sare peste limitele care nu sunt credite", () => {
     expect(extrageCota({ code: 401 })).toBeNull();
     expect(extrageCota({ data: { level: "pro", limits: [{ type: "TOOL_LIMIT", unit: 4, number: 1, usage: 1000, currentValue: 5, percentage: 1, nextResetTime: 0 }] } })).toBeNull();
+  });
+});
+
+describe("costMicrodolari cu cache", () => {
+  it("tokenii din cache se platesc la pretul de cache al modelului; fara pret de cache, la pret intreg", () => {
+    expect(costMicrodolari("deepseek-v4-flash", 676_000, 600, 676_000)).toBe(2061);
+    expect(costMicrodolari("deepseek-v4-flash", 676_000, 600)).toBe(94_808);
+    expect(costMicrodolari("glm-5.3-flash", 100_000, 500, 90_000)).toBe(4_450);
+    expect(costMicrodolari("gemini-3.5-flash-lite", 7000, 600, 7000)).toBe(3600);
+  });
+});
+
+describe("clientul OpenAI-compatibil si DeepSeek", () => {
+  it("citeste tokenii din cache din prompt_cache_hit_tokens (DeepSeek) sau din prompt_tokens_details (Z.AI)", () => {
+    const deepseek = { choices: [{ message: { content: "ok" } }], usage: { prompt_tokens: 1000, prompt_cache_hit_tokens: 900, prompt_cache_miss_tokens: 100, completion_tokens: 20 } };
+    expect(extrageRaspunsZai(deepseek)).toEqual({ text: "ok", tokens_intrare: 1000, tokens_cache: 900, tokens_iesire: 20 });
+  });
+
+  it("recunoaste contextul prea lung si in formularea OpenAI", () => {
+    expect(new EroareZai(400, "This model's maximum context length is 1048576 tokens. However, you requested 1200000 tokens").contextPreaLung).toBe(true);
+    expect(new EroareZai(400, "Invalid request").contextPreaLung).toBe(false);
+  });
+
+  it("are baza DeepSeek", () => {
+    expect(BAZA_DEEPSEEK).toBe("https://api.deepseek.com");
   });
 });

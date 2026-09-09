@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   fmtDurata, fmtMarime, slug, urlNotebookValid, valideazaAudio, valideazaCatalog, valideazaSursa, ziValida,
 } from "./validare";
-import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, motorModel, TARIFE } from "./validare";
+import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, motorModel, NUME_MOTOR, TARIFE } from "./validare";
 
 describe("slug", () => {
   it("scoate diacriticele si pune cratime", () => {
@@ -104,5 +104,14 @@ describe("modele si motoare", () => {
   it("bugetul de context are limite fixe", () => {
     expect(LIMITA_BUGET_MIN).toBe(10_000);
     expect(LIMITA_BUGET_MAX).toBe(3_000_000);
+  });
+});
+
+describe("motorul deepseek", () => {
+  it("deepseek-v4-flash are motorul deepseek, tarif cu pret de cache si un nume de afisat", () => {
+    expect(motorModel("deepseek-v4-flash")).toBe("deepseek");
+    expect(TARIFE["deepseek-v4-flash"]).toMatchObject({ motor: "deepseek", intrare: 0.14, intrare_cache: 0.0028, iesire: 0.28 });
+    expect(TARIFE["glm-5.3-flash"]).toMatchObject({ intrare_cache: 0.03 });
+    expect(NUME_MOTOR).toEqual({ gemini: "Gemini", zai: "Z.AI", deepseek: "DeepSeek" });
   });
 });

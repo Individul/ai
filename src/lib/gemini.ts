@@ -245,8 +245,10 @@ export async function intreaba(cheie: string, c: CerereIntrebare): Promise<Raspu
 }
 
 // Tokenii costa $/milion; 1 $/milion = 1 microdolar per token, deci inmultirea e directa.
-export function costMicrodolari(model: string, tokensIntrare: number, tokensIesire: number): number {
+// `tokensCache` (parte din tokensIntrare) se plateste la pretul de cache al modelului, daca are unul.
+export function costMicrodolari(model: string, tokensIntrare: number, tokensIesire: number, tokensCache = 0): number {
   const t = TARIFE[model];
   if (!t) return 0;
-  return Math.round(tokensIntrare * t.intrare + tokensIesire * t.iesire);
+  const cache = Math.min(Math.max(tokensCache, 0), tokensIntrare);
+  return Math.round((tokensIntrare - cache) * t.intrare + cache * (t.intrare_cache ?? t.intrare) + tokensIesire * t.iesire);
 }

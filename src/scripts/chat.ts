@@ -15,8 +15,8 @@ if (sectiune) pornesteChat(sectiune);
 
 function pornesteChat(el: HTMLElement) {
   const catalog = el.dataset.chat ?? "";
-  // Z.AI primeste textul catalogului intreg: raspunsul poate dura minute, iar omul trebuie sa stie.
-  const asteptare = el.dataset.motor === "zai" ? "se citește culegerea… poate dura 1–3 minute" : "se caută în documente…";
+  // Z.AI si DeepSeek primesc textul catalogului intreg: raspunsul poate dura minute, iar omul trebuie sa stie.
+  const asteptare = el.dataset.motor !== "gemini" ? "se citește culegerea… poate dura 1–3 minute" : "se caută în documente…";
   const form = el.querySelector<HTMLFormElement>("form")!;
   const camp = form.querySelector<HTMLTextAreaElement>("textarea")!;
   const buton = form.querySelector<HTMLButtonElement>("button[type=submit]")!;

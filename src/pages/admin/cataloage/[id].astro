@@ -10,7 +10,7 @@ import { aziChisinau, fmtMoment, fmtZi } from "../../../lib/data";
 import { verificaIndexarea } from "../../../lib/indexare";
 import { citesteSetare } from "../../../lib/consum";
 import { disponibilePentruChat } from "../../../lib/motor";
-import { motorModel } from "../../../lib/validare";
+import { motorModel, NUME_MOTOR } from "../../../lib/validare";
 
 const id = Astro.params.id ?? "";
 const catalog = await citesteCatalog(env.DB, id);
@@ -59,12 +59,12 @@ const etichetaText = (s: (typeof surse)[number]) =>
   </form>
 
   <section class="sectiune" id="surse">
-    <h2>Surse <span class="numar">{surse.length}{surse.length > 0 && ` · ${disponibile} în chat (${motor === "zai" ? "Z.AI" : "Gemini"})`}</span></h2>
+    <h2>Surse <span class="numar">{surse.length}{surse.length > 0 && ` · ${disponibile} în chat (${NUME_MOTOR[motor]})`}</span></h2>
     {faraText.length > 0 && (
       <p class="extrage" data-cere-js hidden>
         <button type="button" class="buton mic" data-extrage-toate={faraText.join(",")}>Extrage textul pentru {faraText.length} {faraText.length === 1 ? "sursă" : "surse"}</button>
         <output data-stare class="stare-incarcare"></output>
-        <small>Textul e necesar chatului pe Z.AI; se extrage în browser din PDF-urile deja încărcate.</small>
+        <small>Textul e necesar chatului pe Z.AI sau DeepSeek; se extrage în browser din PDF-urile deja încărcate.</small>
       </p>
     )}
     <ul class="randuri">

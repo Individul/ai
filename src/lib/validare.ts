@@ -26,10 +26,12 @@ export const ETICHETE_PICTOGRAMA: Record<Pictograma, string> = {
 // (3.8 Flash creste la 1,50 / 7,50 de la 1 ian. 2027). Modelele Z.AI (GLM) se platesc din planul de
 // coding, masurat in credite: (intrare x i + cache x c + iesire x o) / 10.000 (docs.z.ai/devpack/overview);
 // tariful lor in $ e cel public (api.z.ai), doar orientativ.
-export type Motor = "gemini" | "zai";
+// DeepSeek (sept. 2026): plata per token, cache automat pe prefix, tokenii din cache la intrare_cache.
+export type Motor = "gemini" | "zai" | "deepseek";
 export interface Tarif {
   motor: Motor;
   intrare: number;
+  intrare_cache?: number;   // $ per milion pentru tokenii de intrare veniti din cache; lipsa = pret intreg
   iesire: number;
   eticheta: string;
   credite?: { intrare: number; cache: number; iesire: number };
@@ -38,12 +40,14 @@ export const TARIFE: Record<string, Tarif> = {
   "gemini-3.5-flash-lite": { motor: "gemini", intrare: 0.30, iesire: 2.50, eticheta: "Gemini 3.5 Flash-Lite (cel mai ieftin)" },
   "gemini-3.8-flash": { motor: "gemini", intrare: 0.75, iesire: 3.75, eticheta: "Gemini 3.8 Flash (mai bun)" },
   "gemini-3.5-flash": { motor: "gemini", intrare: 1.50, iesire: 9.00, eticheta: "Gemini 3.5 Flash" },
-  "glm-5.3-flash": { motor: "zai", intrare: 0.15, iesire: 0.50, eticheta: "GLM-5.3-Flash · Z.AI, planul de coding", credite: { intrare: 2.3, cache: 0.56, iesire: 8 } },
-  "glm-5.3": { motor: "zai", intrare: 1.40, iesire: 4.40, eticheta: "GLM-5.3 · Z.AI, planul de coding (scump în credite)", credite: { intrare: 6.9, cache: 1.7, iesire: 24 } },
+  "glm-5.3-flash": { motor: "zai", intrare: 0.15, intrare_cache: 0.03, iesire: 0.50, eticheta: "GLM-5.3-Flash · Z.AI, planul de coding", credite: { intrare: 2.3, cache: 0.56, iesire: 8 } },
+  "glm-5.3": { motor: "zai", intrare: 1.40, intrare_cache: 0.26, iesire: 4.40, eticheta: "GLM-5.3 · Z.AI, planul de coding (scump în credite)", credite: { intrare: 6.9, cache: 1.7, iesire: 24 } },
+  "deepseek-v4-flash": { motor: "deepseek", intrare: 0.14, intrare_cache: 0.0028, iesire: 0.28, eticheta: "DeepSeek V4 Flash · plată per token, cache automat" },
 };
 export const MODELE = Object.keys(TARIFE);
 export function esteModel(s: string): boolean { return s in TARIFE; }
 export function motorModel(model: string): Motor | null { return TARIFE[model]?.motor ?? null; }
+export const NUME_MOTOR: Record<Motor, string> = { gemini: "Gemini", zai: "Z.AI", deepseek: "DeepSeek" };
 
 // Bugetul de context pentru GLM (caractere trimise modelului), setabil din Admin.
 // 3 M caractere ~ 1 M tokeni, plafonul GLM-5.3 / 5.3-Flash.

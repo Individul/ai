@@ -26,7 +26,8 @@
 	"vars": {
 		// Echipa Cloudflare Access, aceeasi ca la notite.
 		// Secrete (npx wrangler secret put ...): ACCESS_AUD, GEMINI_API_KEY, ZAI_API_KEY (planul de coding Z.AI,
-		// pentru modelele GLM). Optional ZAI_API_BASE aici, daca se schimba endpointul. DEV_EMAIL nu se pune NICIODATA aici.
+		// pentru modelele GLM), DEEPSEEK_API_KEY (platform.deepseek.com, pentru deepseek-*).
+		// Optional ZAI_API_BASE aici, daca se schimba endpointul. DEV_EMAIL nu se pune NICIODATA aici.
 		"ACCESS_TEAM_DOMAIN": "wandering-firefly-46cf.cloudflareaccess.com",
 		// Cine vede /admin si poate scrie. Lista separata prin virgula; goala = nimeni.
 		"ADMIN_EMAILS": "prisacarudumitru@gmail.com"

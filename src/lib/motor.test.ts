@@ -92,3 +92,30 @@ describe("raspunde pe Z.AI", () => {
       .rejects.toMatchObject({ status: 503 });
   });
 });
+
+describe("motorul deepseek", () => {
+  it("numara sursele cu text, ca orice motor fara File Search", () => {
+    expect(disponibilePentruChat("deepseek", null, SURSE)).toBe(2);
+  });
+
+  it("trimite cheia si baza DeepSeek, fara credite, cu costul socotit pe tokenii din cache", async () => {
+    const { catalog, ord } = await catalogCuText();
+    const apeluri: { cheie: string; baza: string }[] = [];
+    const apel = async (cheie: string, baza: string, _c: CerereZai): Promise<RaspunsZai> => {
+      apeluri.push({ cheie, baza });
+      return { text: "Marți [Ordinul nr. 777, pag. 2].", tokens_intrare: 1000, tokens_cache: 900, tokens_iesire: 20 };
+    };
+    const r = await raspunde({ DB: env.DB, FISIERE: env.FISIERE, DEEPSEEK_API_KEY: "ds-test", ZAI_API_KEY: "zai-test" },
+      { model: "deepseek-v4-flash", catalog, istoric: [], intrebare: "Când?", buget: 1000 }, apel);
+    expect(apeluri).toEqual([{ cheie: "ds-test", baza: "https://api.deepseek.com" }]);
+    expect(r).toMatchObject({ citari: [{ sursa_id: ord.id, titlu: "Ordinul nr. 777", pagina: 2 }], credite: 0, mod: "integral", tokens_cache: 900 });
+    // 100 x 0,14 + 900 x 0,0028 + 20 x 0,28 = 14 + 2,52 + 5,6 = 22,12 -> 22 microdolari
+    expect(r.cost_microdolari).toBe(22);
+  });
+
+  it("fara cheie DeepSeek raspunde 503, chiar daca exista cheia Z.AI", async () => {
+    const { catalog } = await catalogCuText();
+    await expect(raspunde({ DB: env.DB, FISIERE: env.FISIERE, ZAI_API_KEY: "zai-test" }, { model: "deepseek-v4-flash", catalog, istoric: [], intrebare: "x", buget: 1000 }))
+      .rejects.toMatchObject({ status: 503 });
+  });
+});

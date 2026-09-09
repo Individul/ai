@@ -17,6 +17,9 @@ import { TARIFE } from "./validare";
 import type { Schimb } from "./gemini";
 
 export const BAZA_ZAI = "https://api.z.ai/api/coding/paas/v4";
+// DeepSeek e tot OpenAI-compatibil: acelasi client, alta baza si alta cheie (vezi motor.ts).
+// Cache-ul e automat, pe prefix; tokenii din cache vin in usage.prompt_cache_hit_tokens.
+export const BAZA_DEEPSEEK = "https://api.deepseek.com";
 
 export const PROMPT_SISTEM_ZAI = `Ești asistentul unei culegeri de acte normative din sistemul penitenciar al Republicii Moldova.
 Răspunzi în limba română, doar pe baza documentelor de mai jos. Fiecare pagină începe cu un antet „=== Titlu | pag. N ===”.
@@ -46,7 +49,8 @@ export class EroareZai extends Error {
     super(mesaj);
     this.status = status;
     this.cod = cod;
-    this.contextPreaLung = cod === "1261" || /exceeds max length/i.test(mesaj);
+    // Z.AI: cod 1261 "Prompt exceeds max length"; DeepSeek/OpenAI: "maximum context length is N tokens".
+    this.contextPreaLung = cod === "1261" || /exceeds max length|maximum context length|context length|too long/i.test(mesaj);
   }
 }
 
@@ -71,7 +75,7 @@ export function extrageRaspunsZai(d: any): RaspunsZai {
   return {
     text: typeof continut === "string" ? continut.trim() : "",
     tokens_intrare: Number(u.prompt_tokens ?? 0),
-    tokens_cache: Number(u.prompt_tokens_details?.cached_tokens ?? 0),
+    tokens_cache: Number(u.prompt_cache_hit_tokens ?? u.prompt_tokens_details?.cached_tokens ?? 0),
     tokens_iesire: Number(u.completion_tokens ?? 0),
   };
 }

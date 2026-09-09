@@ -21,6 +21,8 @@ declare namespace Cloudflare {
     // chatul pe GLM raspunde 503. ZAI_API_BASE e optional: implicit endpointul planului de coding.
     ZAI_API_KEY?: string;
     ZAI_API_BASE?: string;
+    // Cheia DeepSeek (platform.deepseek.com, sold preplatit), pentru modelele deepseek-*. Fara ea, 503.
+    DEEPSEEK_API_KEY?: string;
     // Doar in .dev.vars, pentru dezvoltare locala. Ignorat in productie.
     DEV_EMAIL?: string;
   }

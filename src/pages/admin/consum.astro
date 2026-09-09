@@ -21,7 +21,7 @@ const cota = motor === "zai" && env.ZAI_API_KEY ? await cotaZai(env.ZAI_API_KEY)
 const COTA_SAPTAMANA = cota?.ferestre.find((f) => f.eticheta === "săpt.")?.total ?? 10_000;
 const descriereModel = (m: string) => {
   const t = TARIFE[m]!;
-  const tarif = `${t.intrare.toFixed(2)} / ${t.iesire.toFixed(2)} $ per M tokeni`;
+  const tarif = `${t.intrare.toFixed(2)} / ${t.iesire.toFixed(2)} $ per M tokeni` + (t.intrare_cache ? ` (din cache ${t.intrare_cache.toFixed(4)})` : "");
   return t.credite ? `${t.eticheta} · ${tarif} orientativ · credite ×${t.credite.intrare} / ×${t.credite.iesire}` : `${t.eticheta} · ${tarif}`;
 };
 const eroare = Astro.url.searchParams.get("eroare");
@@ -61,16 +61,18 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
       </select>
     </label>
     <label>
-      <span>Buget context Z.AI (caractere)</span>
+      <span>Buget context (caractere) · Z.AI, DeepSeek</span>
       <input name="buget_context" type="number" min={LIMITA_BUGET_MIN} max={LIMITA_BUGET_MAX} step="10000" value={buget} required />
     </label>
     <button class="buton" type="submit">Salvează setările</button>
   </form>
   <p class="lamurire sus">
-    Motorul activ: <strong>{motor === "zai" ? "Z.AI (GLM)" : "Gemini File Search"}</strong>.{" "}
+    Motorul activ: <strong>{motor === "zai" ? "Z.AI (GLM)" : motor === "deepseek" ? "DeepSeek" : "Gemini File Search"}</strong>.{" "}
     {motor === "zai"
       ? "GLM primește textul întregii culegeri dacă încape în buget, altfel paginile care se potrivesc cu întrebarea. La 3.000.000 de caractere (≈ 1 M tokeni) o întrebare pe GLM-5.3-Flash costă ≈ 230 de credite din cota planului Lite (2.000 la 5 ore, 10.000 pe săptămână, pentru toți)."
-      : "Modelele GLM cer textul extras din PDF-uri (se face la upload sau din „Extrage textul” în pagina culegerii)."}
+      : motor === "deepseek"
+        ? "DeepSeek primește textul întregii culegeri dacă încape în buget, altfel paginile care se potrivesc cu întrebarea. Plata e per token, fără cotă; cache-ul e automat pe prefix, deci de la a doua întrebare pe aceeași culegere documentele se plătesc la prețul de cache (0,0028 $ per M în loc de 0,14 $). Jurnalul arată costul real, cu tokenii din cache."
+        : "Modelele GLM și DeepSeek cer textul extras din PDF-uri (se face la upload sau din „Extrage textul” în pagina culegerii)."}
   </p>
 
   <h2>Utilizatori <span class="numar">{raport.length}</span></h2>

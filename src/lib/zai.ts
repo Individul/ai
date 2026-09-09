@@ -18,7 +18,10 @@ import type { Schimb } from "./gemini";
 
 export const BAZA_ZAI = "https://api.z.ai/api/coding/paas/v4";
 // DeepSeek e tot OpenAI-compatibil: acelasi client, alta baza si alta cheie (vezi motor.ts).
-// Cache-ul e automat, pe prefix; tokenii din cache vin in usage.prompt_cache_hit_tokens.
+// Verificat pe viu la 9 sept. 2026, pe deepseek-v4-flash: `thinking: {type: "disabled"}` e acceptat;
+// usage are prompt_tokens, prompt_cache_hit_tokens / prompt_cache_miss_tokens (si
+// prompt_tokens_details.cached_tokens); a doua cerere cu acelasi prefix de ~20 k tokeni a venit din
+// cache cu 19.712 din 19.829 tokeni, dupa ~1 s. Cache-ul e automat, pe prefix, fara configurare.
 export const BAZA_DEEPSEEK = "https://api.deepseek.com";
 
 export const PROMPT_SISTEM_ZAI = `Ești asistentul unei culegeri de acte normative din sistemul penitenciar al Republicii Moldova.

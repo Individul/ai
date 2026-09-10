@@ -39,6 +39,11 @@ const { catalog: c } = Astro.props;
     </label>
   </div>
   <label>
+    <span>Caiet Gemini Notebook (link)</span>
+    <input name="url_notebook" type="url" value={c?.url_notebook ?? ""} placeholder="https://notebook.google.com/notebook/…" />
+    <small>Caietul tău pentru această culegere. Partajează-l din NotebookLM cu adresele colegilor, ca viewer: pot întreba și pot folosi rezumatele audio, hărțile mentale și testele generate de tine. Gol = fără link pe pagină.</small>
+  </label>
+  <label>
     <span>Note de utilizare (Markdown)</span>
     <textarea name="note_utilizare" rows="4" maxlength="20000" placeholder="## Întrebări utile&#10;- Ce pedeapsă prevede art. 186?">{c?.note_utilizare ?? ""}</textarea>
   </label>

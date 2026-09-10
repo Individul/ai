@@ -39,6 +39,12 @@ const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) :
       </div>
       <h1>{catalog.titlu}</h1>
       {catalog.descriere && <p class="descriere">{catalog.descriere}</p>}
+      {catalog.url_notebook && (
+        <p class="notebook">
+          <a href={catalog.url_notebook} target="_blank" rel="noopener noreferrer">Deschide în Gemini Notebook ↗</a>
+          <small>rezumate audio, hărți mentale și teste; întrebările puse acolo nu se numără aici</small>
+        </p>
+      )}
     </header>
 
     <Chat catalogId={catalog.id} disponibile={disponibile} motor={motor} ramase={Math.max(0, limita - folosite)} limita={limita} />
@@ -75,6 +81,10 @@ const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) :
   }
   h1 { font-size: 40px; letter-spacing: -0.02em; }
   .descriere { color: var(--muted); font-size: 17px; max-width: 60ch; }
+  .notebook { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 14px; }
+  .notebook a { font-weight: 600; color: var(--accent, var(--violet)); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color 0.15s; }
+  .notebook a:hover { text-decoration-color: currentColor; }
+  .notebook small { color: var(--faint); font-size: 13px; }
   .sectiune { margin-top: 56px; display: flex; flex-direction: column; gap: 18px; }
   .sectiune h2 { display: flex; align-items: baseline; gap: 10px; font-size: 20px; }
   .numar { color: var(--faint); font-size: 14px; font-weight: 600; }

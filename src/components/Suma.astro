@@ -1,6 +1,7 @@
 ---
-// O suma din jurnal (microdolari), afisata in lei la cursul BNM; dolarii si cursul, la hover.
-// Fara curs cunoscut (BNM n-a raspuns niciodata), ramane in dolari.
+// O suma din jurnal (microdolari), afisata in lei la cursul BNM, cu steagul Republicii Moldova
+// dupa "lei"; dolarii si cursul, la hover. Fara curs cunoscut (BNM n-a raspuns niciodata),
+// ramane in dolari, fara steag. Steagul e SVG (emoji-ul de steag apare ca "MD" pe Windows).
 import { fmtCost } from "../lib/consum";
 import { explicatieLei, fmtLei, type CursUsd } from "../lib/curs";
 
@@ -15,4 +16,23 @@ const explicatie = curs ? explicatieLei(microdolari, curs) : "";
 const title = [titlu, explicatie].filter(Boolean).join(" · ");
 ---
 
-<span title={title || undefined}>{text}</span>
+<span class="suma-lei" title={title || undefined}>{text}{curs && (
+  <svg class="steag" viewBox="0 0 30 20" aria-hidden="true" focusable="false">
+    <rect width="10" height="20" fill="#0046AE" />
+    <rect x="10" width="10" height="20" fill="#FFD200" />
+    <rect x="20" width="10" height="20" fill="#CC092F" />
+    <!-- stema, stilizata: acvila cu scut -->
+    <path d="M15 5.2 L9.2 8.4 L11.4 9 L10.6 12.6 L13.4 11.2 L15 15.4 L16.6 11.2 L19.4 12.6 L18.6 9 L20.8 8.4 Z" fill="#7A4E12" />
+    <circle cx="15" cy="5.4" r="1.4" fill="#7A4E12" />
+    <rect x="13.7" y="8.6" width="2.6" height="1.9" fill="#CC092F" />
+    <rect x="13.7" y="10.5" width="2.6" height="1.9" fill="#0046AE" />
+  </svg>
+)}</span>
+
+<style>
+  .suma-lei { white-space: nowrap; }
+  .steag {
+    display: inline-block; width: 15px; height: 10px; margin-left: 4px; vertical-align: -1px; border-radius: 2px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+  }
+</style>

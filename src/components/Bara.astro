@@ -4,17 +4,20 @@
 // Cand motorul activ e Z.AI, la capat apar procentele consumate din cota planului (comuna tuturor),
 // pe 5 ore si pe saptamana, cu momentele de resetare la hover; lipsesc daca Z.AI nu raspunde.
 import { env } from "cloudflare:workers";
-import { citesteSetare, costPropriu, costTotalToti, fmtCost } from "../lib/consum";
-import { fmtMoment } from "../lib/data";
+import Suma from "./Suma.astro";
+import { citesteSetare, costPropriu, costTotalToti } from "../lib/consum";
+import { aziChisinau, fmtMoment } from "../lib/data";
+import { cursUsd } from "../lib/curs";
 import { motorModel } from "../lib/validare";
 import { cotaZai } from "../lib/zai";
 
 const cale = Astro.url.pathname;
 const admin = Astro.locals.admin;
-const [propriu, toti, model] = await Promise.all([
+const [propriu, toti, model, curs] = await Promise.all([
   costPropriu(env.DB, Astro.locals.email),
   admin ? costTotalToti(env.DB) : Promise.resolve(0),
   citesteSetare(env.DB, "model"),
+  cursUsd(env.DB, aziChisinau()),
 ]);
 const cota = motorModel(model) === "zai" && env.ZAI_API_KEY ? await cotaZai(env.ZAI_API_KEY) : null;
 const maxim = cota ? Math.max(...cota.ferestre.map((f) => f.procent)) : 0;
@@ -28,9 +31,9 @@ const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsW
   <a class="brand" href="/">Culegeri<span>.</span></a>
   <nav aria-label="Navigare principală">
     <a href="/" class:list={{ activ: activ("/") }}>Culegeri</a>
-    <a href="/consum" class:list={{ activ: activ("/consum") }}>Consum <span class="suma" title="costul tău de la început">{fmtCost(propriu)}</span></a>
+    <a href="/consum" class:list={{ activ: activ("/consum") }}>Consum <span class="suma"><Suma microdolari={propriu} curs={curs} titlu="costul tău de la început" /></span></a>
     <a href="/acces" class:list={{ activ: activ("/acces") }}>Cum obțin acces</a>
-    {admin && <a href="/admin" class:list={["admin", { activ: activ("/admin") }]}>Admin <span class="suma" title="costul tuturor de la început">{fmtCost(toti)}</span></a>}
+    {admin && <a href="/admin" class:list={["admin", { activ: activ("/admin") }]}>Admin <span class="suma"><Suma microdolari={toti} curs={curs} titlu="costul tuturor de la început" /></span></a>}
     {cota && (
       <span class:list={["cota", { atentie: maxim >= 80 && maxim < 100, plin: maxim >= 100 }]} title={`Cota planului Z.AI (${cota.nivel}), comună tuturor: ${explicatie}`}>
         Z.AI {cota.ferestre.map((f) => `${f.procent} % / ${f.eticheta}`).join(" · ")}

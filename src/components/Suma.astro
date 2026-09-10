@@ -1,0 +1,18 @@
+---
+// O suma din jurnal (microdolari), afisata in lei la cursul BNM; dolarii si cursul, la hover.
+// Fara curs cunoscut (BNM n-a raspuns niciodata), ramane in dolari.
+import { fmtCost } from "../lib/consum";
+import { explicatieLei, fmtLei, type CursUsd } from "../lib/curs";
+
+interface Props {
+  microdolari: number;
+  curs: CursUsd | null;
+  titlu?: string;   // text pus inaintea explicatiei, ex. "costul tău de la început"
+}
+const { microdolari, curs, titlu } = Astro.props;
+const text = curs ? fmtLei(microdolari, curs.curs) : fmtCost(microdolari);
+const explicatie = curs ? explicatieLei(microdolari, curs) : "";
+const title = [titlu, explicatie].filter(Boolean).join(" · ");
+---
+
+<span title={title || undefined}>{text}</span>

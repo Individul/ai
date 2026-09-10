@@ -2,16 +2,18 @@
 // Consumul propriu: cate intrebari azi, limita, ultimele intrebari cu raspunsuri.
 import { env } from "cloudflare:workers";
 import Base from "../layouts/Base.astro";
-import { consumUtilizator, fmtCost, intrebariAzi, istoricUtilizator, limitaPentru } from "../lib/consum";
+import Suma from "../components/Suma.astro";
+import { consumUtilizator, intrebariAzi, istoricUtilizator, limitaPentru } from "../lib/consum";
 import { aziChisinau, fmtMoment } from "../lib/data";
+import { cursUsd } from "../lib/curs";
 import { listeazaCataloage } from "../lib/db";
 import { randeazaMarkdown } from "../lib/markdown";
 
 const email = Astro.locals.email;
 const zi = aziChisinau();
-const [folosite, limita, istoric, cataloage, consum] = await Promise.all([
+const [folosite, limita, istoric, cataloage, consum, curs] = await Promise.all([
   intrebariAzi(env.DB, email, zi), limitaPentru(env.DB, email), istoricUtilizator(env.DB, email, 50),
-  listeazaCataloage(env.DB, { cuArhivate: true }), consumUtilizator(env.DB, email, zi),
+  listeazaCataloage(env.DB, { cuArhivate: true }), consumUtilizator(env.DB, email, zi), cursUsd(env.DB, zi),
 ]);
 const numeCatalog = new Map(cataloage.map((c) => [c.id, c.titlu]));
 const ramase = Math.max(0, limita - folosite);
@@ -24,9 +26,9 @@ const ramase = Math.max(0, limita - folosite);
     Mai ai <strong>{ramase}</strong>. Limita se resetează la miezul nopții.
   </p>
   <dl class="cifre">
-    <div><dt>Cost azi</dt><dd>{fmtCost(consum.cost_azi)}</dd></div>
-    <div><dt>Ultimele 30 de zile</dt><dd>{fmtCost(consum.cost_30)} <small>· {consum.zile30} {consum.zile30 === 1 ? "întrebare" : "întrebări"}</small></dd></div>
-    <div><dt>De la început</dt><dd>{fmtCost(consum.cost_total)} <small>· {consum.total} {consum.total === 1 ? "întrebare" : "întrebări"}</small></dd></div>
+    <div><dt>Cost azi</dt><dd><Suma microdolari={consum.cost_azi} curs={curs} /></dd></div>
+    <div><dt>Ultimele 30 de zile</dt><dd><Suma microdolari={consum.cost_30} curs={curs} /> <small>· {consum.zile30} {consum.zile30 === 1 ? "întrebare" : "întrebări"}</small></dd></div>
+    <div><dt>De la început</dt><dd><Suma microdolari={consum.cost_total} curs={curs} /> <small>· {consum.total} {consum.total === 1 ? "întrebare" : "întrebări"}</small></dd></div>
   </dl>
   <p class="lamurire">Costul e estimat din tokenii raportați de Google și tariful modelului folosit la fiecare întrebare.</p>
 
@@ -43,7 +45,7 @@ const ramase = Math.max(0, limita - folosite);
             <span>{numeCatalog.get(i.catalog_id) ?? "culegere"}</span>
             {i.stare === "refuzat" && <span class="eticheta">refuzată, limita atinsă</span>}
             {i.stare === "eroare" && <span class="eticheta">eroare</span>}
-            {i.stare === "ok" && <span class="cost" title={`${i.tokens_intrare} tokeni intrare · ${i.tokens_iesire} ieșire · ${i.model}`}>{fmtCost(i.cost_microdolari)}</span>}
+            {i.stare === "ok" && <span class="cost"><Suma microdolari={i.cost_microdolari} curs={curs} titlu={`${i.tokens_intrare} tokeni intrare · ${i.tokens_iesire} ieșire · ${i.model}`} /></span>}
           </div>
           <p class="intrebare">{i.intrebare}</p>
           {i.stare === "ok" && <div class="proza raspuns" set:html={randeazaMarkdown(i.raspuns)} />}

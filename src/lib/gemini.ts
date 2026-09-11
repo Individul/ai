@@ -9,7 +9,7 @@
 //
 // Verificat pe viu la 8 sept. 2026; formele JSON de mai jos sunt cele reale.
 
-import { TARIFE } from "./validare";
+import { TARIFE, factorTarif } from "./validare";
 import type { Citare } from "./consum";
 
 const BAZA = "https://generativelanguage.googleapis.com";
@@ -246,9 +246,11 @@ export async function intreaba(cheie: string, c: CerereIntrebare): Promise<Raspu
 
 // Tokenii costa $/milion; 1 $/milion = 1 microdolar per token, deci inmultirea e directa.
 // `tokensCache` (parte din tokensIntrare) se plateste la pretul de cache al modelului, daca are unul.
-export function costMicrodolari(model: string, tokensIntrare: number, tokensIesire: number, tokensCache = 0): number {
+// `moment` conteaza doar la modelele cu ore de varf (DeepSeek): pretul se dubleaza in acele ore.
+export function costMicrodolari(model: string, tokensIntrare: number, tokensIesire: number, tokensCache = 0, moment: Date = new Date()): number {
   const t = TARIFE[model];
   if (!t) return 0;
   const cache = Math.min(Math.max(tokensCache, 0), tokensIntrare);
-  return Math.round((tokensIntrare - cache) * t.intrare + cache * (t.intrare_cache ?? t.intrare) + tokensIesire * t.iesire);
+  const f = factorTarif(model, moment);
+  return Math.round(((tokensIntrare - cache) * t.intrare + cache * (t.intrare_cache ?? t.intrare) + tokensIesire * t.iesire) * f);
 }

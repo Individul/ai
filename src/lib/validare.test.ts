@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MODELE, factorTarif,
   fmtDurata, fmtMarime, slug, urlNotebookValid, valideazaAudio, valideazaCatalog, valideazaSursa, ziValida,
 } from "./validare";
 import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, motorModel, NUME_MOTOR, TARIFE } from "./validare";
@@ -113,5 +114,17 @@ describe("motorul deepseek", () => {
     expect(TARIFE["deepseek-v4-flash"]).toMatchObject({ motor: "deepseek", intrare: 0.14, intrare_cache: 0.0028, iesire: 0.28 });
     expect(TARIFE["glm-5.3-flash"]).toMatchObject({ intrare_cache: 0.03 });
     expect(NUME_MOTOR).toEqual({ gemini: "Gemini", zai: "Z.AI", deepseek: "DeepSeek" });
+  });
+});
+
+describe("factorTarif si MODELE", () => {
+  it("dubleaza la orele de varf UTC in zilele lucratoare, altfel 1; modelele fara varf raman 1", () => {
+    expect(factorTarif("deepseek-flash", new Date("2026-09-10T01:00:00Z"))).toBe(2);
+    expect(factorTarif("deepseek-flash", new Date("2026-09-10T04:00:00Z"))).toBe(1);
+    expect(factorTarif("deepseek-flash", new Date("2026-09-10T09:59:00Z"))).toBe(2);
+    expect(factorTarif("deepseek-flash", new Date("2026-09-13T08:00:00Z"))).toBe(1); // duminica
+    expect(factorTarif("gemini-3.5-flash-lite", new Date("2026-09-10T08:00:00Z"))).toBe(1);
+    expect(MODELE).toContain("deepseek-flash");
+    expect(MODELE).not.toContain("deepseek-v4-flash");
   });
 });

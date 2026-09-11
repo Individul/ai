@@ -84,4 +84,15 @@ describe("costMicrodolari", () => {
     expect(costMicrodolari("gemini-3.8-flash", 7000, 600)).toBe(7500);
     expect(costMicrodolari("necunoscut", 7000, 600)).toBe(0);
   });
+
+  it("DeepSeek: cache la pret de cache, dublu la orele de varf (UTC, luni-vineri)", () => {
+    const liber = new Date("2026-09-10T12:00:00Z");   // joi, 12:00 UTC
+    const varf = new Date("2026-09-10T07:30:00Z");    // joi, 07:30 UTC
+    const weekend = new Date("2026-09-12T07:30:00Z"); // sambata, aceeasi ora
+    // 700.000 intrare din care 690.000 din cache, 600 iesire: 10.000×0,15 + 690.000×0,003 + 600×0,60
+    expect(costMicrodolari("deepseek-flash", 700_000, 600, 690_000, liber)).toBe(Math.round(1500 + 2070 + 360));
+    expect(costMicrodolari("deepseek-flash", 700_000, 600, 690_000, varf)).toBe(Math.round((1500 + 2070 + 360) * 2));
+    expect(costMicrodolari("deepseek-flash", 700_000, 600, 690_000, weekend)).toBe(Math.round(1500 + 2070 + 360));
+    expect(costMicrodolari("gemini-3.5-flash-lite", 7000, 600, 0, varf)).toBe(3600);
+  });
 });

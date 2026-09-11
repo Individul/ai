@@ -27,6 +27,9 @@ export const ETICHETE_PICTOGRAMA: Record<Pictograma, string> = {
 // coding, masurat in credite: (intrare x i + cache x c + iesire x o) / 10.000 (docs.z.ai/devpack/overview);
 // tariful lor in $ e cel public (api.z.ai), doar orientativ.
 // DeepSeek (sept. 2026): plata per token, cache automat pe prefix, tokenii din cache la intrare_cache.
+// `deepseek-flash` e numele din API pentru V4.1 Flash (10 sept. 2026); V4 Flash / V4 Pro sunt retrase si
+// redirectionate spre el. Tarifele DeepSeek sunt cele de la orele libere; la orele de varf (`varf`) sunt
+// duble. Un model `retras` ramane in tabel pentru costul din jurnal, dar nu mai apare in Admin.
 export type Motor = "gemini" | "zai" | "deepseek";
 export interface Tarif {
   motor: Motor;
@@ -35,6 +38,9 @@ export interface Tarif {
   iesire: number;
   eticheta: string;
   credite?: { intrare: number; cache: number; iesire: number };
+  // Orele de varf (UTC), cu factorul de pret; `doar_lucratoare` = luni-vineri.
+  varf?: { factor: number; ore_utc: [number, number][]; doar_lucratoare: boolean };
+  retras?: boolean;
 }
 export const TARIFE: Record<string, Tarif> = {
   "gemini-3.5-flash-lite": { motor: "gemini", intrare: 0.30, iesire: 2.50, eticheta: "Gemini 3.5 Flash-Lite (cel mai ieftin)" },
@@ -42,9 +48,25 @@ export const TARIFE: Record<string, Tarif> = {
   "gemini-3.5-flash": { motor: "gemini", intrare: 1.50, iesire: 9.00, eticheta: "Gemini 3.5 Flash" },
   "glm-5.3-flash": { motor: "zai", intrare: 0.15, intrare_cache: 0.03, iesire: 0.50, eticheta: "GLM-5.3-Flash · Z.AI, planul de coding", credite: { intrare: 2.3, cache: 0.56, iesire: 8 } },
   "glm-5.3": { motor: "zai", intrare: 1.40, intrare_cache: 0.26, iesire: 4.40, eticheta: "GLM-5.3 · Z.AI, planul de coding (scump în credite)", credite: { intrare: 6.9, cache: 1.7, iesire: 24 } },
-  "deepseek-v4-flash": { motor: "deepseek", intrare: 0.14, intrare_cache: 0.0028, iesire: 0.28, eticheta: "DeepSeek V4 Flash · plată per token, cache automat" },
+  "deepseek-flash": {
+    motor: "deepseek", intrare: 0.15, intrare_cache: 0.003, iesire: 0.60,
+    eticheta: "DeepSeek V4.1 Flash · plată per token, cache automat; preț dublu la orele de vârf",
+    varf: { factor: 2, ore_utc: [[1, 4], [6, 10]], doar_lucratoare: true },
+  },
+  "deepseek-v4-flash": { motor: "deepseek", intrare: 0.14, intrare_cache: 0.0028, iesire: 0.28, eticheta: "DeepSeek V4 Flash (retras, redirecționat spre 4.1)", retras: true },
 };
-export const MODELE = Object.keys(TARIFE);
+// Modelele selectabile in Admin (fara cele retrase).
+export const MODELE = Object.keys(TARIFE).filter((m) => !TARIFE[m]!.retras);
+
+// Factorul de pret la momentul dat (UTC): `varf.factor` in intervalele de varf, altfel 1.
+export function factorTarif(model: string, moment: Date = new Date()): number {
+  const v = TARIFE[model]?.varf;
+  if (!v) return 1;
+  const zi = moment.getUTCDay();
+  if (v.doar_lucratoare && (zi === 0 || zi === 6)) return 1;
+  const ora = moment.getUTCHours() + moment.getUTCMinutes() / 60;
+  return v.ore_utc.some(([de, pana]) => ora >= de && ora < pana) ? v.factor : 1;
+}
 export function esteModel(s: string): boolean { return s in TARIFE; }
 export function motorModel(model: string): Motor | null { return TARIFE[model]?.motor ?? null; }
 export const NUME_MOTOR: Record<Motor, string> = { gemini: "Gemini", zai: "Z.AI", deepseek: "DeepSeek" };

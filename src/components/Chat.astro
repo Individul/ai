@@ -8,8 +8,10 @@ interface Props {
   motor: Motor;          // scriptul arata alta stare de asteptare la Z.AI (contexte mari, minute)
   ramase: number;
   limita: number;
+  // Orele de varf ale modelului activ (DeepSeek): textul de sub caseta, rosu cand e varf acum.
+  varf?: { activ: boolean; text: string } | null;
 }
-const { catalogId, disponibile, motor, ramase, limita } = Astro.props;
+const { catalogId, disponibile, motor, ramase, limita, varf = null } = Astro.props;
 const admin = Astro.locals.admin;
 ---
 
@@ -34,6 +36,7 @@ const admin = Astro.locals.admin;
           <button type="submit" class="buton principal" disabled={ramase === 0}>Întreabă</button>
         </div>
         <p class="lamurire">Răspunsurile vin doar din actele culegerii, cu trimitere la articol și la pagina din PDF. Verifică întotdeauna în act.</p>
+        {varf && <p class:list={["lamurire", "varf", { activ: varf.activ }]}>{varf.text}</p>}
       </form>
       <div class="schimburi" data-schimburi></div>
       <button type="button" class="text mai-multe" data-mai-multe hidden>arată întrebări mai vechi</button>
@@ -52,6 +55,7 @@ const admin = Astro.locals.admin;
   .chat .pas-admin { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--text-2); font-size: 14px; }
   .chat .pas-admin small { color: var(--faint); flex-basis: 100%; }
   .chat .lamurire { color: var(--faint); font-size: 13px; line-height: 1.5; }
+  .chat .varf.activ { color: var(--coral); font-weight: 600; }
 
   /* Schimburi, cel mai nou primul, sub caseta: intrebarea ca titlu mic, raspunsul ca text */
   .chat .schimburi { display: flex; flex-direction: column; gap: 36px; padding-top: 8px; border-top: 1px solid var(--line); }

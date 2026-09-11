@@ -8,7 +8,8 @@ import {
 } from "../../lib/consum";
 import { aziChisinau, fmtMoment, fmtZi } from "../../lib/data";
 import { cursUsd } from "../../lib/curs";
-import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, MODELE, TARIFE, motorModel } from "../../lib/validare";
+import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, MODELE, TARIFE, motorModel, stareVarf } from "../../lib/validare";
+import { textVarf } from "../../lib/varf";
 import { cotaZai } from "../../lib/zai";
 
 const azi = aziChisinau();
@@ -76,6 +77,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
         ? "DeepSeek primește textul întregii culegeri dacă încape în buget, altfel paginile care se potrivesc cu întrebarea. Plata e per token, fără cotă; cache-ul e automat pe prefix, deci de la a doua întrebare pe aceeași culegere documentele se plătesc la prețul de cache (0,0028 $ per M în loc de 0,14 $). Jurnalul arată costul real, cu tokenii din cache."
         : "Modelele GLM și DeepSeek cer textul extras din PDF-uri (se face la upload sau din „Extrage textul” în pagina culegerii)."}
   </p>
+  {(() => { const v = textVarf(stareVarf(model)); return v && <p class:list={["lamurire", "varf", { activ: v.activ }]}>{v.text}</p>; })()}
 
   <h2>Utilizatori <span class="numar">{raport.length}</span></h2>
   {raport.length === 0 ? (
@@ -150,4 +152,6 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
   td input[name=nota] { width: 160px; }
   .bifa { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
   .lamurire { color: var(--faint); font-size: 13px; margin-top: 14px; }
+  .varf { margin-top: 6px; }
+  .varf.activ { color: var(--coral); font-weight: 600; }
 </style>

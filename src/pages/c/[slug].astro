@@ -10,7 +10,8 @@ import { citesteCatalogDupaSlug, listeazaAudio, listeazaSurse } from "../../lib/
 import { citesteSetare, intrebariAzi, limitaPentru } from "../../lib/consum";
 import { aziChisinau } from "../../lib/data";
 import { disponibilePentruChat } from "../../lib/motor";
-import { ETICHETE_STARE, motorModel } from "../../lib/validare";
+import { ETICHETE_STARE, motorModel, stareVarf } from "../../lib/validare";
+import { textVarf } from "../../lib/varf";
 import { randeazaMarkdown } from "../../lib/markdown";
 import { fmtMoment } from "../../lib/data";
 
@@ -27,6 +28,7 @@ const [surse, audio, folosite, limita, model] = await Promise.all([
 // Chatul e disponibil cand motorul ales in Admin are ce citi (Gemini: indexate; Z.AI: cu text extras).
 const motor = motorModel(model) ?? "gemini";
 const disponibile = disponibilePentruChat(motor, catalog.magazin, surse);
+const varf = textVarf(stareVarf(model));
 const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) : "";
 ---
 
@@ -47,7 +49,7 @@ const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) :
       )}
     </header>
 
-    <Chat catalogId={catalog.id} disponibile={disponibile} motor={motor} ramase={Math.max(0, limita - folosite)} limita={limita} />
+    <Chat catalogId={catalog.id} disponibile={disponibile} motor={motor} ramase={Math.max(0, limita - folosite)} limita={limita} varf={varf} />
 
     <section class="sectiune">
       <h2>Surse <span class="numar">{surse.length}</span></h2>

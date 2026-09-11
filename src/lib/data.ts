@@ -32,6 +32,17 @@ export function aziChisinau(acum: Date = new Date()): string {
   }).format(acum);
 }
 
+// "09:00" pentru ora UTC data, in fusul Chisinau, in ziua momentului (tine cont de ora de vara).
+export function oraLocala(oraUtc: number, moment: Date = new Date()): string {
+  const d = new Date(Date.UTC(moment.getUTCFullYear(), moment.getUTCMonth(), moment.getUTCDate(), oraUtc, 0, 0));
+  return d.toLocaleTimeString("ro-RO", { timeZone: FUS, hour: "2-digit", minute: "2-digit" });
+}
+
+// "04:00–07:00 și 09:00–13:00" pentru intervale UTC, in ora locala.
+export function fmtIntervale(intervale: [number, number][], moment: Date = new Date()): string {
+  return intervale.map(([de, pana]) => `${oraLocala(de, moment)}–${oraLocala(pana, moment)}`).join(" și ");
+}
+
 // Ziua cu `n` zile inainte, pe UTC (zilele sunt siruri YYYY-MM-DD fara fus).
 export function ziMinus(zi: string, n: number): string {
   const [a, l, z] = zi.split("-").map(Number) as [number, number, number];

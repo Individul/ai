@@ -58,6 +58,24 @@ export const TARIFE: Record<string, Tarif> = {
 // Modelele selectabile in Admin (fara cele retrase).
 export const MODELE = Object.keys(TARIFE).filter((m) => !TARIFE[m]!.retras);
 
+// Starea orelor de varf pentru pagini: daca acum e varf, pana cand (UTC, ca Date) si intervalele.
+// `null` pentru modelele fara ore de varf. Orele din intervale sunt UTC; paginile le formateaza in fus.
+export interface StareVarf { activ: boolean; factor: number; panaLa: Date | null; intervale: [number, number][]; doar_lucratoare: boolean }
+export function stareVarf(model: string, moment: Date = new Date()): StareVarf | null {
+  const v = TARIFE[model]?.varf;
+  if (!v) return null;
+  const factor = factorTarif(model, moment);
+  let panaLa: Date | null = null;
+  if (factor > 1) {
+    const ora = moment.getUTCHours() + moment.getUTCMinutes() / 60;
+    const interval = v.ore_utc.find(([de, pana]) => ora >= de && ora < pana);
+    if (interval) {
+      panaLa = new Date(Date.UTC(moment.getUTCFullYear(), moment.getUTCMonth(), moment.getUTCDate(), interval[1], 0, 0));
+    }
+  }
+  return { activ: factor > 1, factor, panaLa, intervale: v.ore_utc, doar_lucratoare: v.doar_lucratoare };
+}
+
 // Factorul de pret la momentul dat (UTC): `varf.factor` in intervalele de varf, altfel 1.
 export function factorTarif(model: string, moment: Date = new Date()): number {
   const v = TARIFE[model]?.varf;

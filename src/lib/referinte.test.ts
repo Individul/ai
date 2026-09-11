@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { legaReferinte } from "./referinte";
+import { legaReferinte, termenCautare } from "./referinte";
 
 const CITARI = [
   { sursa_id: "s1", titlu: "Instrucțiune", pagina: 35 },
@@ -10,7 +10,7 @@ describe("legaReferinte", () => {
   it("transforma [Titlu, pag. N] in link spre PDF la pagina, cu titlul scurt", () => {
     const html = legaReferinte("<p>Se face cu cerneală neagră (pct. 218) [Instrucțiune, pag. 35].</p>", CITARI);
     expect(html).toBe(
-      '<p>Se face cu cerneală neagră (pct. 218) <a class="ref" href="/f/pdf/s1#page=35" target="_blank" rel="noopener" title="Instrucțiune, pagina 35">Instrucțiune, p. 35</a>.</p>'
+      '<p>Se face cu cerneală neagră (pct. 218) <a class="ref" href="/f/pdf/s1#page=35" target="_blank" rel="noopener" title="Instrucțiune, pagina 35" data-vizor="s1" data-pagina="35" data-titlu="Instrucțiune" data-cauta="pct:218">Instrucțiune, p. 35</a>.</p>'
     );
   });
 
@@ -28,5 +28,20 @@ describe("legaReferinte", () => {
 
   it("nu atinge textul fara referinte sau linkurile Markdown", () => {
     expect(legaReferinte("<p>fără [paranteze] de pagină</p>", CITARI)).toBe("<p>fără [paranteze] de pagină</p>");
+  });
+});
+
+describe("termenCautare si datele pentru vizor", () => {
+  it("ia ultimul articol / punct / alineat dinaintea trimiterii", () => {
+    expect(termenCautare("Se face cu cerneală (pct. 218) și ")).toBe("pct:218");
+    expect(termenCautare("potrivit <strong>articolului 13</strong> ")).toBe("art:13");
+    expect(termenCautare("art. 217¹ alin. (2) ")).toBe("alin:2");
+    expect(termenCautare("Conform Art. 91 ")).toBe("art:91");
+    expect(termenCautare("nimic aici")).toBeNull();
+  });
+
+  it("pune pe link datele pentru vizor: sursa, pagina, titlu si termenul", () => {
+    const html = legaReferinte("<p>potrivit articolului 13 [Instrucțiune, pag. 35].</p>", CITARI);
+    expect(html).toContain('data-vizor="s1" data-pagina="35" data-titlu="Instrucțiune" data-cauta="art:13"');
   });
 });

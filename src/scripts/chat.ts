@@ -6,6 +6,7 @@
 
 import { randeazaMarkdown } from "../lib/markdown";
 import { legaReferinte } from "../lib/referinte";
+import "./vizor";
 import { fmtDurata } from "../lib/validare";
 
 interface Citare { sursa_id: string | null; titlu: string; pagina: number | null }
@@ -52,7 +53,8 @@ function pornesteChat(el: HTMLElement) {
       const text = esc(c.titlu) + (c.pagina ? ` · p. ${c.pagina}` : "");
       if (!c.sursa_id) return `<span class="citare">${text}</span>`;
       const href = `/f/pdf/${encodeURIComponent(c.sursa_id)}${c.pagina ? `#page=${c.pagina}` : ""}`;
-      return `<a class="citare" href="${href}" target="_blank" rel="noopener">${text}</a>`;
+      const vizor = ` data-vizor="${encodeURIComponent(c.sursa_id)}" data-pagina="${c.pagina ?? 1}" data-titlu="${esc(c.titlu)}"`;
+      return `<a class="citare" href="${href}" target="_blank" rel="noopener"${vizor}>${text}</a>`;
     });
     return `<div class="citari">${etichete.join("")}</div>`;
   }

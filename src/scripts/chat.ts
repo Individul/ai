@@ -5,7 +5,7 @@
 // contextul trimis modelului. Randarea escapeaza tot; raspunsul e Markdown minimal, randat sigur.
 
 import { randeazaMarkdown } from "../lib/markdown";
-import { legaReferinte } from "../lib/referinte";
+import { legaReferinte, termeniPeCitare } from "../lib/referinte";
 import "./vizor";
 import { fmtDurata } from "../lib/validare";
 
@@ -47,19 +47,21 @@ function pornesteChat(el: HTMLElement) {
 
   const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-  function htmlCitari(citari: Citare[]): string {
+  function htmlCitari(citari: Citare[], raspuns = ""): string {
     if (!citari.length) return "";
+    const termeni = termeniPeCitare(raspuns, citari);
     const etichete = citari.map((c) => {
       const text = esc(c.titlu) + (c.pagina ? ` · p. ${c.pagina}` : "");
       if (!c.sursa_id) return `<span class="citare">${text}</span>`;
       const href = `/f/pdf/${encodeURIComponent(c.sursa_id)}${c.pagina ? `#page=${c.pagina}` : ""}`;
-      const vizor = ` data-vizor="${encodeURIComponent(c.sursa_id)}" data-pagina="${c.pagina ?? 1}" data-titlu="${esc(c.titlu)}"`;
+      const cauta = termeni[`${c.sursa_id}|${c.pagina}`];
+      const vizor = ` data-vizor="${encodeURIComponent(c.sursa_id)}" data-pagina="${c.pagina ?? 1}" data-titlu="${esc(c.titlu)}"${cauta ? ` data-cauta="${cauta}"` : ""}`;
       return `<a class="citare" href="${href}" target="_blank" rel="noopener"${vizor}>${text}</a>`;
     });
     return `<div class="citari">${etichete.join("")}</div>`;
   }
 
-  const corp = (s: Schimb) => `<div class="raspuns proza">${legaReferinte(randeazaMarkdown(s.raspuns), s.citari)}</div>${htmlCitari(s.citari)}`;
+  const corp = (s: Schimb) => `<div class="raspuns proza">${legaReferinte(randeazaMarkdown(s.raspuns), s.citari)}</div>${htmlCitari(s.citari, s.raspuns)}`;
 
   // Sub caseta: intrebarile ca linkuri, cea mai noua prima, grupate pe zile; raspunsul se deschide
   // la clic. Raspunsul abia primit e deschis automat. Caseta ramane mereu in acelasi loc.

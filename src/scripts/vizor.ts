@@ -142,9 +142,10 @@ export async function arata(d: Deschidere): Promise<void> {
     stare("");
 
     // Evidentierea: pdf.js sparge randurile in bucati ("Articolul", "13."), deci cautam in textul
-    // intreg al paginii si marcam bucatile care acopera potrivirea.
-    const re = regexCautare(d.cauta);
-    if (!re) return;
+    // intreg al paginii si marcam bucatile care acopera potrivirea. Termenii vin in ordine
+    // ("art:91;alin:2"): fiecare se cauta dupa potrivirea celui dinainte.
+    const termeni = (d.cauta ?? "").split(";").map((t) => t.trim()).filter(Boolean);
+    if (!termeni.length) return;
     const continut = await page.getTextContent();
     if (id !== randare) return;
     type Bucata = { str: string; transform: number[]; width: number; height: number; hasEOL?: boolean };
@@ -157,12 +158,8 @@ export async function arata(d: Deschidere): Promise<void> {
       pozitii.push({ de, pana: text.length, b });
       text += b.hasEOL ? "\n" : " ";
     }
-    let primul: HTMLElement | null = null;
-    let gasite = 0;
-    const global = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
-    for (const m of text.matchAll(global)) {
-      const start = m.index! + (m[1]?.length ?? 0);
-      const sfarsit = m.index! + m[0].length;
+    const marcheaza = (start: number, sfarsit: number): HTMLElement | null => {
+      let primul: HTMLElement | null = null;
       for (const p of pozitii) {
         if (p.pana <= start || p.de >= sfarsit || !p.b.str.trim()) continue;
         const [x, y] = viewport.convertToViewportPoint(p.b.transform[4]!, p.b.transform[5]!);
@@ -176,13 +173,32 @@ export async function arata(d: Deschidere): Promise<void> {
         marcaje.appendChild(el2);
         primul ??= el2;
       }
-      gasite++;
-      if (gasite >= 3) break;
+      return primul;
+    };
+    // Grupuri independente (din trimiteri diferite) sunt separate prin ";" dar pornesc de la 0
+    // doar cand termenul e un articol/punct; alineatele continua de la ultimul articol gasit.
+    let tinta: HTMLElement | null = null;
+    const gasiti: string[] = [];
+    let pozitie = 0;
+    for (const termen of termeni) {
+      const re = regexCautare(termen);
+      if (!re) continue;
+      if (!termen.startsWith("alin")) pozitie = 0;
+      const global = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+      global.lastIndex = pozitie;
+      const m = global.exec(text);
+      if (!m) continue;
+      const start = m.index + (m[1]?.length ?? 0);
+      const sfarsit = m.index + m[0].length;
+      const primul = marcheaza(start, sfarsit);
+      if (primul) { tinta = primul; gasiti.push(termen); }
+      pozitie = sfarsit;
     }
-    if (primul) {
-      corp.scrollTo({ top: Math.max(0, primul.offsetTop - 120), behavior: "smooth" });
-      el.querySelector<HTMLElement>("[data-unde]")!.textContent = ` · ${d.cauta!.replace("art:", "art. ").replace("pct:", "pct. ").replace("alin:", "alin. (")}${d.cauta!.startsWith("alin") ? ")" : ""}`;
-    } else if (gasite === 0) {
+    if (tinta) {
+      corp.scrollTo({ top: Math.max(0, tinta.offsetTop - 140), behavior: "smooth" });
+      const eticheta = gasiti.map((t) => t.replace("art:", "art. ").replace("pct:", "pct. ").replace(/^alin:(\d+)$/, "alin. ($1)")).join(", ");
+      el.querySelector<HTMLElement>("[data-unde]")!.textContent = ` · ${eticheta}`;
+    } else {
       el.querySelector<HTMLElement>("[data-unde]")!.textContent = " · textul citat nu a fost găsit pe pagină";
     }
   } catch (e) {

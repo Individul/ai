@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { legaReferinte, termenCautare } from "./referinte";
+import { legaReferinte, termenCautare, termeniPeCitare } from "./referinte";
 
 const CITARI = [
   { sursa_id: "s1", titlu: "Instrucțiune", pagina: 35 },
@@ -35,7 +35,7 @@ describe("termenCautare si datele pentru vizor", () => {
   it("ia ultimul articol / punct / alineat dinaintea trimiterii", () => {
     expect(termenCautare("Se face cu cerneală (pct. 218) și ")).toBe("pct:218");
     expect(termenCautare("potrivit <strong>articolului 13</strong> ")).toBe("art:13");
-    expect(termenCautare("art. 217¹ alin. (2) ")).toBe("alin:2");
+    expect(termenCautare("art. 217¹ alin. (2) ")).toBe("art:217¹;alin:2");
     expect(termenCautare("Conform Art. 91 ")).toBe("art:91");
     expect(termenCautare("nimic aici")).toBeNull();
   });
@@ -43,5 +43,18 @@ describe("termenCautare si datele pentru vizor", () => {
   it("pune pe link datele pentru vizor: sursa, pagina, titlu si termenul", () => {
     const html = legaReferinte("<p>potrivit articolului 13 [Instrucțiune, pag. 35].</p>", CITARI);
     expect(html).toContain('data-vizor="s1" data-pagina="35" data-titlu="Instrucțiune" data-cauta="art:13"');
+  });
+});
+
+describe("termeni compusi si pe citare", () => {
+  it("alineatul vine cu articolul lui; punctul singur ramane singur", () => {
+    expect(termenCautare("în temeiul art. 91 alin. (2) din Codul Penal, ")).toBe("art:91;alin:2");
+    expect(termenCautare("art. 90 apoi (pct. 218) ")).toBe("pct:218");
+    expect(termenCautare("doar alin. (3) ")).toBe("alin:3");
+  });
+
+  it("aduna termenii pe (sursa, pagina) pentru lista Surse", () => {
+    const text = "Se face (pct. 218) [Instrucțiune, pag. 35]. Colțul (pct. 219) [Instrucțiune, pag. 36]. Indică (pct. 221) [Instrucțiune, pag. 36]. Alt act [Necunoscut, pag. 3].";
+    expect(termeniPeCitare(text, CITARI)).toEqual({ "s1|35": "pct:218", "s1|36": "pct:219;pct:221" });
   });
 });

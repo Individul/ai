@@ -173,6 +173,14 @@ const email = Astro.locals.email;
       .proza pre { background: var(--bg-3); padding: 12px 14px; border-radius: 12px; overflow-x: auto; }
       .proza pre code { background: none; padding: 0; }
       .proza strong { color: var(--text); }
+      /* Trimiterea la act si pagina, in linie: mica, discreta, deschide PDF-ul la pagina */
+      .proza .ref {
+        display: inline-block; vertical-align: baseline; margin: 0 1px; padding: 0 7px; border-radius: 999px;
+        font-size: 12px; font-weight: 600; line-height: 1.6; white-space: nowrap; text-decoration: none;
+        color: var(--accent, var(--violet)); background: rgba(var(--accent-rgb, 179, 147, 242), 0.12);
+      }
+      .proza a.ref:hover { background: rgba(var(--accent-rgb, 179, 147, 242), 0.24); text-decoration: none; }
+      .proza span.ref { color: var(--muted); background: var(--line); }
       .proza .sarcina { list-style: none; margin-left: -22px; display: flex; gap: 8px; }
       .proza .sarcina.gata span { color: var(--faint); text-decoration: line-through; }
 

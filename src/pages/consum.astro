@@ -8,6 +8,7 @@ import { aziChisinau, fmtMoment } from "../lib/data";
 import { cursUsd } from "../lib/curs";
 import { listeazaCataloage } from "../lib/db";
 import { randeazaMarkdown } from "../lib/markdown";
+import { legaReferinte } from "../lib/referinte";
 
 const email = Astro.locals.email;
 const zi = aziChisinau();
@@ -48,7 +49,7 @@ const ramase = Math.max(0, limita - folosite);
             {i.stare === "ok" && <span class="cost"><Suma microdolari={i.cost_microdolari} curs={curs} titlu={`${i.tokens_intrare} tokeni intrare · ${i.tokens_iesire} ieșire · ${i.model}`} /></span>}
           </div>
           <p class="intrebare">{i.intrebare}</p>
-          {i.stare === "ok" && <div class="proza raspuns" set:html={randeazaMarkdown(i.raspuns)} />}
+          {i.stare === "ok" && <div class="proza raspuns" set:html={legaReferinte(randeazaMarkdown(i.raspuns), (() => { try { return JSON.parse(i.citari); } catch { return []; } })())} />}
         </li>
       ))}
     </ul>

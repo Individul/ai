@@ -5,6 +5,7 @@
 // contextul trimis modelului. Randarea escapeaza tot; raspunsul e Markdown minimal, randat sigur.
 
 import { randeazaMarkdown } from "../lib/markdown";
+import { legaReferinte } from "../lib/referinte";
 import { fmtDurata } from "../lib/validare";
 
 interface Citare { sursa_id: string | null; titlu: string; pagina: number | null }
@@ -56,7 +57,7 @@ function pornesteChat(el: HTMLElement) {
     return `<div class="citari">${etichete.join("")}</div>`;
   }
 
-  const corp = (s: Schimb) => `<div class="raspuns proza">${randeazaMarkdown(s.raspuns)}</div>${htmlCitari(s.citari)}`;
+  const corp = (s: Schimb) => `<div class="raspuns proza">${legaReferinte(randeazaMarkdown(s.raspuns), s.citari)}</div>${htmlCitari(s.citari)}`;
 
   // Sub caseta: intrebarile ca linkuri, cea mai noua prima, grupate pe zile; raspunsul se deschide
   // la clic. Raspunsul abia primit e deschis automat. Caseta ramane mereu in acelasi loc.

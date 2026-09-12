@@ -31,11 +31,26 @@ describe("extrageCursUsd", () => {
 });
 
 describe("fmtLei si explicatieLei", () => {
-  it("formateaza in lei, cu virgula zecimala si punct la mii", () => {
-    expect(fmtLei(0, 17.2388)).toBe("0 lei");
-    expect(fmtLei(3600, 17.2388)).toBe("0,062 lei");          // 0,0036 $
-    expect(fmtLei(720_000, 17.2388)).toBe("12,41 lei");       // 0,72 $
-    expect(fmtLei(71_600_000, 17.2388)).toBe("1.234,30 lei"); // 71,6 $
+  // Cursul 10 in teste, ca sumele sa se citeasca direct: 100.000 microdolari = 1 leu.
+  it("desparte leii de bani, cu acordul din romana", () => {
+    expect(fmtLei(0, 10)).toBe("0 lei");
+    expect(fmtLei(100_000, 10)).toBe("1 leu");
+    expect(fmtLei(500_000, 10)).toBe("5 lei");
+    expect(fmtLei(104_000, 10)).toBe("1 leu și 4 bani");
+    expect(fmtLei(2_494_000, 10)).toBe("24 lei și 94 de bani");
+    expect(fmtLei(123_456_000, 10)).toBe("1.234 lei și 56 de bani");
+  });
+
+  it("scrie corect banul singur, pluralul si forma cu „de”", () => {
+    expect(fmtLei(1_000, 10)).toBe("1 ban");
+    expect(fmtLei(19_000, 10)).toBe("19 bani");
+    expect(fmtLei(20_000, 10)).toBe("20 de bani");
+    expect(fmtLei(94_000, 10)).toBe("94 de bani");
+  });
+
+  it("sub un ban spune asta, ca sa nu arate zero", () => {
+    expect(fmtLei(200, 17.2388)).toBe("sub 1 ban");   // 0,0034 lei
+    expect(fmtLei(3600, 17.2388)).toBe("6 bani");     // 0,062 lei
   });
 
   it("explica suma in dolari si cursul folosit", () => {

@@ -98,11 +98,15 @@ const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsW
     :root:not([data-theme="light"]) .tema .soare { display: block; }
     :root:not([data-theme="light"]) .tema .luna { display: none; }
   }
+  /* „24 lei si 94 de bani” e lung: sub 1000 px cele doua sume impingeau pagina intr-o
+     derulare orizontala. Se vad oricum pe /consum si /admin/consum. */
+  @media (max-width: 1000px) {
+    .suma { display: none; }
+  }
   @media (max-width: 640px) {
     .bara { gap: 10px; padding: 0 14px; }
     nav { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; margin-right: -14px; padding-right: 14px; }
     nav::-webkit-scrollbar { display: none; }
     nav a { padding: 0 9px; font-size: 13px; }
-    .suma { display: none; }
   }
 </style>

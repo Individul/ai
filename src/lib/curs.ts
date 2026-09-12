@@ -52,12 +52,21 @@ export async function cursUsd(db: D1Database, azi: string, adu: (zi: string) => 
   return cunoscut;
 }
 
-// 3600 microdolari la 17,2388 -> "0,062 lei"; 720000 -> "12,41 lei"; 71600000 -> "1.234,30 lei".
+// 3600 microdolari la 17,2388 -> "6 bani"; 720000 -> "12 lei si 41 de bani"; 200 -> "sub 1 ban".
+// Acordul din romana: 1 leu / 5 lei, 1 ban / 19 bani / 20 de bani (de la 20 in sus, cu "de").
 export function fmtLei(microdolari: number, curs: number): string {
   if (microdolari === 0) return "0 lei";
-  const lei = (microdolari / 1_000_000) * curs;
-  const [intreg, zecimale] = lei.toFixed(lei < 0.1 ? 3 : 2).split(".") as [string, string];
-  return `${intreg.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${zecimale} lei`;
+  const bani = Math.round((microdolari / 1_000_000) * curs * 100);
+  // Costul unei intrebari e adesea sub un ban; "0 bani" ar parea gresit, asa ca o spunem.
+  if (bani === 0) return "sub 1 ban";
+  const lei = Math.floor(bani / 100);
+  const rest = bani % 100;
+  const cuMii = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const parteLei = lei === 1 ? "1 leu" : `${cuMii(lei)} lei`;
+  const parteBani = rest === 1 ? "1 ban" : rest < 20 ? `${rest} bani` : `${rest} de bani`;
+  if (lei === 0) return parteBani;
+  if (rest === 0) return parteLei;
+  return `${parteLei} și ${parteBani}`;
 }
 
 // Pentru title: suma in dolari si cursul folosit.

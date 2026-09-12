@@ -2,6 +2,7 @@
 // sa il streameze in R2 fara sa il tina in memorie. XMLHttpRequest, nu fetch: doar el da
 // progres la upload. La succes, pagina se reincarca (serverul e sursa adevarului).
 
+import { compunePagina, type ElementPagina } from "../lib/pdf";
 import { PDFDocument } from "pdf-lib";
 import * as pdfjs from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -11,9 +12,10 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 interface Raspuns { status: number; corp: string }
 interface Pagina { pagina: number; text: string }
 
-// Textul PDF-ului, pagina cu pagina, pentru motorul Z.AI (care nu are File Search). Se face aici,
-// in browser: fara limita de CPU si fara sa tinem PDF-ul in memoria Workerului. Paginile fara text
-// (scanate) lipsesc din lista; lista goala = PDF fara strat de text.
+// Textul PDF-ului, pagina cu pagina, pentru motoarele fara File Search (Z.AI, DeepSeek). Se face
+// aici, in browser: fara limita de CPU si fara sa tinem PDF-ul in memoria Workerului. Paginile fara
+// text (scanate) lipsesc din lista; lista goala = PDF fara strat de text. Compunerea paginii din
+// elementele pdf.js (inclusiv exponentii: 217¹, b¹) e in `compunePagina`, ca sa fie testabila.
 async function extrageText(fisier: Blob, progres: (t: string) => void): Promise<Pagina[]> {
   const sarcina = pdfjs.getDocument({ data: new Uint8Array(await fisier.arrayBuffer()) });
   const doc = await sarcina.promise;
@@ -23,12 +25,12 @@ async function extrageText(fisier: Blob, progres: (t: string) => void): Promise<
       if (i % 20 === 0) progres(`se extrage textul… pagina ${i} din ${doc.numPages}`);
       const p = await doc.getPage(i);
       const c = await p.getTextContent();
-      let text = "";
+      const elemente: ElementPagina[] = [];
       for (const item of c.items) {
         if (!("str" in item)) continue;
-        text += item.str + (item.hasEOL ? "\n" : " ");
+        elemente.push({ text: item.str, inaltime: item.height, y: item.transform[5] ?? 0, rand_nou: item.hasEOL });
       }
-      text = text.replace(/[ \t]+/g, " ").replace(/ ?\n ?/g, "\n").trim();
+      const text = compunePagina(elemente);
       if (text) pagini.push({ pagina: i, text });
       p.cleanup();
     }

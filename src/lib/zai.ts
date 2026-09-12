@@ -13,7 +13,7 @@
 //   (dupa ~10 s, la 8 M caractere). Contextul maxim e 1 M tokeni.
 // - Raspunsul la 1 M tokeni poate dura minute; nu punem timeout mai mic de 10 minute.
 
-import { TARIFE } from "./validare";
+import { motorModel, TARIFE } from "./validare";
 import type { Schimb } from "./gemini";
 
 export const BAZA_ZAI = "https://api.z.ai/api/coding/paas/v4";
@@ -69,7 +69,18 @@ export function construiesteCerereZai(c: CerereZai): Record<string, unknown> {
     messages.push({ role: "assistant", content: s.raspuns.slice(0, 4000) });
   }
   messages.push({ role: "user", content: c.intrebare });
-  return { model: c.model, messages, stream: false, temperature: 0.2, max_tokens: 4096, thinking: { type: "disabled" } };
+  // Gandirea, per motor. Pe Z.AI o oprim: la GLM e oricum fara efect (reasoning_tokens = 0), iar
+  // iesirea costa de 8 ori mai mult in credite. Pe DeepSeek 4.1 acelasi parametru opreste
+  // rationamentul in mai multi pasi: pe 12 sept. 2026 intrebarile care cer legarea a doua-trei
+  // articole primeau "nu am gasit" desi textul era in context (dovedit: 5 refuzuri cu el, 4
+  // raspunsuri corecte fara el, acelasi context de 740 k tokeni). Tokenii de gandire intra in
+  // max_tokens, deci acolo plafonul e mai mare.
+  const zai = motorModel(c.model) === "zai";
+  const cerere: Record<string, unknown> = {
+    model: c.model, messages, stream: false, temperature: 0.2, max_tokens: zai ? 4096 : 8192,
+  };
+  if (zai) cerere.thinking = { type: "disabled" };
+  return cerere;
 }
 
 export function extrageRaspunsZai(d: any): RaspunsZai {

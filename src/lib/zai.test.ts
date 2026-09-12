@@ -121,3 +121,18 @@ describe("clientul OpenAI-compatibil si DeepSeek", () => {
     expect(BAZA_DEEPSEEK).toBe("https://api.deepseek.com");
   });
 });
+
+describe("gandirea, per motor", () => {
+  const cerere = (model: string) => construiesteCerereZai({ model, context: "doc", istoric: [], intrebare: "q" }) as any;
+
+  it("Z.AI primeste gandirea oprita (la GLM e fara efect si ieșirea costa 8x in credite)", () => {
+    expect(cerere("glm-5.3-flash").thinking).toEqual({ type: "disabled" });
+    expect(cerere("glm-5.3-flash").max_tokens).toBe(4096);
+  });
+
+  it("DeepSeek nu primeste parametrul: pe 4.1 el opreste rationamentul in mai multi pasi", () => {
+    expect(cerere("deepseek-flash")).not.toHaveProperty("thinking");
+    // tokenii de gandire intra in max_tokens, deci plafonul e mai mare
+    expect(cerere("deepseek-flash").max_tokens).toBe(8192);
+  });
+});

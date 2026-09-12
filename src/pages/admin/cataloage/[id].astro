@@ -24,8 +24,9 @@ if (surse.some((s) => s.indexare === "in_curs") && env.GEMINI_API_KEY) {
 // "In chat" = utilizabile de motorul ales in Admin (Gemini: indexate; Z.AI: cu text extras).
 const motor = motorModel(await citesteSetare(env.DB, "model")) ?? "gemini";
 const disponibile = disponibilePentruChat(motor, catalog.magazin, surse);
-// Surse cu PDF incarcat inainte de motorul Z.AI: textul li se poate extrage dintr-un singur buton.
-const faraText = surse.filter((s) => s.fisier_nume && s.text_caractere === null).map((s) => s.id);
+// Textul se extrage (sau se reface) pentru toate sursele cu PDF, dintr-un singur buton.
+const cuPdf = surse.filter((s) => s.fisier_nume).map((s) => s.id);
+const faraText = surse.filter((s) => s.fisier_nume && s.text_caractere === null).length;
 const eroare = Astro.url.searchParams.get("eroare");
 const ok = Astro.url.searchParams.has("ok");
 const act = (cale: string) => `/admin/actiuni/${cale}`;
@@ -60,11 +61,13 @@ const etichetaText = (s: (typeof surse)[number]) =>
 
   <section class="sectiune" id="surse">
     <h2>Surse <span class="numar">{surse.length}{surse.length > 0 && ` · ${disponibile} în chat (${NUME_MOTOR[motor]})`}</span></h2>
-    {faraText.length > 0 && (
+    {cuPdf.length > 0 && (
       <p class="extrage" data-cere-js hidden>
-        <button type="button" class="buton mic" data-extrage-toate={faraText.join(",")}>Extrage textul pentru {faraText.length} {faraText.length === 1 ? "sursă" : "surse"}</button>
+        <button type="button" class="buton mic" data-extrage-toate={cuPdf.join(",")}>
+          {faraText > 0 ? "Extrage" : "Extrage din nou"} textul pentru {cuPdf.length} {cuPdf.length === 1 ? "sursă" : "surse"}
+        </button>
         <output data-stare class="stare-incarcare"></output>
-        <small>Textul e necesar chatului pe Z.AI sau DeepSeek; se extrage în browser din PDF-urile deja încărcate.</small>
+        <small>Textul e necesar chatului pe Z.AI sau DeepSeek; se extrage în browser din PDF-urile încărcate și îl înlocuiește pe cel de acum.</small>
       </p>
     )}
     <ul class="randuri">

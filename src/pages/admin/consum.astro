@@ -10,6 +10,8 @@ import { aziChisinau, fmtMoment, fmtZi } from "../../lib/data";
 import { cursUsd } from "../../lib/curs";
 import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, MODELE, TARIFE, motorModel, stareVarf } from "../../lib/validare";
 import { textVarf } from "../../lib/varf";
+import { listeazaCataloage } from "../../lib/db";
+import { listaIncalzire } from "../../lib/incalzire";
 import { cotaZai } from "../../lib/zai";
 
 const azi = aziChisinau();
@@ -27,6 +29,8 @@ const descriereModel = (m: string) => {
   const tarif = `${t.intrare.toFixed(2)} / ${t.iesire.toFixed(2)} $ per M tokeni` + (t.intrare_cache ? ` (din cache ${t.intrare_cache.toFixed(4)})` : "");
   return t.credite ? `${t.eticheta} · ${tarif} orientativ · credite ×${t.credite.intrare} / ×${t.credite.iesire}` : `${t.eticheta} · ${tarif}`;
 };
+const culegeri = (await listeazaCataloage(env.DB)).filter((c) => c.stare !== "arhivat");
+const incalzite = new Set(listaIncalzire(await citesteSetare(env.DB, "incalzire")));
 const eroare = Astro.url.searchParams.get("eroare");
 const ok = Astro.url.searchParams.has("ok");
 const totalAzi = raport.reduce((s, r) => s + r.azi, 0);
@@ -67,6 +71,15 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
       <span>Buget context (caractere) · Z.AI, DeepSeek</span>
       <input name="buget_context" type="number" min={LIMITA_BUGET_MIN} max={LIMITA_BUGET_MAX} step="10000" value={buget} required />
     </label>
+    {motorModel(model) === "deepseek" && (
+      <fieldset class="incalzire">
+        <legend>Încălzire dimineața (DeepSeek)</legend>
+        {culegeri.map((c) => (
+          <label class="bifa"><input type="checkbox" name="incalzire" value={c.id} checked={incalzite.has(c.id)} /> {c.titlu}</label>
+        ))}
+        <small>La 05:00 UTC (07:00 iarna / 08:00 vara), luni–vineri, o cerere minimă cu toate actele culegerii, ca prima întrebare a zilei să găsească documentele în cache-ul DeepSeek și să nu plătească prețul întreg (nici cel dublu de la orele de vârf). Costă cât prima întrebare a zilei; apare în tabel pe „sistem@incalzire”.</small>
+      </fieldset>
+    )}
     <button class="buton" type="submit">Salvează setările</button>
   </form>
   <p class="lamurire sus">
@@ -134,6 +147,9 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
   }
   .setari input { width: 120px; }
   .setari input[name=buget_context] { width: 150px; }
+  .incalzire { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 18px; border: 0; padding: 4px 0 0; margin: 0; }
+  .incalzire legend { font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; padding: 0; margin-bottom: 4px; }
+  .incalzire small { flex-basis: 100%; color: var(--faint); font-size: 12.5px; }
   .lamurire.sus { margin: -22px 0 32px; }
   h2 { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
   .numar { color: var(--faint); font-size: 15px; font-weight: 600; }

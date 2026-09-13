@@ -21,7 +21,7 @@ import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import {
   actualizeazaAudio, actualizeazaCatalog, actualizeazaSursa, adaugaSursa, citesteAudio, citesteCatalog, citesteSursa,
-  creeazaCatalog, mutaAudio, mutaCatalog, mutaSursa, seteazaStareCatalog, stergeAudio, stergeSursa,
+  creeazaCatalog, listeazaCataloage, mutaAudio, mutaCatalog, mutaSursa, seteazaStareCatalog, stergeAudio, stergeSursa,
 } from "../../../lib/db";
 import { cheieR2 } from "../../../lib/fisiere";
 import { scoateDinIndex } from "../../../lib/indexare";
@@ -36,9 +36,10 @@ const text = (s: string, status: number, extra: Record<string, string> = {}) =>
 
 type Campuri = Record<string, string | undefined>;
 
+// Campurile repetate (ex. casete bifate cu acelasi nume) se aduna cu virgula.
 async function campuri(request: Request): Promise<Campuri> {
   const f: Campuri = {};
-  for (const [k, v] of await request.formData()) if (typeof v === "string") f[k] = v;
+  for (const [k, v] of await request.formData()) if (typeof v === "string") f[k] = k in f ? `${f[k]},${v}` : v;
   return f;
 }
 
@@ -182,6 +183,10 @@ export const POST: APIRoute = async ({ params, request, url, redirect }) => {
     await seteazaSetare(env.DB, "limita_zi_implicita", String(limita));
     await seteazaSetare(env.DB, "model", model);
     await seteazaSetare(env.DB, "buget_context", String(buget));
+    // Culegerile incalzite dimineata: doar id-uri de culegeri existente.
+    const ceruta = (f.incalzire ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const existente = new Set((await listeazaCataloage(env.DB, { cuArhivate: true })).map((c) => c.id));
+    await seteazaSetare(env.DB, "incalzire", ceruta.filter((id) => existente.has(id)).join(","));
     return laConsum({ ok: true });
   }
 

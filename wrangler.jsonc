@@ -3,7 +3,11 @@
 	"compatibility_date": "2026-09-03",
 	"compatibility_flags": ["global_fetch_strictly_public"],
 	"name": "ai",
-	"main": "@astrojs/cloudflare/entrypoints/server",
+	// Punctul de intrare propriu: Astro pentru HTTP + handler-ul programat (incalzirea cache-ului DeepSeek).
+	"main": "src/worker.ts",
+	// 05:00 UTC luni-vineri = 07:00 iarna / 08:00 vara la Chisinau: inainte de program si de orele de varf
+	// DeepSeek (06-10 UTC). Ce se incalzeste se alege din Admin (setari.incalzire).
+	"triggers": { "crons": ["0 5 * * 1-5"] },
 	// Adaugarea unei rute dezactiveaza implicit URL-ul workers.dev; il pastram activ.
 	// E sigur: cererile spre *.workers.dev nu trec prin Access, deci nu au JWT -> 403.
 	"workers_dev": true,

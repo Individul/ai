@@ -11,6 +11,7 @@
 
 import { TARIFE, factorTarif } from "./validare";
 import type { Citare } from "./consum";
+import type { CerereText } from "./corector";
 
 const BAZA = "https://generativelanguage.googleapis.com";
 
@@ -235,6 +236,24 @@ export async function intreaba(cheie: string, c: CerereIntrebare): Promise<Raspu
   const d = await apel(cheie, `/v1beta/models/${encodeURIComponent(c.model)}:generateContent`, {
     method: "POST",
     json: construiesteCerere(c),
+  });
+  const r = extrageRaspuns(d);
+  if (!r.text) {
+    const motiv = d?.candidates?.[0]?.finishReason ?? d?.promptFeedback?.blockReason ?? "fără text";
+    throw new EroareGemini(502, `Modelul nu a dat un răspuns (${motiv}).`);
+  }
+  return r;
+}
+
+// Generare simpla, fara File Search (corectorul): instructiunea de sistem, un mesaj, raspuns JSON.
+export async function genereaza(cheie: string, c: CerereText): Promise<Raspuns> {
+  const d = await apel(cheie, `/v1beta/models/${encodeURIComponent(c.model)}:generateContent`, {
+    method: "POST",
+    json: {
+      system_instruction: { parts: [{ text: c.sistem }] },
+      contents: [{ role: "user", parts: [{ text: c.utilizator }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: c.maxTokens, responseMimeType: "application/json" },
+    },
   });
   const r = extrageRaspuns(d);
   if (!r.text) {

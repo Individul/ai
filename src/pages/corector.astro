@@ -1,0 +1,116 @@
+---
+// Corectorul de documente Word: colegul incarca un .docx, textul paragrafelor merge pe loturi la
+// modelul din setari.model_corector, iar documentul se intoarce cu corecturile ca revizii Word.
+// Tot lucrul cu fisierul e in browser (src/scripts/corector.ts); serverul vede doar textul.
+import { env } from "cloudflare:workers";
+import Base from "../layouts/Base.astro";
+import Suma from "../components/Suma.astro";
+import { corectariUtilizator, modelCorector } from "../lib/consum";
+import { cheieMotor } from "../lib/motor";
+import { cursUsd } from "../lib/curs";
+import { aziChisinau, fmtMoment } from "../lib/data";
+import { numara } from "../lib/corector";
+import { motorModel, NUME_MOTOR, TARIFE } from "../lib/validare";
+
+const [model, documente, curs] = await Promise.all([
+  modelCorector(env.DB), corectariUtilizator(env.DB, Astro.locals.email, 20), cursUsd(env.DB, aziChisinau()),
+]);
+const motor = motorModel(model) ?? "gemini";
+const configurat = !!cheieMotor(env, motor);
+const numeModel = TARIFE[model]?.eticheta.split(" · ")[0] ?? model;
+const descriere = (d: (typeof documente)[number]) =>
+  d.stare === "ok" ? `${numara(d.aplicate, "corectură", "corecturi")}` : d.stare === "eroare" ? "eroare" : "neterminat";
+---
+
+<Base title="Corector · Culegeri">
+  <h1>Corector</h1>
+  <p class="intro">
+    Încarcă un document Word. Corectorul verifică ortografia, gramatica și punctuația și reformulează frazele greoaie,
+    iar tu primești înapoi același document, cu fiecare corectură ca modificare urmărită: o accepți sau o respingi în Word.
+  </p>
+
+  {configurat ? (
+    <section class="corector" data-corector>
+      <label class="zona" data-zona>
+        <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" data-fisier />
+        <span class="zona-titlu">Alege un document .docx</span>
+        <span class="zona-sub">sau trage-l aici</span>
+      </label>
+      <p class="stare" data-stare aria-live="polite"></p>
+      <div class="progres" data-progres hidden><span></span></div>
+
+      <div class="rezultat" data-rezultat hidden>
+        <div class="rezumat">
+          <p data-rezumat></p>
+          <a class="buton principal" data-descarca href="#" download>Descarcă documentul corectat</a>
+        </div>
+        <ol class="corecturi" data-lista></ol>
+      </div>
+
+      <p class="lamurire">
+        Textul documentului e trimis modelului {numeModel} ({NUME_MOTOR[motor]}) și nu se păstrează pe server: în jurnal rămân
+        doar numele fișierului, numărul de corecturi și costul. Nu încărca documente cu date cu caracter personal sau cu acces limitat.
+        Se corectează corpul documentului, cu tot cu tabele; antetele, subsolurile și notele de subsol rămân cum sunt.
+      </p>
+    </section>
+  ) : (
+    <p class="gol">Corectorul nu este configurat încă pe server.</p>
+  )}
+
+  <h2>Documentele tale</h2>
+  {documente.length === 0 ? (
+    <p class="gol">Niciun document corectat încă.</p>
+  ) : (
+    <ul class="documente">
+      {documente.map((d) => (
+        <li class:list={[d.stare]}>
+          <span class="nume">{d.fisier}</span>
+          <span class="detalii" title={d.mesaj ?? undefined}>{fmtMoment(d.creat_la)} · {descriere(d)}</span>
+          <span class="cost"><Suma microdolari={d.cost_microdolari} curs={curs} titlu={`${d.tokens_intrare} tokeni intrare · ${d.tokens_iesire} ieșire · ${d.model}`} /></span>
+        </li>
+      ))}
+    </ul>
+  )}
+</Base>
+
+<script>
+  import "../scripts/corector";
+</script>
+
+<style>
+  .intro { color: var(--text-2); font-size: 17px; margin: 10px 0 24px; max-width: 640px; }
+  .zona {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    padding: 34px 20px; border-radius: 18px; border: 1.5px dashed rgba(var(--violet-rgb), 0.45);
+    background: rgba(var(--violet-rgb), 0.05); cursor: pointer; text-align: center; transition: background 0.15s, border-color 0.15s;
+  }
+  .zona:hover, .zona:global(.peste) { background: rgba(var(--violet-rgb), 0.11); border-color: var(--violet); }
+  .zona:focus-within { outline: 2px solid var(--coral); outline-offset: 2px; }
+  .zona:global(.ocupat) { pointer-events: none; opacity: 0.55; }
+  .zona input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .zona-titlu { font-weight: 700; color: var(--violet); font-size: 16px; }
+  .zona-sub { color: var(--faint); font-size: 13px; }
+  .stare { min-height: 22px; margin: 12px 0 6px; color: var(--muted); font-size: 14px; font-weight: 600; }
+  .stare:global(.eroare) { color: var(--coral); }
+  .progres { height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; margin-bottom: 8px; }
+  .progres span { display: block; height: 100%; width: 0; background: var(--violet); transition: width 0.3s; }
+  .rezumat { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; padding: 6px 0 14px; border-bottom: 1px solid var(--line); }
+  .rezumat p { color: var(--text-2); font-size: 15px; flex: 1 1 280px; }
+  .corecturi { list-style: none; margin: 0; padding: 0; }
+  .corecturi :global(li) { display: flex; flex-direction: column; gap: 3px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .corecturi :global(.tip) { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+  .corecturi :global(.neaplicata) { color: var(--wip); text-transform: none; letter-spacing: 0; font-size: 12.5px; }
+  .corecturi :global(.fragment) { font-size: 15px; color: var(--text-2); overflow-wrap: anywhere; }
+  .corecturi :global(del) { color: var(--coral); background: rgba(var(--coral-rgb), 0.1); border-radius: 4px; padding: 0 2px; }
+  .corecturi :global(ins) { color: var(--verde); background: rgba(var(--verde-rgb), 0.12); text-decoration: none; border-radius: 4px; padding: 0 2px; }
+  .corecturi :global(.motiv) { font-size: 13.5px; color: var(--muted); }
+  .lamurire { color: var(--faint); font-size: 13px; margin-top: 18px; }
+  h2 { margin: 40px 0 10px; }
+  .gol { color: var(--muted); }
+  .documente { list-style: none; margin: 0; padding: 0; }
+  .documente li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 14px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .documente .nume { font-weight: 600; overflow-wrap: anywhere; }
+  .documente .detalii { color: var(--faint); font-size: 13px; }
+  .documente .cost { margin-left: auto; color: var(--muted); font-size: 13px; }
+  .documente li.eroare .detalii, .documente li.in_curs .detalii { color: var(--coral); }
+</style>

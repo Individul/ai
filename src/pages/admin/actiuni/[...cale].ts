@@ -16,7 +16,7 @@
 //   audio/:id/sterge
 //   audio/:id/muta?dir=sus|jos
 //   utilizator/:email          limita_zi, blocat, nota (pagina /admin/consum)
-//   setari                     limita_zi_implicita, model, buget_context
+//   setari                     limita_zi_implicita, model, model_corector, buget_context, incalzire
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import {
@@ -176,12 +176,15 @@ export const POST: APIRoute = async ({ params, request, url, redirect }) => {
     if (!Number.isInteger(limita) || limita < 0 || limita > 10_000) return laConsum({ eroare: "Limita implicită trebuie să fie un număr întreg." });
     const model = (f.model ?? "").trim();
     if (!esteModel(model)) return laConsum({ eroare: "Model necunoscut." });
+    const modelCorector = (f.model_corector ?? "").trim();
+    if (!esteModel(modelCorector)) return laConsum({ eroare: "Modelul corectorului e necunoscut." });
     const buget = Number((f.buget_context ?? "").replace(/[.\s]/g, ""));
     if (!Number.isInteger(buget) || buget < LIMITA_BUGET_MIN || buget > LIMITA_BUGET_MAX) {
       return laConsum({ eroare: `Bugetul de context trebuie să fie între ${LIMITA_BUGET_MIN} și ${LIMITA_BUGET_MAX} de caractere.` });
     }
     await seteazaSetare(env.DB, "limita_zi_implicita", String(limita));
     await seteazaSetare(env.DB, "model", model);
+    await seteazaSetare(env.DB, "model_corector", modelCorector);
     await seteazaSetare(env.DB, "buget_context", String(buget));
     // Culegerile incalzite dimineata: doar id-uri de culegeri existente.
     const ceruta = (f.incalzire ?? "").split(",").map((s) => s.trim()).filter(Boolean);

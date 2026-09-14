@@ -136,3 +136,17 @@ describe("gandirea, per motor", () => {
     expect(cerere("deepseek-flash").max_tokens).toBe(8192);
   });
 });
+
+describe("construiesteCerereText (corectorul)", () => {
+  it("cere JSON; gandirea e oprita doar la Z.AI", async () => {
+    const { construiesteCerereText } = await import("./zai");
+    const c = { sistem: "S", utilizator: "U", maxTokens: 100 };
+    const deepseek = construiesteCerereText({ ...c, model: "deepseek-flash" });
+    expect(deepseek).toMatchObject({
+      model: "deepseek-flash", max_tokens: 100, response_format: { type: "json_object" },
+      messages: [{ role: "system", content: "S" }, { role: "user", content: "U" }],
+    });
+    expect(deepseek).not.toHaveProperty("thinking");
+    expect(construiesteCerereText({ ...c, model: "glm-5.3-flash" })).toMatchObject({ thinking: { type: "disabled" } });
+  });
+});

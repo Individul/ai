@@ -31,6 +31,7 @@ const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsW
   <a class="brand" href="/">Culegeri<span>.</span></a>
   <nav aria-label="Navigare principală">
     <a href="/" class:list={{ activ: activ("/") }}>Culegeri</a>
+    <a href="/corector" class:list={{ activ: activ("/corector") }}>Corector</a>
     <a href="/consum" class:list={{ activ: activ("/consum") }}>Consum <span class="suma"><Suma microdolari={propriu} curs={curs} titlu="costul tău de la început" /></span></a>
     <a href="/acces" class:list={{ activ: activ("/acces") }}>Cum obțin acces</a>
     {admin && <a href="/admin" class:list={["admin", { activ: activ("/admin") }]}>Admin <span class="suma"><Suma microdolari={toti} curs={curs} titlu="costul tuturor de la început" /></span></a>}

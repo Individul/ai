@@ -3,7 +3,8 @@
 import { env } from "cloudflare:workers";
 import Base from "../layouts/Base.astro";
 import Suma from "../components/Suma.astro";
-import { consumUtilizator, intrebariAzi, istoricUtilizator, limitaPentru } from "../lib/consum";
+import { consumUtilizator, corectariUtilizator, intrebariAzi, istoricUtilizator, limitaPentru } from "../lib/consum";
+import { numara } from "../lib/corector";
 import { aziChisinau, fmtMoment } from "../lib/data";
 import { cursUsd } from "../lib/curs";
 import { listeazaCataloage } from "../lib/db";
@@ -12,9 +13,10 @@ import { legaReferinte } from "../lib/referinte";
 
 const email = Astro.locals.email;
 const zi = aziChisinau();
-const [folosite, limita, istoric, cataloage, consum, curs] = await Promise.all([
+const [folosite, limita, istoric, cataloage, consum, curs, documente] = await Promise.all([
   intrebariAzi(env.DB, email, zi), limitaPentru(env.DB, email), istoricUtilizator(env.DB, email, 50),
   listeazaCataloage(env.DB, { cuArhivate: true }), consumUtilizator(env.DB, email, zi), cursUsd(env.DB, zi),
+  corectariUtilizator(env.DB, email, 20),
 ]);
 const numeCatalog = new Map(cataloage.map((c) => [c.id, c.titlu]));
 const ramase = Math.max(0, limita - folosite);
@@ -31,7 +33,26 @@ const ramase = Math.max(0, limita - folosite);
     <div><dt>Ultimele 30 de zile</dt><dd><Suma microdolari={consum.cost_30} curs={curs} /> <small>· {consum.zile30} {consum.zile30 === 1 ? "întrebare" : "întrebări"}</small></dd></div>
     <div><dt>De la început</dt><dd><Suma microdolari={consum.cost_total} curs={curs} /> <small>· {consum.total} {consum.total === 1 ? "întrebare" : "întrebări"}</small></dd></div>
   </dl>
-  <p class="lamurire">Costul e estimat din tokenii raportați de Google și tariful modelului folosit la fiecare întrebare.</p>
+  <p class="lamurire">Costul e estimat din tokenii raportați de model și tariful lui, la fiecare întrebare și la fiecare document corectat.</p>
+
+  {documente.length > 0 && (
+    <>
+      <h2>Documente corectate</h2>
+      <ul class="lista">
+        {documente.map((d) => (
+          <li class:list={[d.stare === "ok" ? "ok" : "eroare"]}>
+            <div class="meta">
+              <span>{fmtMoment(d.creat_la)}</span>
+              <span>·</span>
+              <span>{d.fisier}</span>
+              {d.stare === "ok" ? <span>· {numara(d.aplicate, "corectură", "corecturi")}</span> : <span class="eticheta">{d.stare === "eroare" ? "eroare" : "neterminat"}</span>}
+              <span class="cost"><Suma microdolari={d.cost_microdolari} curs={curs} titlu={`${d.tokens_intrare} tokeni intrare · ${d.tokens_iesire} ieșire · ${d.model}`} /></span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
+  )}
 
   <h2>Ultimele întrebări</h2>
   {istoric.length === 0 ? (

@@ -11,6 +11,7 @@ await applyD1Migrations(env.DB, TEST_MIGRATIONS);
 
 beforeEach(async () => {
   await env.DB.exec("DELETE FROM intrebari");
+  await env.DB.exec("DELETE FROM corectari");
   await env.DB.exec("DELETE FROM utilizatori");
   await env.DB.exec("DELETE FROM audio");
   await env.DB.exec("DELETE FROM surse");

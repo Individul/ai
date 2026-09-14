@@ -4,11 +4,13 @@
 
 import { listeazaSurse, type Catalog, type Sursa } from "./db";
 import type { Citare } from "./consum";
-import { costMicrodolari, intreaba, EroareGemini, type Schimb } from "./gemini";
-import { BAZA_DEEPSEEK, BAZA_ZAI, crediteZai, EroareZai, intreabaZai } from "./zai";
+import { costMicrodolari, genereaza, intreaba, EroareGemini, type Schimb } from "./gemini";
+import { BAZA_DEEPSEEK, BAZA_ZAI, completeaza, construiesteCerereText, crediteZai, EroareZai, intreabaZai, type RaspunsZai } from "./zai";
+import { cerereCorectura, extrageCorecturi, type CerereText } from "./corector";
+import type { Corectura, ParagrafText } from "./docx";
 import { construiesteContext, extrageCitariText, type SursaText } from "./context";
 import { citesteText } from "./text";
-import { motorModel, type Motor } from "./validare";
+import { motorModel, NUME_MOTOR, type Motor } from "./validare";
 
 export interface Mediu {
   DB: D1Database;
@@ -47,7 +49,7 @@ export function cheieMotor(env: Mediu, motor: Motor): string | undefined {
   return env.DEEPSEEK_API_KEY || undefined;
 }
 
-function bazaMotor(env: Mediu, motor: Motor): string {
+export function bazaMotor(env: Mediu, motor: Motor): string {
   return motor === "zai" ? env.ZAI_API_BASE || BAZA_ZAI : BAZA_DEEPSEEK;
 }
 
@@ -100,5 +102,56 @@ async function raspundeText(env: Mediu, motor: Motor, i: Intrebare, apel: ApelZa
       if (incercare === 0 && e instanceof EroareZai && e.contextPreaLung) { buget = Math.floor(buget / 2); continue; }
       throw e;
     }
+  }
+}
+
+// ---------------------------------------------------------------- corector
+
+export interface ConsumModel {
+  tokens_intrare: number;   // total, include tokens_cache
+  tokens_cache: number;
+  tokens_iesire: number;
+  cost_microdolari: number;
+  credite: number;
+}
+
+export interface RezultatCorectare extends ConsumModel {
+  corecturi: Corectura[];
+}
+
+// Modelul a raspuns (deci s-a platit), dar raspunsul nu se poate citi: eroarea poarta consumul,
+// ca sa intre in jurnal.
+export class EroareCorectare extends Error {
+  consum: ConsumModel;
+  constructor(mesaj: string, consum: ConsumModel) {
+    super(mesaj);
+    this.consum = consum;
+  }
+}
+
+export type ApelText = (motor: Motor, cheie: string, baza: string, c: CerereText) => Promise<RaspunsZai>;
+
+const apelText: ApelText = async (motor, cheie, baza, c) => {
+  if (motor !== "gemini") return completeaza(cheie, baza, construiesteCerereText(c));
+  const r = await genereaza(cheie, c);
+  return { text: r.text, tokens_intrare: r.tokens_intrare, tokens_cache: 0, tokens_iesire: r.tokens_iesire };
+};
+
+// Un lot de paragrafe al corectorului, pe modelul din setari.model_corector. Motorul vine din model,
+// ca la chat. `apel` se injecteaza doar in teste.
+export async function corecteazaLot(env: Mediu, model: string, lot: ParagrafText[], apel: ApelText = apelText): Promise<RezultatCorectare> {
+  const motor = motorModel(model) ?? "gemini";
+  const cheie = cheieMotor(env, motor);
+  if (!cheie) throw new EroareZai(503, `Cheia ${NUME_MOTOR[motor]} nu este configurată pe server.`);
+  const r = await apel(motor, cheie, bazaMotor(env, motor), cerereCorectura(model, lot));
+  const consum: ConsumModel = {
+    tokens_intrare: r.tokens_intrare, tokens_cache: r.tokens_cache, tokens_iesire: r.tokens_iesire,
+    cost_microdolari: costMicrodolari(model, r.tokens_intrare, r.tokens_iesire, r.tokens_cache),
+    credite: crediteZai(model, r.tokens_intrare, r.tokens_cache, r.tokens_iesire),
+  };
+  try {
+    return { ...consum, corecturi: extrageCorecturi(r.text, new Set(lot.map((p) => p.i))) };
+  } catch (e) {
+    throw new EroareCorectare((e as Error).message, consum);
   }
 }

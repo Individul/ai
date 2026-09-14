@@ -15,6 +15,7 @@
 
 import { motorModel, TARIFE } from "./validare";
 import type { Schimb } from "./gemini";
+import type { CerereText } from "./corector";
 
 export const BAZA_ZAI = "https://api.z.ai/api/coding/paas/v4";
 // DeepSeek e tot OpenAI-compatibil: acelasi client, alta baza si alta cheie (vezi motor.ts).
@@ -95,10 +96,32 @@ export function extrageRaspunsZai(d: any): RaspunsZai {
 }
 
 export async function intreabaZai(cheie: string, baza: string, c: CerereZai): Promise<RaspunsZai> {
+  return completeaza(cheie, baza, construiesteCerereZai(c));
+}
+
+// Cererea corectorului: sistem + utilizator, raspuns JSON (response_format json_object, verificat pe
+// viu pe deepseek-flash, cu si fara gandire). Gandirea, per motor, ca la chat: oprita la Z.AI, pornita
+// la DeepSeek. Pe 14 sept. 2026, pe aceeasi nota de o pagina, fara gandire DeepSeek a scapat jumatate
+// din greseli si a schimbat cuvinte ("deținere" -> "detenție", "unei anchete" -> "unei anchetă"); cu
+// gandire a dat 31 de corecturi, toate bune, in 38 s si ~9.000 de tokeni de iesire (din care 7.900 de
+// gandire), deci loturi mici si max_tokens mare.
+export function construiesteCerereText(c: CerereText): Record<string, unknown> {
+  const cerere: Record<string, unknown> = {
+    model: c.model,
+    messages: [{ role: "system", content: c.sistem }, { role: "user", content: c.utilizator }],
+    stream: false, temperature: 0.2, max_tokens: c.maxTokens,
+    response_format: { type: "json_object" },
+  };
+  if (motorModel(c.model) === "zai") cerere.thinking = { type: "disabled" };
+  return cerere;
+}
+
+// POST /chat/completions cu corpul dat; comun chatului si corectorului.
+export async function completeaza(cheie: string, baza: string, corp: Record<string, unknown>): Promise<RaspunsZai> {
   const r = await fetch(`${baza.replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
     headers: { authorization: `Bearer ${cheie}`, "content-type": "application/json" },
-    body: JSON.stringify(construiesteCerereZai(c)),
+    body: JSON.stringify(corp),
     signal: AbortSignal.timeout(15 * 60_000),
   });
   const text = await r.text();

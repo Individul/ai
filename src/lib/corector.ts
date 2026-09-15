@@ -4,6 +4,7 @@
 // browserul le pune in .docx ca revizii (docx.ts). Apelul catre model e in motor.ts (corecteazaLot).
 
 import type { Corectura, ParagrafText } from "./docx";
+import { despreMentiune } from "./mentiune";
 
 export const MODEL_CORECTOR_IMPLICIT = "deepseek-flash";
 export const LIMITA_LOT = 4_000;          // caractere pe cerere: cu gandirea pornita, un lot dureaza ~1 minut
@@ -66,6 +67,7 @@ Reguli:
 - Verifici acordul predicatului cu subiectul, inclusiv când subiectul e departe de verb („rezultatele ... se vor prezenta”).
 - Nu corecta ce e deja corect și nu reformula un paragraf bun doar din preferință.
 - Nu semnala diferența dintre ş/ţ cu sedilă și ș/ț cu virgulă.
+- Mențiunea despre datele cu caracter personal („Atenție: Documentul conține date cu caracter personal…”) se verifică separat, după forma aprobată: nu o corecta.
 Răspunzi doar cu JSON: {"corecturi":[{"i":număr,"vechi":"...","nou":"...","tip":"ortografie|gramatică|punctuație|formulare","motiv":"..."}]}
 - "vechi" e copiat exact, caracter cu caracter, din textul paragrafului "i"; cât mai scurt (cuvântul sau grupul de cuvinte greșit, nu tot paragraful), dar suficient ca să apară o singură dată în paragraf.
 - "nou" e textul care îl înlocuiește pe "vechi".
@@ -330,6 +332,7 @@ Răspunzi cu JSON: {"corecturi":[{"i":număr,"vechi":"...","nou":"...","tip":"..
   - "altele": neconcordanțe între versiunea română și cea rusă, denumiri oficiale greșite.
 - Fiecare observație începe cu citatul scurt din document, apoi ce e în neregulă și ce ar trebui verificat. Cel mult 20 de observații, cele mai importante primele.
 - Scrii pentru om: nu pomeni numerele paragrafelor („i”), ci citatul din document.
+- Nu comenta mențiunea despre datele cu caracter personal: se verifică separat.
 - Nu știi ce zi e azi, deci nu spui despre nicio dată din document că e în viitor sau în trecut.
 - Nu inventa: dacă nu ai ce semnala, întorci "observatii":[].`;
 
@@ -382,7 +385,7 @@ export function extrageVerificare(text: string, indici: Set<number>): { corectur
   const observatii: Observatie[] = [];
   for (const x of (Array.isArray(d?.observatii) ? d.observatii : []) as Record<string, unknown>[]) {
     const continut = String(x?.text ?? "").trim();
-    if (!continut) continue;
+    if (!continut || despreMentiune({ text: continut })) continue; // mentiunea obligatorie se verifica in cod
     const tip = TIPURI_OBSERVATIE.includes(String(x?.tip) as (typeof TIPURI_OBSERVATIE)[number]) ? String(x.tip) : "altele";
     observatii.push({ tip, text: continut.slice(0, 700) });
     if (observatii.length >= 20) break;

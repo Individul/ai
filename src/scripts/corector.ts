@@ -6,16 +6,19 @@
 //   - corectura: doar corpul, pe loturi, in paralel;
 //   - verificare: tot documentul (corp, antete, subsoluri, note) intr-o singura cerere, cu observatii
 //     pe deasupra (date care se contrazic, rubrici goale, formatare rupta, indoieli juridice).
+//
+// In ambele moduri se verifica si mentiunea obligatorie despre datele cu caracter personal (src/lib/mentiune.ts,
+// acelasi cod ca in aplicatia de Mac): lipsa se adauga, cea in alta forma se aduce la forma aprobata, ca revizii.
 
 import {
-  analizeazaDocument, analizeazaIntreg, aplicaCorecturi, aplicaCorecturiIntreg, deschideDocx, EroareDocx,
-  paragrafeDeCorectat, paragrafeIntreg, salveazaDocx, salveazaDocxParti,
+  analizeazaIntreg, deschideDocx, EroareDocx, paragrafeDeCorectat, paragrafeIntreg, salveazaDocxParti,
   type Aplicare, type Corectura, type ParagrafText, type StareAplicare,
 } from "../lib/docx";
 import {
   AUTOR_REVIZII, ETICHETA_OBSERVATIE, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_PARAGRAF, LIMITA_VERIFICARE,
   LOTURI_PARALELE, numara, type Observatie,
 } from "../lib/corector";
+import { aplicaCuMentiune, type RezultatMentiune } from "../lib/mentiune";
 
 const TIP_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const MAX_OCTETI = 30 * 1024 * 1024;
@@ -24,6 +27,14 @@ const NEAPLICATE: Partial<Record<StareAplicare, string>> = {
   negasita: "de verificat: fragmentul nu a fost găsit exact în document",
   suprapusa: "de verificat: se suprapune cu altă corectură",
   blocata: "de verificat: textul e într-un câmp, într-o revizie existentă sau trece peste un tab",
+};
+
+// Ce se spune despre mentiunea obligatorie; una deja in regula nu se mai pomeneste.
+const FRAZA_MENTIUNE: Record<RezultatMentiune, string> = {
+  prezenta: "",
+  corectata: " Mențiunea despre datele cu caracter personal a fost adusă la forma aprobată.",
+  adaugata: " Mențiunea despre datele cu caracter personal lipsea și a fost adăugată la sfârșitul documentului.",
+  de_verificat: " Mențiunea despre datele cu caracter personal e în altă formă și nu s-a putut înlocui automat: verific-o.",
 };
 
 class EroareCerere extends Error {
@@ -140,14 +151,14 @@ function porneste(radacina: HTMLElement) {
       scrie(`Se citește ${fisier.name}…`);
       const docx = deschideDocx(new Uint8Array(await fisier.arrayBuffer()));
       const rev = { autor: AUTOR_REVIZII, data: new Date().toISOString().replace(/\.\d{3}Z$/, "Z") };
-      let aplicari: Aplicare[];
-      let construieste: () => Uint8Array;
+      // Tot documentul, in ambele moduri: mentiunea obligatorie poate sta si in subsol. Corpul e prima parte,
+      // deci numerele paragrafelor din modul corectura raman valabile.
+      const doc = analizeazaIntreg(docx);
+      let corecturiModel: Corectura[];
       let observatii: Observatie[] = [];
-      let propuse = 0;
       let partiale: string | null = null;
 
       if (mod === "verificare") {
-        const doc = analizeazaIntreg(docx);
         const paragrafe = paragrafeIntreg(doc).filter((p) => p.text.length <= LIMITA_PARAGRAF);
         const caractere = paragrafe.reduce((s, p) => s + p.text.length, 0);
         if (!paragrafe.length) throw new EroareDocx("Documentul nu are text de verificat.");
@@ -166,18 +177,10 @@ function porneste(radacina: HTMLElement) {
         } finally {
           opreste();
         }
-        propuse = r.corecturi.length;
+        corecturiModel = r.corecturi;
         observatii = r.observatii;
-        scrie("Se pun corecturile în document…");
-        const pus = aplicaCorecturiIntreg(doc, r.corecturi, rev);
-        if (Object.values(pus.xml).some(xmlStricat)) {
-          throw new Error("Documentul corectat nu a ieșit valid, așa că nu l-am pus la descărcare.");
-        }
-        aplicari = pus.aplicari;
-        construieste = () => salveazaDocxParti(docx, pus.xml);
       } else {
-        const analiza = analizeazaDocument(docx.xml);
-        const paragrafe = paragrafeDeCorectat(analiza).filter((p) => p.text.length <= LIMITA_PARAGRAF);
+        const paragrafe = paragrafeDeCorectat(doc.parti[0]!.analiza).filter((p) => p.text.length <= LIMITA_PARAGRAF);
         const caractere = paragrafe.reduce((s, p) => s + p.text.length, 0);
         if (!paragrafe.length) throw new EroareDocx("Documentul nu are text de corectat.");
         if (caractere > LIMITA_DOCUMENT) {
@@ -212,24 +215,24 @@ function porneste(radacina: HTMLElement) {
         await Promise.all(Array.from({ length: Math.min(LOTURI_PARALELE, loturi.length) }, lucrator));
         if (picate === loturi.length) throw new Error(ultimaEroare || "Modelul nu a răspuns.");
 
-        scrie("Se pun corecturile în document…");
-        const toate = corecturi.flat();
-        propuse = toate.length;
+        corecturiModel = corecturi.flat();
         partiale = picate ? `${numara(picate, "parte", "părți")} din ${loturi.length} nu s-au putut corecta (${ultimaEroare})` : null;
-        const { xml, aplicari: puse } = aplicaCorecturi(analiza, toate, rev);
-        if (xmlStricat(xml)) throw new Error("Documentul corectat nu a ieșit valid, așa că nu l-am pus la descărcare.");
-        aplicari = puse;
-        construieste = () => salveazaDocx(docx, xml);
       }
 
-      const aplicate = aplicari.filter((a) => a.stare === "aplicata");
-      const deVerificat = aplicari.filter((a) => NEAPLICATE[a.stare]);
+      scrie("Se pun corecturile în document…");
+      const pus = aplicaCuMentiune(docx, doc, corecturiModel, rev);
+      if (Object.values(pus.xml).some(xmlStricat)) {
+        throw new Error("Documentul corectat nu a ieșit valid, așa că nu l-am pus la descărcare.");
+      }
+      const aplicate = pus.aplicari.filter((a) => a.stare === "aplicata");
+      const deVerificat = pus.aplicari.filter((a) => NEAPLICATE[a.stare]);
       await post(`/api/corector/${id}/gata`, {
-        stare: "ok", corecturi: propuse, aplicate: aplicate.length, observatii: observatii.length, mesaj: partiale,
+        stare: "ok", corecturi: corecturiModel.length, aplicate: aplicate.length, observatii: observatii.length, mesaj: partiale,
       }).catch(() => undefined);
 
       if (urlDocument) URL.revokeObjectURL(urlDocument);
-      urlDocument = aplicate.length ? URL.createObjectURL(new Blob([construieste() as Uint8Array<ArrayBuffer>], { type: TIP_DOCX })) : null;
+      const schimbat = aplicate.length > 0 || pus.mentiune === "adaugata";
+      urlDocument = schimbat ? URL.createObjectURL(new Blob([salveazaDocxParti(docx, pus.xml) as Uint8Array<ArrayBuffer>], { type: TIP_DOCX })) : null;
       descarca.hidden = !urlDocument;
       if (urlDocument) {
         descarca.href = urlDocument;
@@ -240,7 +243,7 @@ function porneste(radacina: HTMLElement) {
         : deVerificat.length ? "Nicio corectură nu a putut fi pusă automat în document." : "Nu am găsit greșeli în document.";
       const frazaVerificat = deVerificat.length ? ` ${numara(deVerificat.length, "propunere", "propuneri")} de verificat manual, mai jos.` : "";
       const frazaObservatii = observatii.length ? ` ${numara(observatii.length, "observație", "observații")} pentru tine, mai jos.` : "";
-      rezumat.textContent = `${frazaAplicate}${frazaVerificat}${frazaObservatii}${partiale ? ` Atenție: ${partiale}.` : ""}`;
+      rezumat.textContent = `${frazaAplicate}${frazaVerificat}${FRAZA_MENTIUNE[pus.mentiune]}${frazaObservatii}${partiale ? ` Atenție: ${partiale}.` : ""}`;
       listaObservatii.replaceChildren(...observatii.map(randObservatie));
       listaObservatii.hidden = !observatii.length;
       lista.replaceChildren(...[...aplicate, ...deVerificat].sort((x, y) => x.i - y.i).map(randCorectura));

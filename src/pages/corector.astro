@@ -73,7 +73,8 @@ const descriere = (d: (typeof documente)[number]) => {
         doar numele fișierului, numărul de corecturi și costul. Nu încărca documente cu date cu caracter personal sau cu acces limitat.
         La „corectură” se lucrează pe corpul documentului, cu tot cu tabele; la „verificare” intră și antetele, subsolurile
         și notele de subsol, iar modelul spune în plus ce a găsit și nu poate repara singur: date care se contrazic,
-        rubrici necompletate, formatare ruptă, îndoieli juridice.
+        rubrici necompletate, formatare ruptă, îndoieli juridice. La fiecare document se verifică și mențiunea obligatorie
+        despre datele cu caracter personal: dacă lipsește sau e în altă formă, e pusă în forma aprobată, tot ca modificare urmărită.
       </p>
       {varf && <p class:list={["lamurire", "varf", { activ: varf.activ }]}>{varf.text.replace("fiecare întrebare", "fiecare document")}</p>}
     </section>

@@ -193,4 +193,15 @@ describe("verificarea intregului document", () => {
     expect(() => extrageVerificare("Am verificat documentul și nu am observații.", new Set([1]))).toThrow(/nu a întors verificarea/);
     expect(() => extrageVerificare('{"corecturi":[{"i":1,', new Set([1]))).toThrow(/nu a întors verificarea/);
   });
+
+  it("arunca observatiile despre mentiunea obligatorie, care se verifica in cod", () => {
+    const raspuns = JSON.stringify({
+      corecturi: [],
+      observatii: [
+        { tip: "juridic", text: "„Legea Republicii Moldova nr. 160 din 30.07.2026” din mențiunea despre datele cu caracter personal: de verificat." },
+        { tip: "lipsa", text: "Rubrica „Anexă pe: ___ file” a rămas necompletată." },
+      ],
+    });
+    expect(extrageVerificare(raspuns, new Set([1])).observatii.map((o) => o.tip)).toEqual(["lipsa"]);
+  });
 });

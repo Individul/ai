@@ -36,10 +36,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
-  adaugaParagrafLaSfarsit, analizeazaIntreg, aplicaCorecturiIntreg, deschideDocx, paragrafeDeCorectat, paragrafeIntreg,
-  salveazaDocxParti, type Corectura, type DocumentIntreg, type Docx, type StareAplicare,
+  analizeazaIntreg, deschideDocx, paragrafeDeCorectat, paragrafeIntreg, salveazaDocxParti, type Corectura,
+  type DocumentIntreg, type Docx, type StareAplicare,
 } from "../src/lib/docx.ts";
-import { BUCATI_MENTIUNE, cautaMentiune, MARIME_MENTIUNE, MENTIUNE_DATE_PERSONALE } from "../src/lib/mentiune.ts";
+import { aplicaCuMentiune, type RezultatMentiune } from "../src/lib/mentiune.ts";
 import {
   AUTOR_REVIZII, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageCorecturi, extrageVerificare,
   impartePeLoturi, LIMITA_PARAGRAF, LIMITA_VERIFICARE, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal,
@@ -68,9 +68,6 @@ interface CorecturaAfisata {
   inainte: string;
   dupa: string;
 }
-
-// Ce s-a intamplat cu mentiunea obligatorie despre datele cu caracter personal (src/lib/mentiune.ts).
-type RezultatMentiune = "prezenta" | "corectata" | "adaugata" | "de_verificat";
 
 interface RezultatDocument {
   fisier: string;
@@ -245,38 +242,14 @@ const afisabile = (aplicari: { stare: StareAplicare; tip: string; vechi: string;
     .filter((a) => a.stare !== "fara_schimbare")
     .map(({ stare, tip, vechi, nou, motiv, inainte, dupa }) => ({ stare, tip, vechi, nou, motiv, inainte, dupa }));
 
-// ---------------------------------------------------------------- mentiunea despre datele personale
+// ---------------------------------------------------------------- scrierea documentului
 
-// Mentiunea se verifica in cod, dupa forma aprobata (src/lib/mentiune.ts): modelul nu o atinge.
-const NU_ATINGE_MENTIUNEA =
-  "\n- Mențiunea despre datele cu caracter personal („Atenție: Documentul conține date cu caracter personal…”) se verifică separat, după forma aprobată: nu o corecta și nu o comenta în observații.";
-
-const despreMentiune = (o: Observatie) => {
-  const t = o.text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
-  return t.includes("caracter personal") && /atentie|mentiun|legea/.test(t);
-};
-
-// Corecturile modelului si mentiunea obligatorie, puse in document; aceeasi cale in ambele moduri.
-// Numerele paragrafelor sunt globale (corpul e prima parte, deci in modul corectura raman cele din corp).
+// Corecturile modelului si mentiunea obligatorie (src/lib/mentiune.ts, acelasi cod ca in hub), puse in document.
 // Documentul corectat se scrie doar daca s-a schimbat ceva.
 function puneInDocument(fisier: string, docx: Docx, doc: DocumentIntreg, corecturiModel: Corectura[]) {
-  const rev = { autor: AUTOR_REVIZII, data: acum() };
-  const gasita = cautaMentiune(paragrafeIntreg(doc));
-  const lista = corecturiModel.filter((c) => c.i !== gasita.i);
-  if (gasita.stare === "diferita") {
-    // exact: textul aprobat intra caracter cu caracter, inclusiv ș/ț cu virgula in locul celor cu sedila
-    lista.push({
-      i: gasita.i!, vechi: gasita.text!, nou: MENTIUNE_DATE_PERSONALE, tip: "formulare", exact: true,
-      motiv: "Mențiunea obligatorie despre datele cu caracter personal, în forma aprobată.",
-    });
-  }
-  const { xml, aplicari } = aplicaCorecturiIntreg(doc, lista, rev);
-  if (gasita.stare === "lipsa") xml[docx.cale] = adaugaParagrafLaSfarsit(xml[docx.cale] ?? docx.xml, BUCATI_MENTIUNE, rev, MARIME_MENTIUNE);
+  const { xml, aplicari, mentiune } = aplicaCuMentiune(docx, doc, corecturiModel, { autor: AUTOR_REVIZII, data: acum() });
   const corecturi = afisabile(aplicari);
   const aplicate = corecturi.filter((a) => a.stare === "aplicata").length;
-  const inlocuita = aplicari.some((a) => a.i === gasita.i && a.nou === MENTIUNE_DATE_PERSONALE && a.stare === "aplicata");
-  const mentiune: RezultatMentiune =
-    gasita.stare === "prezenta" ? "prezenta" : gasita.stare === "lipsa" ? "adaugata" : inlocuita ? "corectata" : "de_verificat";
   const iesire = aplicate || mentiune === "adaugata" ? numeLibera(fisier) : null;
   if (iesire) writeFileSync(iesire, salveazaDocxParti(docx, xml));
   return { iesire, aplicate, corecturi, mentiune };
@@ -308,7 +281,7 @@ async function corecteaza(fisier: string, alegere: Alegere, anunta: (e: Evenimen
       const parte = loturi[k]!;
       const eticheta = { fisier, parte: k + 1, caractere: parte.reduce((s, x) => s + x.text.length, 0) };
       try {
-        const r = await cereCuReincercare(motor, JSON.stringify({ paragrafe: parte }), PROMPT_CORECTOR + NU_ATINGE_MENTIUNEA, cli, eticheta, laStare);
+        const r = await cereCuReincercare(motor, JSON.stringify({ paragrafe: parte }), PROMPT_CORECTOR, cli, eticheta, laStare);
         rezultate[k] = extrageCorecturi(r.brut, new Set(parte.map((x) => x.i)));
         cost += r.cost_usd;
         jetoane += r.jetoane;
@@ -342,12 +315,12 @@ async function verifica(fisier: string, alegere: Alegere, anunta: (e: Eveniment)
   }
 
   const laStare = (mesaj: string) => anunta({ tip: "stare", fisier, mesaj });
-  const r = await cereCuReincercare(motor, mesajVerificare(paragrafe), PROMPT_VERIFICARE + NU_ATINGE_MENTIUNEA, cli, { fisier, parte: 1, caractere }, laStare);
+  const r = await cereCuReincercare(motor, mesajVerificare(paragrafe), PROMPT_VERIFICARE, cli, { fisier, parte: 1, caractere }, laStare);
   const { corecturi: cerute, observatii } = extrageVerificare(r.brut, new Set(paragrafe.map((p) => p.i)));
   anunta({ tip: "progres", fisier, gata: 1, total: 1 });
 
   const pus = puneInDocument(fisier, docx, doc, cerute);
-  return { ...gol, ...pus, observatii: observatii.filter((o) => !despreMentiune(o)), cost_usd: r.cost_usd, jetoane: r.jetoane, secunde: secunde(t0) };
+  return { ...gol, ...pus, observatii, cost_usd: r.cost_usd, jetoane: r.jetoane, secunde: secunde(t0) };
 }
 
 const acum = () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z");

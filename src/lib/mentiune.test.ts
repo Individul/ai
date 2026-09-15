@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { asemanareMentiune, BUCATI_MENTIUNE, cautaMentiune, MENTIUNE_DATE_PERSONALE } from "./mentiune";
+import { strToU8 } from "fflate";
+import { analizeazaIntreg, type Docx } from "./docx";
+import { aplicaCuMentiune, asemanareMentiune, BUCATI_MENTIUNE, cautaMentiune, despreMentiune, MENTIUNE_DATE_PERSONALE } from "./mentiune";
 
 // Textul dat de Dumitru pe 15 sept. 2026, copiat exact: o schimbare aici trebuie sa fie intentionata.
 const APROBAT =
@@ -36,5 +38,48 @@ describe("mentiunea despre datele cu caracter personal", () => {
     expect(asemanareMentiune(obisnuit)).toBeLessThan(0.5);
     expect(cautaMentiune([{ i: 3, text: obisnuit }])).toEqual({ stare: "lipsa" });
     expect(cautaMentiune([])).toEqual({ stare: "lipsa" });
+  });
+});
+
+const REV = { autor: "Corector AI", data: "2026-09-15T10:00:00Z" };
+const document = (...paragrafe: string[]): Docx => {
+  const xml = `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragrafe
+    .map((t) => `<w:p><w:r><w:t xml:space="preserve">${t}</w:t></w:r></w:p>`).join("")}<w:sectPr/></w:body></w:document>`;
+  return { intrari: { "word/document.xml": strToU8(xml) }, cale: "word/document.xml", xml };
+};
+// Textul paragrafelor dupa „Accepta tot” in Word.
+const acceptat = (xml: string) =>
+  [...xml.replace(/<w:del\b[^>]*>[\s\S]*?<\/w:del>/g, "").matchAll(/<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g)]
+    .map((m) => [...m[1]!.matchAll(/<w:t\b[^>]*>([^<]*)<\/w:t>/g)].map((t) => t[1]).join(""));
+
+describe("aplicaCuMentiune (acelasi cod in hub si in aplicatie)", () => {
+  it("mentiunea corecta ramane; corecturile modelului pe ea se arunca, celelalte intra", () => {
+    const d = document("Deținutii au fost informati.", APROBAT);
+    const r = aplicaCuMentiune(d, analizeazaIntreg(d), [
+      { i: 0, vechi: "informati", nou: "informați", tip: "ortografie", motiv: "" },
+      { i: 1, vechi: "Atenție:", nou: "ATENȚIE!", tip: "formulare", motiv: "" },
+    ], REV);
+    expect(r.mentiune).toBe("prezenta");
+    expect(r.aplicari.map((a) => a.nou)).toEqual(["informați"]);
+    expect(acceptat(r.xml["word/document.xml"]!)).toEqual(["Deținutii au fost informați.", APROBAT]);
+  });
+
+  it("mentiunea veche se aduce la forma aprobata, caracter cu caracter", () => {
+    const d = document("Directorul", VECHE_133);
+    const r = aplicaCuMentiune(d, analizeazaIntreg(d), [], REV);
+    expect(r.mentiune).toBe("corectata");
+    expect(acceptat(r.xml["word/document.xml"]!)).toEqual(["Directorul", APROBAT]);
+  });
+
+  it("mentiunea lipsa se adauga la sfarsitul corpului", () => {
+    const d = document("Nota informativă.", "Șef secție");
+    const r = aplicaCuMentiune(d, analizeazaIntreg(d), [], REV);
+    expect(r.mentiune).toBe("adaugata");
+    expect(acceptat(r.xml["word/document.xml"]!)).toEqual(["Nota informativă.", "Șef secție", APROBAT]);
+  });
+
+  it("recunoaste observatiile modelului despre mentiune", () => {
+    expect(despreMentiune({ text: "„Atenție: Documentul conține date cu caracter personal” trimite la o lege recentă; de verificat." })).toBe(true);
+    expect(despreMentiune({ text: "Lipsesc datele de identificare ale condamnatului." })).toBe(false);
   });
 });

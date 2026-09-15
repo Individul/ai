@@ -5,8 +5,12 @@
 //   - diferita: exista o mentiune veche sau altfel formulata („Atenţie! ... Legea nr. 133 din 08.07.2011”,
 //     „... Legea nr. 195 din 25.07.2024”) -> se inlocuieste cu textul aprobat, ca revizie;
 //   - lipsa: se adauga la sfarsitul corpului, ca revizie, cu formatarea din actele care o au deja.
+// Acelasi cod in hub (browser, /corector) si in comanda locala (aplicatia de Mac): aplicaCuMentiune.
 
-import type { ParagrafIntreg } from "./docx";
+import {
+  adaugaParagrafLaSfarsit, aplicaCorecturiIntreg, paragrafeIntreg,
+  type Aplicare, type Corectura, type DocumentIntreg, type Docx, type ParagrafIntreg, type Revizie,
+} from "./docx";
 
 // Bucatile textului aprobat, cu formatarea din actele care il au deja (demersul Cazacu, 15 sept. 2026):
 // 10 pt, aliniat stanga-dreapta, numele legii in bold.
@@ -68,4 +72,35 @@ export function cautaMentiune(paragrafe: Pick<ParagrafIntreg, "i" | "text">[]): 
     }
   }
   return cel ?? { stare: "lipsa" };
+}
+
+export type RezultatMentiune = "prezenta" | "corectata" | "adaugata" | "de_verificat";
+
+const MOTIV_MENTIUNE = "Mențiunea obligatorie despre datele cu caracter personal, în forma aprobată.";
+
+// Corecturile modelului si mentiunea obligatorie, puse in document (fara scriere). Numerele paragrafelor sunt
+// globale (analizeazaIntreg); corpul e prima parte, deci corecturile din modul corectura, facute pe corp, raman
+// valabile. `xml` are doar partile schimbate.
+export function aplicaCuMentiune(
+  docx: Docx, doc: DocumentIntreg, corecturiModel: Corectura[], rev: Revizie
+): { xml: Record<string, string>; aplicari: Aplicare[]; mentiune: RezultatMentiune } {
+  const gasita = cautaMentiune(paragrafeIntreg(doc));
+  // Modelul nu atinge mentiunea: corecturile lui pe acel paragraf se arunca.
+  const lista = corecturiModel.filter((c) => c.i !== gasita.i);
+  if (gasita.stare === "diferita") {
+    // exact: textul aprobat intra caracter cu caracter, inclusiv ș/ț cu virgula in locul celor cu sedila
+    lista.push({ i: gasita.i!, vechi: gasita.text!, nou: MENTIUNE_DATE_PERSONALE, tip: "formulare", motiv: MOTIV_MENTIUNE, exact: true });
+  }
+  const { xml, aplicari } = aplicaCorecturiIntreg(doc, lista, rev);
+  if (gasita.stare === "lipsa") xml[docx.cale] = adaugaParagrafLaSfarsit(xml[docx.cale] ?? docx.xml, BUCATI_MENTIUNE, rev, MARIME_MENTIUNE);
+  const inlocuita = aplicari.some((a) => a.i === gasita.i && a.nou === MENTIUNE_DATE_PERSONALE && a.stare === "aplicata");
+  const mentiune: RezultatMentiune =
+    gasita.stare === "prezenta" ? "prezenta" : gasita.stare === "lipsa" ? "adaugata" : inlocuita ? "corectata" : "de_verificat";
+  return { xml, aplicari, mentiune };
+}
+
+// O observatie a modelului despre mentiune (la verificare) se arunca: mentiunea se verifica in cod.
+export function despreMentiune(o: { text: string }): boolean {
+  const t = o.text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  return t.includes("caracter personal") && /atentie|mentiun|legea/.test(t);
 }

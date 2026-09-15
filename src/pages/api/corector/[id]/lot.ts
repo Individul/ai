@@ -8,7 +8,7 @@ import { corecteazaLot, EroareCorectare } from "../../../../lib/motor";
 import { citesteJson, eroare, json } from "../../../../lib/api";
 import { EroareGemini } from "../../../../lib/gemini";
 import { EroareZai } from "../../../../lib/zai";
-import { LIMITA_LOT_SERVER, LIMITA_LOTURI } from "../../../../lib/corector";
+import { bugetCaractere, LIMITA_LOT_SERVER, LIMITA_LOTURI } from "../../../../lib/corector";
 import type { ParagrafText } from "../../../../lib/docx";
 
 export const POST: APIRoute = async ({ params, request, locals }) => {
@@ -30,13 +30,17 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   }
   if (!lot.length) return eroare(400, "Lotul e gol.");
   if (lot.length > 2000 || caractere > LIMITA_LOT_SERVER) return eroare(413, "Lotul e prea mare.");
+  // Bugetul declarat la pornire (de doua ori, pentru reincercari): ruta nu e o poarta libera spre model.
+  if (corectare.caractere_trimise + caractere > bugetCaractere(corectare.caractere)) {
+    return eroare(413, "Documentul a depășit textul declarat la pornire. Încarcă-l din nou.");
+  }
 
   try {
     const r = await corecteazaLot(env, corectare.model, lot);
-    await adaugaLaCorectare(env.DB, corectare.id, { ...r, reusit: true });
+    await adaugaLaCorectare(env.DB, corectare.id, { ...r, caractere, reusit: true });
     return json({ corecturi: r.corecturi });
   } catch (e) {
-    if (e instanceof EroareCorectare) await adaugaLaCorectare(env.DB, corectare.id, { ...e.consum, reusit: false });
+    if (e instanceof EroareCorectare) await adaugaLaCorectare(env.DB, corectare.id, { ...e.consum, caractere, reusit: false });
     const status = (e instanceof EroareGemini || e instanceof EroareZai) && e.status === 503 ? 503 : 502;
     return eroare(status, `Modelul nu a putut corecta lotul: ${(e as Error).message}`);
   }

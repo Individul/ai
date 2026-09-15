@@ -17,19 +17,35 @@ const NEAPLICATE: Partial<Record<StareAplicare, string>> = {
   blocata: "de verificat: textul e într-un câmp, într-o revizie existentă sau trece peste un tab",
 };
 
+class EroareCerere extends Error {
+  status: number; // 0 = reteaua, nu serverul
+  constructor(status: number, mesaj: string) {
+    super(mesaj);
+    this.status = status;
+  }
+}
+
 async function post<T>(url: string, corp: unknown): Promise<T> {
-  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corp) });
+  let r: Response;
+  try {
+    r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corp) });
+  } catch {
+    throw new EroareCerere(0, "Nu am putut ajunge la server.");
+  }
   const d = (await r.json().catch(() => ({}))) as T & { eroare?: string };
-  if (!r.ok) throw new Error(d.eroare ?? `Eroare ${r.status}.`);
+  if (!r.ok) throw new EroareCerere(r.status, d.eroare ?? `Eroare ${r.status}.`);
   return d;
 }
 
-// Un lot, cu o singura reincercare (un raspuns stricat al modelului sau o retea capricioasa).
+// Un lot, cu o singura reincercare cand a picat modelul sau reteaua (5xx sau fara raspuns); un refuz
+// al serverului (4xx: lot prea mare, corectare incheiata) nu se reincearca.
 async function corecteazaLot(id: string, paragrafe: ParagrafText[]): Promise<Corectura[]> {
+  const trimite = async () => (await post<{ corecturi: Corectura[] }>(`/api/corector/${id}/lot`, { paragrafe })).corecturi;
   try {
-    return (await post<{ corecturi: Corectura[] }>(`/api/corector/${id}/lot`, { paragrafe })).corecturi;
-  } catch {
-    return (await post<{ corecturi: Corectura[] }>(`/api/corector/${id}/lot`, { paragrafe })).corecturi;
+    return await trimite();
+  } catch (e) {
+    if (e instanceof EroareCerere && e.status >= 400 && e.status < 500) throw e;
+    return trimite();
   }
 }
 

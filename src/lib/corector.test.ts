@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cerereCorectura, extrageCorecturi, impartePeLoturi, numara, PROMPT_CORECTOR } from "./corector";
+import { bugetCaractere, cerereCorectura, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR } from "./corector";
 
 describe("impartePeLoturi", () => {
   it("umple loturile in ordine, fara sa depaseasca plafonul; un paragraf lung sta singur", () => {
@@ -51,5 +51,19 @@ describe("numara", () => {
       "0 corecturi", "1 corectură", "2 corecturi", "19 corecturi", "20 de corecturi", "21 de corecturi",
       "100 de corecturi", "101 corecturi", "119 corecturi", "120 de corecturi",
     ]);
+  });
+});
+
+describe("plafoane", () => {
+  it("bugetul de caractere permite o reincercare a fiecarui lot si e plafonat la LIMITA_DOCUMENT", () => {
+    expect(bugetCaractere(10_000)).toBe(45_000);
+    expect(bugetCaractere(LIMITA_DOCUMENT * 5)).toBe(LIMITA_DOCUMENT * 2 + 25_000);
+    expect(bugetCaractere(-1)).toBe(25_000);
+  });
+
+  it("cel mai nefavorabil document (paragrafe putin peste jumatate de lot) incape in LIMITA_LOTURI", () => {
+    const n = Math.floor(LIMITA_DOCUMENT / (LIMITA_LOT / 2 + 1));
+    const paragrafe = Array.from({ length: n }, (_, i) => ({ i, text: "a".repeat(LIMITA_LOT / 2 + 1) }));
+    expect(impartePeLoturi(paragrafe).length).toBeLessThanOrEqual(LIMITA_LOTURI);
   });
 });

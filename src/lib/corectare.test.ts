@@ -17,14 +17,14 @@ describe("jurnalul corectarilor", () => {
     const c = await creeazaCorectare(env.DB, { email: A, zi: ZI, fisier: "raport.docx", caractere: 12_000, model: "deepseek-flash" });
     expect(c).toMatchObject({ stare: "in_curs", loturi: 0, cost_microdolari: 0 });
     await Promise.all([
-      adaugaLaCorectare(env.DB, c.id, { tokens_intrare: 1000, tokens_iesire: 200, cost_microdolari: 300, credite: 0, reusit: true }),
-      adaugaLaCorectare(env.DB, c.id, { tokens_intrare: 500, tokens_iesire: 100, cost_microdolari: 150, credite: 0, reusit: true }),
-      adaugaLaCorectare(env.DB, c.id, { tokens_intrare: 50, tokens_iesire: 10, cost_microdolari: 20, credite: 0, reusit: false }),
+      adaugaLaCorectare(env.DB, c.id, { caractere: 4000, tokens_intrare: 1000, tokens_iesire: 200, cost_microdolari: 300, credite: 0, reusit: true }),
+      adaugaLaCorectare(env.DB, c.id, { caractere: 4000, tokens_intrare: 500, tokens_iesire: 100, cost_microdolari: 150, credite: 0, reusit: true }),
+      adaugaLaCorectare(env.DB, c.id, { caractere: 4000, tokens_intrare: 50, tokens_iesire: 10, cost_microdolari: 20, credite: 0, reusit: false }),
     ]);
     expect(await incheieCorectare(env.DB, c.id, { stare: "ok", corecturi: 9, aplicate: 8, mesaj: null, durata_ms: 5000 })).toBe(true);
     expect(await incheieCorectare(env.DB, c.id, { stare: "eroare", corecturi: 0, aplicate: 0, mesaj: "x", durata_ms: 1 })).toBe(false);
     expect(await citesteCorectare(env.DB, c.id)).toMatchObject({
-      stare: "ok", loturi: 2, tokens_intrare: 1550, tokens_iesire: 310, cost_microdolari: 470, corecturi: 9, aplicate: 8, durata_ms: 5000,
+      stare: "ok", loturi: 2, caractere_trimise: 12_000, tokens_intrare: 1550, tokens_iesire: 310, cost_microdolari: 470, corecturi: 9, aplicate: 8, durata_ms: 5000,
     });
 
     const catalog = await creeazaCatalog(env.DB, "penala", { titlu: "Legislația penală", stare: "activ" });

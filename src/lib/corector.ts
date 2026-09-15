@@ -10,7 +10,9 @@ export const LIMITA_LOT = 4_000;          // caractere pe cerere: cu gandirea po
 export const LIMITA_PARAGRAF = 20_000;    // un paragraf mai lung nu se trimite
 export const LIMITA_LOT_SERVER = 25_000;  // plafonul verificat pe server (un paragraf lung sta singur in lot)
 export const LIMITA_DOCUMENT = 400_000;   // ≈ 150 de pagini
-export const LIMITA_LOTURI = 100;         // cereri pe o corectare
+// Cereri pe o corectare. Un document de 400.000 de caractere face pana la 200 de loturi cand
+// paragrafele au putin peste 2.000 de caractere (cate unul pe lot); plafonul real e pe caractere.
+export const LIMITA_LOTURI = 250;
 export const LOTURI_PARALELE = 4;
 export const AUTOR_REVIZII = "Corector AI";
 export const TIPURI_CORECTURA = ["ortografie", "gramatică", "punctuație", "formulare"] as const;
@@ -40,6 +42,12 @@ Răspunzi doar cu JSON: {"corecturi":[{"i":număr,"vechi":"...","nou":"...","tip
 - "nou" e textul care îl înlocuiește pe "vechi".
 - "motiv" explică scurt și exact regula, în cel mult 15 cuvinte.
 - Dacă nu există greșeli, răspunzi {"corecturi":[]}.`;
+
+// Cate caractere poate trimite clientul modelului pentru o corectare: de doua ori cat a declarat
+// la pornire (un lot picat se reincearca o data), plus un lot. Peste, serverul refuza lotul.
+export function bugetCaractere(declarate: number): number {
+  return Math.min(Math.max(declarate, 0), LIMITA_DOCUMENT) * 2 + LIMITA_LOT_SERVER;
+}
 
 // Paragrafele, in ordine, in loturi de cel mult `max` caractere; un paragraf mai lung sta singur.
 export function impartePeLoturi(paragrafe: ParagrafText[], max = LIMITA_LOT): ParagrafText[][] {

@@ -227,6 +227,7 @@ export interface Corectare {
   zi: string;
   fisier: string;
   caractere: number;
+  caractere_trimise: number; // adunate pe loturi, si la cele picate dupa ce modelul a raspuns
   loturi: number;
   corecturi: number;
   aplicate: number;
@@ -243,7 +244,7 @@ export interface Corectare {
 }
 
 const COL_CORECTARE =
-  "id, email, zi, fisier, caractere, loturi, corecturi, aplicate, model, tokens_intrare, tokens_iesire, cost_microdolari, credite, stare, mesaj, durata_ms, creat_la, actualizat_la";
+  "id, email, zi, fisier, caractere, caractere_trimise, loturi, corecturi, aplicate, model, tokens_intrare, tokens_iesire, cost_microdolari, credite, stare, mesaj, durata_ms, creat_la, actualizat_la";
 
 export async function creeazaCorectare(
   db: D1Database, c: { email: string; zi: string; fisier: string; caractere: number; model: string }
@@ -264,18 +265,19 @@ export async function citesteCorectare(db: D1Database, id: string): Promise<Core
 }
 
 // Consumul unui lot, adunat in aceeasi instructiune: loturile unei corectari merg in paralel.
-// `reusit` = modelul a dat corecturi lizibile (altfel se adauga doar costul).
+// `reusit` = modelul a dat corecturi lizibile (altfel se adauga doar costul si caracterele).
 export async function adaugaLaCorectare(
   db: D1Database, id: string,
-  x: { tokens_intrare: number; tokens_iesire: number; cost_microdolari: number; credite: number; reusit: boolean }
+  x: { caractere: number; tokens_intrare: number; tokens_iesire: number; cost_microdolari: number; credite: number; reusit: boolean }
 ): Promise<void> {
   await db
     .prepare(
-      `UPDATE corectari SET loturi = loturi + ?, tokens_intrare = tokens_intrare + ?, tokens_iesire = tokens_iesire + ?,
+      `UPDATE corectari SET loturi = loturi + ?, caractere_trimise = caractere_trimise + ?,
+         tokens_intrare = tokens_intrare + ?, tokens_iesire = tokens_iesire + ?,
          cost_microdolari = cost_microdolari + ?, credite = credite + ?, actualizat_la = ?
        WHERE id = ?`
     )
-    .bind(x.reusit ? 1 : 0, x.tokens_intrare, x.tokens_iesire, x.cost_microdolari, x.credite, acum(), id)
+    .bind(x.reusit ? 1 : 0, x.caractere, x.tokens_intrare, x.tokens_iesire, x.cost_microdolari, x.credite, acum(), id)
     .run();
 }
 

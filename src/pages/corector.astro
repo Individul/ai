@@ -1,7 +1,8 @@
 ---
-// Corectorul de documente Word: colegul incarca un .docx, textul paragrafelor merge pe loturi la
-// modelul din setari.model_corector, iar documentul se intoarce cu corecturile ca revizii Word.
-// Tot lucrul cu fisierul e in browser (src/scripts/corector.ts); serverul vede doar textul.
+// Corectorul de documente Word: colegul incarca un .docx, textul merge la modelul din
+// setari.model_corector, iar documentul se intoarce cu corecturile ca revizii Word. Doua moduri, ca in
+// aplicatia de Mac: corectura (corpul, pe loturi) si verificare (tot documentul intr-o cerere, cu antete
+// si observatii). Tot lucrul cu fisierul e in browser (src/scripts/corector.ts); serverul vede doar textul.
 import { env } from "cloudflare:workers";
 import Base from "../layouts/Base.astro";
 import Suma from "../components/Suma.astro";
@@ -9,7 +10,7 @@ import { corectariUtilizator, modelCorector } from "../lib/consum";
 import { cheieMotor } from "../lib/motor";
 import { cursUsd } from "../lib/curs";
 import { aziChisinau, fmtMoment } from "../lib/data";
-import { numara } from "../lib/corector";
+import { LIMITA_VERIFICARE, numara } from "../lib/corector";
 import { motorModel, NUME_MOTOR, stareVarf, TARIFE } from "../lib/validare";
 import { textVarf } from "../lib/varf";
 
@@ -20,8 +21,12 @@ const motor = motorModel(model) ?? "gemini";
 const configurat = !!cheieMotor(env, motor);
 const numeModel = TARIFE[model]?.eticheta.split(" · ")[0] ?? model;
 const varf = textVarf(stareVarf(model));
-const descriere = (d: (typeof documente)[number]) =>
-  d.stare === "ok" ? `${numara(d.aplicate, "corectură", "corecturi")}` : d.stare === "eroare" ? "eroare" : "neterminat";
+const descriere = (d: (typeof documente)[number]) => {
+  if (d.stare !== "ok") return d.stare === "eroare" ? "eroare" : "neterminat";
+  const parti = [numara(d.aplicate, "corectură", "corecturi")];
+  if (d.mod === "verificare") parti.push(numara(d.observatii, "observație", "observații"));
+  return parti.join(" · ");
+};
 ---
 
 <Base title="Corector · Culegeri">
@@ -33,6 +38,19 @@ const descriere = (d: (typeof documente)[number]) =>
 
   {configurat ? (
     <section class="corector" data-corector>
+      <fieldset class="moduri">
+        <legend>Ce fac cu documentul</legend>
+        <label>
+          <input type="radio" name="mod" value="corectura" data-mod checked />
+          <span class="nume">Corectură</span>
+          <span class="sub">Corpul documentului, pe bucăți. Merge și pe documente mari.</span>
+        </label>
+        <label>
+          <input type="radio" name="mod" value="verificare" data-mod />
+          <span class="nume">Verificare</span>
+          <span class="sub">Tot documentul odată, cu antet și subsol, plus observațiile care cer om. Până la {(LIMITA_VERIFICARE / 1000)} mii de caractere.</span>
+        </label>
+      </fieldset>
       <label class="zona" data-zona>
         <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" data-fisier />
         <span class="zona-titlu">Alege un document .docx</span>
@@ -46,13 +64,16 @@ const descriere = (d: (typeof documente)[number]) =>
           <p data-rezumat></p>
           <a class="buton principal" data-descarca href="#" download>Descarcă documentul corectat</a>
         </div>
+        <ul class="observatii" data-observatii hidden></ul>
         <ol class="corecturi" data-lista></ol>
       </div>
 
       <p class="lamurire">
         Textul documentului e trimis modelului {numeModel} ({NUME_MOTOR[motor]}) și nu se păstrează pe server: în jurnal rămân
         doar numele fișierului, numărul de corecturi și costul. Nu încărca documente cu date cu caracter personal sau cu acces limitat.
-        Se corectează corpul documentului, cu tot cu tabele; antetele, subsolurile și notele de subsol rămân cum sunt.
+        La „corectură” se lucrează pe corpul documentului, cu tot cu tabele; la „verificare” intră și antetele, subsolurile
+        și notele de subsol, iar modelul spune în plus ce a găsit și nu poate repara singur: date care se contrazic,
+        rubrici necompletate, formatare ruptă, îndoieli juridice.
       </p>
       {varf && <p class:list={["lamurire", "varf", { activ: varf.activ }]}>{varf.text.replace("fiecare întrebare", "fiecare document")}</p>}
     </section>
@@ -82,6 +103,23 @@ const descriere = (d: (typeof documente)[number]) =>
 
 <style>
   .intro { color: var(--text-2); font-size: 17px; margin: 10px 0 24px; max-width: 640px; }
+  .moduri { display: flex; flex-wrap: wrap; gap: 10px; border: 0; padding: 0; margin: 0 0 16px; }
+  .moduri legend { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); padding: 0 0 8px; }
+  .moduri label {
+    flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: 14px;
+    border: 1px solid var(--line); cursor: pointer; transition: background 0.15s, border-color 0.15s;
+  }
+  .moduri label:hover { border-color: rgba(var(--violet-rgb), 0.5); }
+  .moduri label:has(input:checked) { border-color: var(--violet); background: rgba(var(--violet-rgb), 0.07); }
+  .moduri label:focus-within { outline: 2px solid var(--coral); outline-offset: 2px; }
+  .moduri input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .moduri .nume { font-weight: 700; font-size: 15px; }
+  .moduri label:has(input:checked) .nume { color: var(--violet); }
+  .moduri .sub { color: var(--faint); font-size: 12.5px; }
+  .observatii { list-style: none; margin: 0; padding: 0; }
+  .observatii :global(li) { display: flex; flex-direction: column; gap: 3px; padding: 12px 0 12px 14px; border-bottom: 1px solid var(--line); border-left: 2px solid rgba(var(--galben-rgb), 0.55); }
+  .observatii :global(.tip) { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--wip); }
+  .observatii :global(.text) { font-size: 14.5px; color: var(--text-2); overflow-wrap: anywhere; }
   .zona {
     position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     padding: 34px 20px; border-radius: 18px; border: 1.5px dashed rgba(var(--violet-rgb), 0.45);

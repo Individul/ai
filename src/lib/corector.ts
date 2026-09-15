@@ -308,6 +308,15 @@ export interface Observatie {
   text: string;
 }
 
+// Eticheta afisata pentru fiecare fel de observatie (aceleasi cuvinte ca in aplicatia de Mac).
+export const ETICHETA_OBSERVATIE: Record<string, string> = {
+  date: "date care nu se potrivesc",
+  juridic: "de verificat juridic",
+  formatare: "formatare",
+  lipsa: "rubrică necompletată",
+  altele: "de verificat",
+};
+
 export const PROMPT_VERIFICARE = `${PROMPT_CORECTOR}
 
 Primești acum TOT documentul, nu doar corpul: fiecare paragraf are și „unde”: corp, antet, subsol sau note.
@@ -320,10 +329,47 @@ Răspunzi cu JSON: {"corecturi":[{"i":număr,"vechi":"...","nou":"...","tip":"..
   - "lipsa": rubrici rămase goale (număr de înregistrare, dată, număr de file, semnătură);
   - "altele": neconcordanțe între versiunea română și cea rusă, denumiri oficiale greșite.
 - Fiecare observație începe cu citatul scurt din document, apoi ce e în neregulă și ce ar trebui verificat. Cel mult 20 de observații, cele mai importante primele.
+- Scrii pentru om: nu pomeni numerele paragrafelor („i”), ci citatul din document.
+- Nu știi ce zi e azi, deci nu spui despre nicio dată din document că e în viitor sau în trecut.
 - Nu inventa: dacă nu ai ce semnala, întorci "observatii":[].`;
 
 export function mesajVerificare(paragrafe: { i: number; text: string; fel: string }[]): string {
   return JSON.stringify({ paragrafe: paragrafe.map((p) => ({ i: p.i, unde: p.fel, text: p.text })) });
+}
+
+// Schema raspunsului la verificare, pentru motoarele care o accepta (Claude). Aceleasi limite ca la
+// SCHEMA_CORECTURI: additionalProperties false peste tot, fara minLength.
+export const SCHEMA_VERIFICARE: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    corecturi: (SCHEMA_CORECTURI.properties as { corecturi: unknown }).corecturi,
+    observatii: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          tip: { type: "string", enum: [...TIPURI_OBSERVATIE] },
+          text: { type: "string" },
+        },
+        required: ["tip", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["corecturi", "observatii"],
+  additionalProperties: false,
+};
+
+// Verificarea intregului document, intr-o singura cerere. Iesirea e mai mare decat la un lot (corecturi
+// din tot documentul plus observatii), dar tot mica fata de document.
+export function cerereVerificare(model: string, paragrafe: { i: number; text: string; fel: string }[]): CerereText {
+  return {
+    model,
+    sistem: PROMPT_VERIFICARE,
+    utilizator: mesajVerificare(paragrafe),
+    maxTokens: 32_768,
+    schema: SCHEMA_VERIFICARE,
+  };
 }
 
 export function extrageVerificare(text: string, indici: Set<number>): { corecturi: Corectura[]; observatii: Observatie[] } {

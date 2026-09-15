@@ -221,16 +221,20 @@ export async function istoricCatalog(
 
 // Jurnalul corectorului de documente: o linie pe document, fara textul lui. Nu conteaza la limita pe zi;
 // costul intra in totaluri prin vederea `cheltuieli` (intrebari + corectari).
+export type ModCorectare = "corectura" | "verificare";
+
 export interface Corectare {
   id: string;
   email: string;
   zi: string;
   fisier: string;
+  mod: ModCorectare;
   caractere: number;
   caractere_trimise: number; // adunate pe loturi, si la cele picate dupa ce modelul a raspuns
   loturi: number;
   corecturi: number;
   aplicate: number;
+  observatii: number;
   model: string;
   tokens_intrare: number;
   tokens_iesire: number;
@@ -244,16 +248,16 @@ export interface Corectare {
 }
 
 const COL_CORECTARE =
-  "id, email, zi, fisier, caractere, caractere_trimise, loturi, corecturi, aplicate, model, tokens_intrare, tokens_iesire, cost_microdolari, credite, stare, mesaj, durata_ms, creat_la, actualizat_la";
+  "id, email, zi, fisier, mod, caractere, caractere_trimise, loturi, corecturi, aplicate, observatii, model, tokens_intrare, tokens_iesire, cost_microdolari, credite, stare, mesaj, durata_ms, creat_la, actualizat_la";
 
 export async function creeazaCorectare(
-  db: D1Database, c: { email: string; zi: string; fisier: string; caractere: number; model: string }
+  db: D1Database, c: { email: string; zi: string; fisier: string; mod: ModCorectare; caractere: number; model: string }
 ): Promise<Corectare> {
   const id = crypto.randomUUID();
   const moment = acum();
   await db
-    .prepare("INSERT INTO corectari (id, email, zi, fisier, caractere, model, stare, creat_la, actualizat_la) VALUES (?, ?, ?, ?, ?, ?, 'in_curs', ?, ?)")
-    .bind(id, c.email, c.zi, c.fisier, c.caractere, c.model, moment, moment)
+    .prepare("INSERT INTO corectari (id, email, zi, fisier, mod, caractere, model, stare, creat_la, actualizat_la) VALUES (?, ?, ?, ?, ?, ?, ?, 'in_curs', ?, ?)")
+    .bind(id, c.email, c.zi, c.fisier, c.mod, c.caractere, c.model, moment, moment)
     .run();
   const r = await citesteCorectare(db, id);
   if (!r) throw new Error("corectarea lipseste dupa inserare");
@@ -284,14 +288,14 @@ export async function adaugaLaCorectare(
 // Starea finala, o singura data (doar din in_curs).
 export async function incheieCorectare(
   db: D1Database, id: string,
-  x: { corecturi: number; aplicate: number; stare: "ok" | "eroare"; mesaj: string | null; durata_ms: number }
+  x: { corecturi: number; aplicate: number; observatii?: number; stare: "ok" | "eroare"; mesaj: string | null; durata_ms: number }
 ): Promise<boolean> {
   const r = await db
     .prepare(
-      `UPDATE corectari SET corecturi = ?, aplicate = ?, stare = ?, mesaj = ?, durata_ms = ?, actualizat_la = ?
+      `UPDATE corectari SET corecturi = ?, aplicate = ?, observatii = ?, stare = ?, mesaj = ?, durata_ms = ?, actualizat_la = ?
        WHERE id = ? AND stare = 'in_curs'`
     )
-    .bind(x.corecturi, x.aplicate, x.stare, x.mesaj, x.durata_ms, acum(), id)
+    .bind(x.corecturi, x.aplicate, x.observatii ?? 0, x.stare, x.mesaj, x.durata_ms, acum(), id)
     .run();
   return (r.meta.changes ?? 0) > 0;
 }

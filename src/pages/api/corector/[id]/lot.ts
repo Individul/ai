@@ -16,6 +16,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   const corectare = await citesteCorectare(env.DB, params.id ?? "");
   if (!corectare || corectare.email !== locals.email) return eroare(404, "Corectarea nu există.");
   if (corectare.stare !== "in_curs") return eroare(409, "Corectarea s-a încheiat deja.");
+  if (corectare.mod !== "corectura") return eroare(409, "Corectarea asta e pe tot documentul, nu pe loturi.");
   if (corectare.loturi >= LIMITA_LOTURI) return eroare(429, "Prea multe loturi pentru un singur document.");
 
   const c = await citesteJson<{ paragrafe?: unknown }>(request);

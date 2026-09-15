@@ -1,4 +1,4 @@
-// POST /api/corector/{id}/gata { stare: "ok" | "eroare", corecturi, aplicate, mesaj? }
+// POST /api/corector/{id}/gata { stare: "ok" | "eroare", corecturi, aplicate, observatii?, mesaj? }
 // Incheie corectarea in jurnal, o singura data: cate corecturi a propus modelul, cate au intrat in
 // document si, daca e cazul, ce n-a mers (loturi picate, document care nu s-a putut construi).
 import type { APIRoute } from "astro";
@@ -10,6 +10,7 @@ interface Corp {
   stare?: string;
   corecturi?: number;
   aplicate?: number;
+  observatii?: number;
   mesaj?: string;
 }
 
@@ -28,6 +29,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     stare: c.date.stare === "eroare" ? "eroare" : "ok",
     corecturi: numar(c.date.corecturi),
     aplicate: numar(c.date.aplicate),
+    observatii: numar(c.date.observatii),
     mesaj,
     durata_ms: Math.max(0, Date.now() - Date.parse(corectare.creat_la)),
   });

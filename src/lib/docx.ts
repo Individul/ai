@@ -285,7 +285,7 @@ export interface Revizie {
 }
 
 // Caractere pe care XML-ul nu le accepta; tab-ul si randul nou dintr-o inserare devin spatiu.
-const curataInserat = (s: string) => s.replace(/[\t\n\r]/g, " ").replace(/[ --￾￿]/g, "");
+const curataInserat = (s: string) => s.replace(/[\t\n\r]/g, " ").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/g, "");
 
 function idMaxim(tokeni: string[]): number {
   let max = 0;
@@ -424,7 +424,8 @@ export function aplicaCorecturi(a: AnalizaDocx, corecturi: Corectura[], rev: Rev
 // Modul „verificare” se uita la tot documentul, nu doar la corp: antetele si subsolurile tin numarul de
 // inregistrare, telefoanele si numele institutiei, iar acolo stau de obicei greselile ramase neatinse.
 // Paragrafele primesc un numar global, in ordinea partilor, ca modelul sa trimita corecturile pe el.
-export type FelParte = "corp" | "antet" | "subsol" | "note";
+export const FELURI_PARTE = ["corp", "antet", "subsol", "note"] as const;
+export type FelParte = (typeof FELURI_PARTE)[number];
 
 export interface ParteDocx {
   cale: string;

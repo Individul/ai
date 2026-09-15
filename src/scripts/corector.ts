@@ -1,12 +1,21 @@
-// Corectorul de documente in browser: desface .docx-ul, trimite textul paragrafelor pe loturi la
-// /api/corector, pune corecturile inapoi ca revizii Word (docx.ts) si ofera documentul spre
-// descarcare. Fisierul nu pleaca din browser; serverul primeste doar textul paragrafelor.
+// Corectorul de documente in browser: desface .docx-ul, trimite textul la /api/corector, pune
+// corecturile inapoi ca revizii Word (docx.ts) si ofera documentul spre descarcare. Fisierul nu pleaca
+// din browser; serverul primeste doar textul paragrafelor.
+//
+// Doua moduri, ca in aplicatia de Mac:
+//   - corectura: doar corpul, pe loturi, in paralel;
+//   - verificare: tot documentul (corp, antete, subsoluri, note) intr-o singura cerere, cu observatii
+//     pe deasupra (date care se contrazic, rubrici goale, formatare rupta, indoieli juridice).
 
 import {
-  analizeazaDocument, aplicaCorecturi, deschideDocx, EroareDocx, paragrafeDeCorectat, salveazaDocx,
+  analizeazaDocument, analizeazaIntreg, aplicaCorecturi, aplicaCorecturiIntreg, deschideDocx, EroareDocx,
+  paragrafeDeCorectat, paragrafeIntreg, salveazaDocx, salveazaDocxParti,
   type Aplicare, type Corectura, type ParagrafText, type StareAplicare,
 } from "../lib/docx";
-import { AUTOR_REVIZII, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_PARAGRAF, LOTURI_PARALELE, numara } from "../lib/corector";
+import {
+  AUTOR_REVIZII, ETICHETA_OBSERVATIE, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_PARAGRAF, LIMITA_VERIFICARE,
+  LOTURI_PARALELE, numara, type Observatie,
+} from "../lib/corector";
 
 const TIP_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const MAX_OCTETI = 30 * 1024 * 1024;
@@ -60,6 +69,13 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, clasa?: string, 
 const inceput = (s: string) => (s.length >= 40 ? `…${s.replace(/^\S*\s/, "")}` : s);
 const sfarsit = (s: string) => (s.length >= 40 ? `${s.replace(/\s\S*$/, "")}…` : s);
 
+function randObservatie(o: Observatie): HTMLLIElement {
+  const li = element("li");
+  li.appendChild(element("div", "tip", ETICHETA_OBSERVATIE[o.tip] ?? ETICHETA_OBSERVATIE.altele));
+  li.appendChild(element("p", "text", o.text));
+  return li;
+}
+
 function randCorectura(a: Aplicare): HTMLLIElement {
   const li = element("li", a.stare);
   const tip = element("div", "tip", a.tip);
@@ -85,6 +101,7 @@ function porneste(radacina: HTMLElement) {
   const rezumat = radacina.querySelector<HTMLElement>("[data-rezumat]")!;
   const descarca = radacina.querySelector<HTMLAnchorElement>("[data-descarca]")!;
   const lista = radacina.querySelector<HTMLOListElement>("[data-lista]")!;
+  const listaObservatii = radacina.querySelector<HTMLUListElement>("[data-observatii]")!;
   let ocupat = false;
   let urlDocument: string | null = null;
 
@@ -96,6 +113,18 @@ function porneste(radacina: HTMLElement) {
     progres.hidden = fractie === null;
     progres.querySelector("span")!.style.width = `${Math.round((fractie ?? 0) * 100)}%`;
   };
+  const modAles = () => (radacina.querySelector<HTMLInputElement>("[data-mod]:checked")?.value === "verificare" ? "verificare" : "corectura");
+
+  // O singura cerere lunga, fara progres pe parti: aratam secundele, ca sa se vada ca merge.
+  const cronometru = (text: string) => {
+    const t0 = Date.now();
+    const arata = () => scrie(`${text}… ${Math.round((Date.now() - t0) / 1000)} s`);
+    arata();
+    const ceas = setInterval(arata, 1000);
+    return () => clearInterval(ceas);
+  };
+
+  const xmlStricat = (xml: string) => new DOMParser().parseFromString(xml, "application/xml").getElementsByTagName("parsererror").length > 0;
 
   async function corecteaza(fisier: File) {
     if (ocupat) return;
@@ -107,58 +136,100 @@ function porneste(radacina: HTMLElement) {
       if (/\.doc$/i.test(fisier.name)) throw new EroareDocx("Documentele .doc vechi nu se pot citi. Deschide-l în Word și salvează-l ca .docx.");
       if (!/\.docx$/i.test(fisier.name)) throw new EroareDocx("Alege un document Word .docx.");
       if (fisier.size > MAX_OCTETI) throw new EroareDocx("Documentul are peste 30 MB.");
+      const mod = modAles();
       scrie(`Se citește ${fisier.name}…`);
       const docx = deschideDocx(new Uint8Array(await fisier.arrayBuffer()));
-      const analiza = analizeazaDocument(docx.xml);
-      const paragrafe = paragrafeDeCorectat(analiza).filter((p) => p.text.length <= LIMITA_PARAGRAF);
-      const caractere = paragrafe.reduce((s, p) => s + p.text.length, 0);
-      if (!paragrafe.length) throw new EroareDocx("Documentul nu are text de corectat.");
-      if (caractere > LIMITA_DOCUMENT) {
-        throw new EroareDocx(`Documentul are ${caractere.toLocaleString("ro-RO")} de caractere de text, peste plafonul de 400.000. Împarte-l în părți mai mici.`);
-      }
+      const rev = { autor: AUTOR_REVIZII, data: new Date().toISOString().replace(/\.\d{3}Z$/, "Z") };
+      let aplicari: Aplicare[];
+      let construieste: () => Uint8Array;
+      let observatii: Observatie[] = [];
+      let propuse = 0;
+      let partiale: string | null = null;
 
-      id = (await post<{ id: string }>("/api/corector", { fisier: fisier.name, caractere })).id;
-      const loturi = impartePeLoturi(paragrafe);
-      const corecturi: Corectura[][] = loturi.map(() => []);
-      let picate = 0;
-      let ultimaEroare = "";
-      let terminate = 0;
-      const durata = loturi.length > LOTURI_PARALELE ? " Poate dura câteva minute." : "";
-      const anunta = () => scrie(`Se corectează: ${terminate} din ${numara(loturi.length, "parte", "părți")}…${durata}`);
-      anunta();
-      avans(0);
-      let urmatorul = 0;
-      const lucrator = async () => {
-        while (urmatorul < loturi.length) {
-          const k = urmatorul++;
-          try {
-            corecturi[k] = await corecteazaLot(id!, loturi[k]!);
-          } catch (e) {
-            picate++;
-            ultimaEroare = (e as Error).message;
-          }
-          terminate++;
-          avans(terminate / loturi.length);
-          anunta();
+      if (mod === "verificare") {
+        const doc = analizeazaIntreg(docx);
+        const paragrafe = paragrafeIntreg(doc).filter((p) => p.text.length <= LIMITA_PARAGRAF);
+        const caractere = paragrafe.reduce((s, p) => s + p.text.length, 0);
+        if (!paragrafe.length) throw new EroareDocx("Documentul nu are text de verificat.");
+        if (caractere > LIMITA_VERIFICARE) {
+          throw new EroareDocx(
+            `Documentul are ${caractere.toLocaleString("ro-RO")} de caractere de text, peste plafonul de ${LIMITA_VERIFICARE.toLocaleString("ro-RO")} al verificării. ` +
+            "Alege „corectură”: merge și pe documente mari, dar doar pe corp."
+          );
         }
-      };
-      await Promise.all(Array.from({ length: Math.min(LOTURI_PARALELE, loturi.length) }, lucrator));
-      if (picate === loturi.length) throw new Error(ultimaEroare || "Modelul nu a răspuns.");
+        id = (await post<{ id: string }>("/api/corector", { fisier: fisier.name, caractere, mod })).id;
+        // O singura cerere, deci nu se reincearca: ar fi inca un document intreg platit.
+        const opreste = cronometru("Se verifică tot documentul: corp, antet, subsol");
+        let r: { corecturi: Corectura[]; observatii: Observatie[] };
+        try {
+          r = await post(`/api/corector/${id}/verificare`, { paragrafe });
+        } finally {
+          opreste();
+        }
+        propuse = r.corecturi.length;
+        observatii = r.observatii;
+        scrie("Se pun corecturile în document…");
+        const pus = aplicaCorecturiIntreg(doc, r.corecturi, rev);
+        if (Object.values(pus.xml).some(xmlStricat)) {
+          throw new Error("Documentul corectat nu a ieșit valid, așa că nu l-am pus la descărcare.");
+        }
+        aplicari = pus.aplicari;
+        construieste = () => salveazaDocxParti(docx, pus.xml);
+      } else {
+        const analiza = analizeazaDocument(docx.xml);
+        const paragrafe = paragrafeDeCorectat(analiza).filter((p) => p.text.length <= LIMITA_PARAGRAF);
+        const caractere = paragrafe.reduce((s, p) => s + p.text.length, 0);
+        if (!paragrafe.length) throw new EroareDocx("Documentul nu are text de corectat.");
+        if (caractere > LIMITA_DOCUMENT) {
+          throw new EroareDocx(`Documentul are ${caractere.toLocaleString("ro-RO")} de caractere de text, peste plafonul de 400.000. Împarte-l în părți mai mici.`);
+        }
 
-      scrie("Se pun corecturile în document…");
-      const toate = corecturi.flat();
-      const data = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-      const { xml, aplicari } = aplicaCorecturi(analiza, toate, { autor: AUTOR_REVIZII, data });
-      if (new DOMParser().parseFromString(xml, "application/xml").getElementsByTagName("parsererror").length) {
-        throw new Error("Documentul corectat nu a ieșit valid, așa că nu l-am pus la descărcare.");
+        id = (await post<{ id: string }>("/api/corector", { fisier: fisier.name, caractere, mod })).id;
+        const loturi = impartePeLoturi(paragrafe);
+        const corecturi: Corectura[][] = loturi.map(() => []);
+        let picate = 0;
+        let ultimaEroare = "";
+        let terminate = 0;
+        const durata = loturi.length > LOTURI_PARALELE ? " Poate dura câteva minute." : "";
+        const anunta = () => scrie(`Se corectează: ${terminate} din ${numara(loturi.length, "parte", "părți")}…${durata}`);
+        anunta();
+        avans(0);
+        let urmatorul = 0;
+        const lucrator = async () => {
+          while (urmatorul < loturi.length) {
+            const k = urmatorul++;
+            try {
+              corecturi[k] = await corecteazaLot(id!, loturi[k]!);
+            } catch (e) {
+              picate++;
+              ultimaEroare = (e as Error).message;
+            }
+            terminate++;
+            avans(terminate / loturi.length);
+            anunta();
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(LOTURI_PARALELE, loturi.length) }, lucrator));
+        if (picate === loturi.length) throw new Error(ultimaEroare || "Modelul nu a răspuns.");
+
+        scrie("Se pun corecturile în document…");
+        const toate = corecturi.flat();
+        propuse = toate.length;
+        partiale = picate ? `${numara(picate, "parte", "părți")} din ${loturi.length} nu s-au putut corecta (${ultimaEroare})` : null;
+        const { xml, aplicari: puse } = aplicaCorecturi(analiza, toate, rev);
+        if (xmlStricat(xml)) throw new Error("Documentul corectat nu a ieșit valid, așa că nu l-am pus la descărcare.");
+        aplicari = puse;
+        construieste = () => salveazaDocx(docx, xml);
       }
+
       const aplicate = aplicari.filter((a) => a.stare === "aplicata");
       const deVerificat = aplicari.filter((a) => NEAPLICATE[a.stare]);
-      const partiale = picate ? `${numara(picate, "parte", "părți")} din ${loturi.length} nu s-au putut corecta (${ultimaEroare})` : null;
-      await post(`/api/corector/${id}/gata`, { stare: "ok", corecturi: toate.length, aplicate: aplicate.length, mesaj: partiale }).catch(() => undefined);
+      await post(`/api/corector/${id}/gata`, {
+        stare: "ok", corecturi: propuse, aplicate: aplicate.length, observatii: observatii.length, mesaj: partiale,
+      }).catch(() => undefined);
 
       if (urlDocument) URL.revokeObjectURL(urlDocument);
-      urlDocument = aplicate.length ? URL.createObjectURL(new Blob([salveazaDocx(docx, xml) as Uint8Array<ArrayBuffer>], { type: TIP_DOCX })) : null;
+      urlDocument = aplicate.length ? URL.createObjectURL(new Blob([construieste() as Uint8Array<ArrayBuffer>], { type: TIP_DOCX })) : null;
       descarca.hidden = !urlDocument;
       if (urlDocument) {
         descarca.href = urlDocument;
@@ -168,7 +239,10 @@ function porneste(radacina: HTMLElement) {
         ? `${numara(aplicate.length, "corectură", "corecturi")} ${aplicate.length === 1 ? "pusă" : "puse"} în document ca modificări urmărite.`
         : deVerificat.length ? "Nicio corectură nu a putut fi pusă automat în document." : "Nu am găsit greșeli în document.";
       const frazaVerificat = deVerificat.length ? ` ${numara(deVerificat.length, "propunere", "propuneri")} de verificat manual, mai jos.` : "";
-      rezumat.textContent = `${frazaAplicate}${frazaVerificat}${partiale ? ` Atenție: ${partiale}.` : ""}`;
+      const frazaObservatii = observatii.length ? ` ${numara(observatii.length, "observație", "observații")} pentru tine, mai jos.` : "";
+      rezumat.textContent = `${frazaAplicate}${frazaVerificat}${frazaObservatii}${partiale ? ` Atenție: ${partiale}.` : ""}`;
+      listaObservatii.replaceChildren(...observatii.map(randObservatie));
+      listaObservatii.hidden = !observatii.length;
       lista.replaceChildren(...[...aplicate, ...deVerificat].sort((x, y) => x.i - y.i).map(randCorectura));
       rezultat.hidden = false;
       scrie("");

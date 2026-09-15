@@ -1,15 +1,16 @@
 // Motorul chatului: modelul ales in Admin decide daca intrebarea merge la Gemini File Search
 // sau la un model OpenAI-compatibil (Z.AI sau DeepSeek) cu textul extras din R2. Tot aici,
 // corectorul (corecteazaLot), care poate merge si la Claude. Rutele si paginile vorbesc doar cu
-// acest modul; clientii (gemini.ts, zai.ts, claude.ts) nu se apeleaza direct.
+// acest modul; clientii (gemini.ts, zai.ts, claude.ts) nu se apeleaza direct. Corectorul are doua feluri
+// de cereri: un lot de paragrafe (corecteazaLot) si verificarea intregului document (verificaDocument).
 
 import { listeazaSurse, type Catalog, type Sursa } from "./db";
 import type { Citare } from "./consum";
 import { costMicrodolari, genereaza, intreaba, EroareGemini, type Schimb } from "./gemini";
 import { BAZA_DEEPSEEK, BAZA_ZAI, completeaza, construiesteCerereText, crediteZai, EroareZai, intreabaZai, type RaspunsZai } from "./zai";
-import { cerereCorectura, extrageCorecturi, type CerereText } from "./corector";
+import { cerereCorectura, cerereVerificare, extrageCorecturi, extrageVerificare, type CerereText, type Observatie } from "./corector";
 import { BAZA_CLAUDE, construiesteCerereClaude, intreabaClaude } from "./claude";
-import type { Corectura, ParagrafText } from "./docx";
+import type { Corectura, ParagrafIntreg, ParagrafText } from "./docx";
 import { construiesteContext, extrageCitariText, type SursaText } from "./context";
 import { citesteText } from "./text";
 import { motorModel, NUME_MOTOR, type Motor } from "./validare";
@@ -125,6 +126,10 @@ export interface RezultatCorectare extends ConsumModel {
   corecturi: Corectura[];
 }
 
+export interface RezultatVerificare extends RezultatCorectare {
+  observatii: Observatie[];
+}
+
 // Modelul a raspuns (deci s-a platit), dar raspunsul nu se poate citi: eroarea poarta consumul,
 // ca sa intre in jurnal.
 export class EroareCorectare extends Error {
@@ -147,18 +152,39 @@ const apelText: ApelText = async (motor, cheie, baza, c) => {
 // Un lot de paragrafe al corectorului, pe modelul din setari.model_corector. Motorul vine din model,
 // ca la chat. `apel` se injecteaza doar in teste.
 export async function corecteazaLot(env: Mediu, model: string, lot: ParagrafText[], apel: ApelText = apelText): Promise<RezultatCorectare> {
-  const motor = motorModel(model) ?? "gemini";
-  const cheie = cheieMotor(env, motor);
-  if (!cheie) throw new EroareZai(503, `Cheia ${NUME_MOTOR[motor]} nu este configurată pe server.`);
-  const r = await apel(motor, cheie, bazaMotor(env, motor), cerereCorectura(model, lot));
-  const consum: ConsumModel = {
-    tokens_intrare: r.tokens_intrare, tokens_cache: r.tokens_cache, tokens_iesire: r.tokens_iesire,
-    cost_microdolari: costMicrodolari(model, r.tokens_intrare, r.tokens_iesire, r.tokens_cache),
-    credite: crediteZai(model, r.tokens_intrare, r.tokens_cache, r.tokens_iesire),
-  };
+  const { consum, text } = await cereModelului(env, model, cerereCorectura(model, lot), apel);
   try {
-    return { ...consum, corecturi: extrageCorecturi(r.text, new Set(lot.map((p) => p.i))) };
+    return { ...consum, corecturi: extrageCorecturi(text, new Set(lot.map((p) => p.i))) };
   } catch (e) {
     throw new EroareCorectare((e as Error).message, consum);
   }
+}
+
+// Verificarea intregului document (corp, antete, subsoluri, note) intr-o singura cerere: aceleasi
+// corecturi, plus observatiile care cer om. Aceeasi cale ca la lot, alt prompt si alta schema.
+export async function verificaDocument(
+  env: Mediu, model: string, paragrafe: ParagrafIntreg[], apel: ApelText = apelText
+): Promise<RezultatVerificare> {
+  const { consum, text } = await cereModelului(env, model, cerereVerificare(model, paragrafe), apel);
+  try {
+    return { ...consum, ...extrageVerificare(text, new Set(paragrafe.map((p) => p.i))) };
+  } catch (e) {
+    throw new EroareCorectare((e as Error).message, consum);
+  }
+}
+
+// Cererea catre modelul corectorului si consumul ei. Motorul vine din model, ca la chat.
+async function cereModelului(env: Mediu, model: string, cerere: CerereText, apel: ApelText): Promise<{ consum: ConsumModel; text: string }> {
+  const motor = motorModel(model) ?? "gemini";
+  const cheie = cheieMotor(env, motor);
+  if (!cheie) throw new EroareZai(503, `Cheia ${NUME_MOTOR[motor]} nu este configurată pe server.`);
+  const r = await apel(motor, cheie, bazaMotor(env, motor), cerere);
+  return {
+    text: r.text,
+    consum: {
+      tokens_intrare: r.tokens_intrare, tokens_cache: r.tokens_cache, tokens_iesire: r.tokens_iesire,
+      cost_microdolari: costMicrodolari(model, r.tokens_intrare, r.tokens_iesire, r.tokens_cache),
+      credite: crediteZai(model, r.tokens_intrare, r.tokens_cache, r.tokens_iesire),
+    },
+  };
 }

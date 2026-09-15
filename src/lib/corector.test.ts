@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bugetCaractere, cerereCorectura, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR, type MotorLocal } from "./corector";
+import { bugetCaractere, cerereCorectura, cerereVerificare, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR, TIPURI_OBSERVATIE, type MotorLocal } from "./corector";
 
 describe("impartePeLoturi", () => {
   it("umple loturile in ordine, fara sa depaseasca plafonul; un paragraf lung sta singur", () => {
@@ -95,6 +95,17 @@ describe("continutLocal", () => {
     expect(() => corecturi("claude", "Invalid API key · Please run /login")).toThrow(/nu a întors JSON/);
     expect(() => corecturi("gemini", JSON.stringify({ status: "ERROR", error: "model overloaded" }))).toThrow(/model overloaded/);
     expect(() => corecturi("gemini", "panic: agy crashed")).toThrow(/nu a întors JSON/);
+  });
+});
+
+describe("cerereVerificare", () => {
+  it("trimite tot documentul cu promptul de verificare si schema celor doua liste", () => {
+    const c = cerereVerificare("claude-opus-5", [{ i: 1, text: "Penitenciarul nr.6", fel: "antet" }]);
+    expect(c.sistem).toBe(PROMPT_VERIFICARE);
+    expect(JSON.parse(c.utilizator)).toEqual({ paragrafe: [{ i: 1, unde: "antet", text: "Penitenciarul nr.6" }] });
+    const schema = c.schema as { required: string[]; properties: Record<string, { items?: { properties?: { tip?: { enum?: string[] } } } }> };
+    expect(schema.required).toEqual(["corecturi", "observatii"]);
+    expect(schema.properties.observatii?.items?.properties?.tip?.enum).toEqual([...TIPURI_OBSERVATIE]);
   });
 });
 

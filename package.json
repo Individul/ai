@@ -18,7 +18,8 @@
     "deploy": "astro build && wrangler deploy",
     "generate-types": "wrangler types",
     "dev:worker": "astro build && wrangler dev --local-upstream localhost",
-    "dev:retea": "astro build && wrangler dev --local-upstream localhost --ip 0.0.0.0"
+    "dev:retea": "astro build && wrangler dev --local-upstream localhost --ip 0.0.0.0",
+    "corecteaza": "node --experimental-strip-types --no-warnings scripts/corecteaza-local.mts"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.0",

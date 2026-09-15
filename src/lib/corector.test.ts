@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bugetCaractere, cerereCorectura, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR } from "./corector";
+import { bugetCaractere, cerereCorectura, corecturiDinClaudeCode, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR } from "./corector";
 
 describe("impartePeLoturi", () => {
   it("umple loturile in ordine, fara sa depaseasca plafonul; un paragraf lung sta singur", () => {
@@ -65,5 +65,23 @@ describe("plafoane", () => {
     const n = Math.floor(LIMITA_DOCUMENT / (LIMITA_LOT / 2 + 1));
     const paragrafe = Array.from({ length: n }, (_, i) => ({ i, text: "a".repeat(LIMITA_LOT / 2 + 1) }));
     expect(impartePeLoturi(paragrafe).length).toBeLessThanOrEqual(LIMITA_LOTURI);
+  });
+});
+
+describe("corecturiDinClaudeCode", () => {
+  const corectura = { i: 1, vechi: "insa", nou: "însă", tip: "ortografie", motiv: "î și ă" };
+  it("ia corecturile din structured_output, cu costul raportat", () => {
+    const iesire = JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "", structured_output: { corecturi: [corectura] }, total_cost_usd: 0.0123 });
+    expect(corecturiDinClaudeCode(iesire, new Set([1]))).toEqual({ corecturi: [corectura], cost_usd: 0.0123 });
+  });
+
+  it("fara structured_output, citeste textul din result", () => {
+    const iesire = JSON.stringify({ type: "result", subtype: "success", is_error: false, result: JSON.stringify({ corecturi: [corectura] }) });
+    expect(corecturiDinClaudeCode(iesire, new Set([1]))).toEqual({ corecturi: [corectura], cost_usd: 0 });
+  });
+
+  it("arunca la eroarea raportata sau la iesire care nu e JSON", () => {
+    expect(() => corecturiDinClaudeCode(JSON.stringify({ subtype: "error_max_turns", is_error: true, result: "Credit balance is too low" }), new Set([1]))).toThrow(/Credit balance/);
+    expect(() => corecturiDinClaudeCode("Invalid API key · Please run /login", new Set([1]))).toThrow(/nu a întors JSON/);
   });
 });

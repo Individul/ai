@@ -137,3 +137,20 @@ export function numara(n: number, singular: string, plural: string): string {
   const rest = n % 100;
   return `${n}${n >= 20 && (rest === 0 || rest >= 20) ? " de" : ""} ${plural}`;
 }
+
+// Rezultatul `claude -p --output-format json --json-schema` (Claude Code pe planul personal, comanda
+// locala `npm run corecteaza`): corecturile vin in `structured_output`; fara el, din textul `result`.
+// Arunca la eroarea raportata de Claude Code sau la un raspuns care nu e JSON.
+export function corecturiDinClaudeCode(iesire: string, indici: Set<number>): { corecturi: Corectura[]; cost_usd: number } {
+  let d: Record<string, unknown>;
+  try {
+    d = JSON.parse(iesire);
+  } catch {
+    throw new Error(`Claude Code nu a întors JSON: ${iesire.trim().slice(0, 200) || "nimic"}`);
+  }
+  if (d.is_error === true || (typeof d.subtype === "string" && d.subtype !== "success")) {
+    throw new Error(`Claude Code: ${String(d.result ?? d.subtype ?? "eroare").slice(0, 300)}`);
+  }
+  const brut = d.structured_output !== undefined ? JSON.stringify(d.structured_output) : String(d.result ?? "");
+  return { corecturi: extrageCorecturi(brut, indici), cost_usd: Number(d.total_cost_usd ?? 0) || 0 };
+}

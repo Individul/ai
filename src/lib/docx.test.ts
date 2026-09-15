@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import {
-  analizeazaDocument, aplicaCorecturi, deschideDocx, diferente, EroareDocx, paragrafeDeCorectat, salveazaDocx, type Corectura,
+  analizeazaDocument, analizeazaIntreg, aplicaCorecturi, aplicaCorecturiIntreg, deschideDocx, diferente, EroareDocx,
+  paragrafeDeCorectat, paragrafeIntreg, salveazaDocx, salveazaDocxParti, type Corectura,
 } from "./docx";
 
 const doc = (corp: string) =>
@@ -176,5 +177,48 @@ describe("deschideDocx / salveazaDocx", () => {
   it("refuza ce nu e .docx", () => {
     expect(() => deschideDocx(new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]))).toThrow(EroareDocx);
     expect(() => deschideDocx(zipSync({ "altceva.txt": strToU8("x") }))).toThrow(EroareDocx);
+  });
+});
+
+describe("documentul intreg (corp, antete, subsoluri)", () => {
+  const arhiva = () => {
+    const rels = `<?xml version="1.0"?><Relationships><Relationship Id="rId1" Target="word/document.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"/></Relationships>`;
+    return deschideDocx(zipSync({
+      "_rels/.rels": strToU8(rels),
+      "word/document.xml": strToU8(doc(par(run("In corp scrie insa gresit.")) + par(run("Al doilea paragraf.")))),
+      "word/header1.xml": strToU8(doc(par(run("Penitenciarul nr.6")))),
+      "word/footer1.xml": strToU8(doc(par(run("Tel-fax 0 230 23674")))),
+      "word/styles.xml": strToU8("<w:styles/>"),
+    }));
+  };
+
+  it("citeste toate partile, cu numere globale de paragraf", () => {
+    const d = analizeazaIntreg(arhiva());
+    expect(d.parti.map((p) => [p.cale, p.fel])).toEqual([
+      ["word/document.xml", "corp"], ["word/footer1.xml", "subsol"], ["word/header1.xml", "antet"],
+    ]);
+    expect(paragrafeIntreg(d)).toEqual([
+      { i: 0, text: "In corp scrie insa gresit.", fel: "corp" },
+      { i: 1, text: "Al doilea paragraf.", fel: "corp" },
+      { i: 2, text: "Tel-fax 0 230 23674", fel: "subsol" },
+      { i: 3, text: "Penitenciarul nr.6", fel: "antet" },
+    ]);
+  });
+
+  it("pune corecturile in partea lor si salveaza doar partile atinse", () => {
+    const docx = arhiva();
+    const d = analizeazaIntreg(docx);
+    const { xml, aplicari } = aplicaCorecturiIntreg(d, [
+      { i: 0, vechi: "insa", nou: "însă", tip: "ortografie", motiv: "" },
+      { i: 3, vechi: "nr.6", nou: "nr. 6", tip: "punctuație", motiv: "" },
+      { i: 9, vechi: "x", nou: "y", tip: "ortografie", motiv: "" },
+    ], REV);
+    expect(aplicari.map((a) => a.stare)).toEqual(["aplicata", "aplicata", "negasita"]);
+    expect(Object.keys(xml).sort()).toEqual(["word/document.xml", "word/header1.xml"]);
+    expect(textDupa(xml["word/header1.xml"]!, "accept")).toEqual(["Penitenciarul nr. 6"]);
+    expect(textDupa(xml["word/document.xml"]!, "accept")[0]).toBe("In corp scrie însă gresit.");
+    const iesire = unzipSync(salveazaDocxParti(docx, xml));
+    expect(strFromU8(iesire["word/footer1.xml"]!)).toBe(strFromU8(docx.intrari["word/footer1.xml"]!));
+    expect(strFromU8(iesire["word/header1.xml"]!)).toContain("<w:ins ");
   });
 });

@@ -53,7 +53,11 @@ func exemplu() -> Rezultat {
       Corectura(stare: "aplicata", tip: "punctuație", vechi: "ca,", nou: "că", motiv: "Fără virgulă după conjuncția „că”.", inainte: "Totodată menționăm ", dupa: " persoanele responsabile vor fi examinate"),
       Corectura(stare: "negasita", tip: "ortografie", vechi: "mentioneam", nou: "menționăm", motiv: "Diacritice lipsă.", inainte: "", dupa: ""),
     ],
-    cost_usd: 0.0412, secunde: 48, esecuri: []
+    cost_usd: 0.0412, secunde: 48, esecuri: [],
+    observatii: [
+      Observatie(tip: "date", text: "„durata executării pedepsei din 02.01.2018” față de „reținut de facto la 02.10.2018”: aceeași dată apare diferit, iar de ea depinde calculul termenului. De verificat în dosar."),
+      Observatie(tip: "lipsa", text: "Rubrica de înregistrare „.09.2026 nr. 5/” a rămas fără zi și fără număr."),
+    ]
   )
 }
 
@@ -78,6 +82,7 @@ if let k = argumente.firstIndex(of: "--ecrane"), k + 1 < argumente.count {
     c.pregatit = true
     c.documente = [
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Nota informativa.docx"), stare: .gata(exemplu())),
+      Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Demers art. 84.docx"), stare: .inLucru(gata: 0, total: 1), inceputLa: Date().addingTimeInterval(-64)),
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Raport lunar septembrie.docx"), stare: .inLucru(gata: 3, total: 7), inceputLa: Date().addingTimeInterval(-192), nota: "Claude reîncearcă: rate_limit (încercarea 2 din 10)"),
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Demers.docx"), stare: .inAsteptare),
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Dispozitie.docx"), stare: .eroare("Claude Code: nu ești logat. Rulează o dată „claude” în Terminal.")),

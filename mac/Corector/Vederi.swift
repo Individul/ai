@@ -77,6 +77,7 @@ struct Continut: View {
           .font(.system(size: 14)).foregroundStyle(p.text2).fixedSize()
       }
 
+      AlegereMod()
       AlegereModel()
 
       if let problema = corector.problema {
@@ -130,6 +131,46 @@ private extension Text {
 
 // ---------------------------------------------------------------- componente
 
+// Randul de alegere (mod, model): capsule desenate, nu Picker, ca sa se randeze si in imagini.
+struct Capsula: View {
+  @Environment(\.colorScheme) private var schema
+  let titlu: String
+  let descriere: String
+  let ales: Bool
+  let apasa: () -> Void
+
+  var body: some View {
+    let p = Paleta(schema: schema)
+    Button(action: apasa) {
+      HStack(spacing: 5) {
+        Text(titlu).font(.system(size: 13, weight: .semibold))
+        Text(descriere).font(.system(size: 11.5)).opacity(0.8)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 6)
+      .foregroundStyle(ales ? p.peAccent : p.text2)
+      .background(Capsule().fill(ales ? p.violet : p.linie))
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+struct AlegereMod: View {
+  @EnvironmentObject private var corector: Corector
+  @Environment(\.colorScheme) private var schema
+
+  var body: some View {
+    let p = Paleta(schema: schema)
+    HStack(spacing: 8) {
+      Text("Mod").font(.system(size: 12, weight: .bold)).textCase(.uppercase).foregroundStyle(p.sters).frame(width: 46, alignment: .leading)
+      ForEach(ModLucru.allCases) { m in
+        Capsula(titlu: m.nume, descriere: m.descriere, ales: m == corector.mod) { corector.mod = m }
+      }
+    }
+  }
+}
+
 struct AlegereModel: View {
   @EnvironmentObject private var corector: Corector
   @Environment(\.colorScheme) private var schema
@@ -137,21 +178,9 @@ struct AlegereModel: View {
   var body: some View {
     let p = Paleta(schema: schema)
     HStack(spacing: 8) {
-      Text("Model").font(.system(size: 12, weight: .bold)).textCase(.uppercase).foregroundStyle(p.sters)
+      Text("Model").font(.system(size: 12, weight: .bold)).textCase(.uppercase).foregroundStyle(p.sters).frame(width: 46, alignment: .leading)
       ForEach(ModelClaude.allCases) { m in
-        let ales = m == corector.model
-        Button { corector.model = m } label: {
-          HStack(spacing: 5) {
-            Text(m.nume).font(.system(size: 13, weight: .semibold))
-            Text(m.descriere).font(.system(size: 11.5)).opacity(0.8)
-          }
-          .padding(.horizontal, 12)
-          .padding(.vertical, 6)
-          .foregroundStyle(ales ? p.peAccent : p.text2)
-          .background(Capsule().fill(ales ? p.violet : p.linie))
-          .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
+        Capsula(titlu: m.nume, descriere: m.descriere, ales: m == corector.model) { corector.model = m }
       }
     }
   }
@@ -242,6 +271,13 @@ struct RandDocument: View {
       if case .inLucru(let gata, let total) = document.stare {
         BaraProgres(fractie: total > 0 ? Double(gata) / Double(total) : 0.04, culoare: p.violet, fundal: p.linie)
       }
+      if case .gata(let r) = document.stare, !r.obs.isEmpty {
+        VStack(alignment: .leading, spacing: 0) {
+          ForEach(Array(r.obs.enumerated()), id: \.offset) { _, o in
+            RandObservatie(o: o)
+          }
+        }
+      }
       if case .gata(let r) = document.stare, !r.corecturi.isEmpty {
         ButonText(titlu: deschis ? "ascunde corecturile" : "arată corecturile (\(r.corecturi.count))", culoare: p.violet, iconita: deschis ? "chevron.down" : "chevron.right") {
           corector.comuta(document.id)
@@ -330,6 +366,7 @@ struct RandDocument: View {
         parti.append(r.deVerificat > 0 ? "Nicio corectură nu a putut fi pusă automat" : "Nu am găsit greșeli")
       }
       if r.deVerificat > 0 { parti.append("\(r.deVerificat) de verificat") }
+      if !r.obs.isEmpty { parti.append(numara(r.obs.count, "observație", "observații")) }
       if !r.esecuri.isEmpty { parti.append("\(numara(r.esecuri.count, "parte nereușită", "părți nereușite"))") }
       parti.append(durata(r.secunde))
       return parti.joined(separator: " · ")
@@ -397,5 +434,25 @@ struct RandCorectura: View {
     a.append(nou)
     a.append(dupa)
     return a
+  }
+}
+
+
+struct RandObservatie: View {
+  @Environment(\.colorScheme) private var schema
+  let o: Observatie
+
+  var body: some View {
+    let p = Paleta(schema: schema)
+    HStack(alignment: .top, spacing: 8) {
+      Image(systemName: "exclamationmark.bubble").font(.system(size: 12)).foregroundStyle(p.galben).padding(.top, 2)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(o.eticheta).font(.system(size: 10.5, weight: .bold)).textCase(.uppercase).foregroundStyle(p.galben)
+        Text(o.text).font(.system(size: 13)).foregroundStyle(p.text2).fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .padding(.vertical, 8)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .overlay(alignment: .top) { Rectangle().fill(p.linie).frame(height: 1) }
   }
 }

@@ -27,6 +27,43 @@ enum ModelClaude: String, CaseIterable, Identifiable {
   }
 }
 
+enum ModLucru: String, CaseIterable, Identifiable {
+  case corectura, verificare
+
+  var id: String { rawValue }
+
+  var nume: String {
+    switch self {
+    case .corectura: return "Corectură"
+    case .verificare: return "Verificare"
+    }
+  }
+
+  var descriere: String {
+    switch self {
+    case .corectura: return "doar corpul, rapid"
+    case .verificare: return "tot documentul, cu observații"
+    }
+  }
+}
+
+// Ce nu se poate repara prin inlocuire de text: date care se contrazic, rubrici goale, formatare rupta,
+// indoieli juridice. Vine doar din modul verificare.
+struct Observatie: Decodable, Hashable {
+  let tip: String
+  let text: String
+
+  var eticheta: String {
+    switch tip {
+    case "date": return "date care nu se potrivesc"
+    case "juridic": return "de verificat juridic"
+    case "formatare": return "formatare"
+    case "lipsa": return "rubrică necompletată"
+    default: return "de verificat"
+    }
+  }
+}
+
 struct Corectura: Decodable, Hashable {
   let stare: String   // aplicata | negasita | suprapusa | blocata
   let tip: String
@@ -55,8 +92,10 @@ struct Rezultat: Decodable, Hashable {
   let cost_usd: Double
   let secunde: Int
   let esecuri: [String]
+  let observatii: [Observatie]?
 
   var deVerificat: Int { corecturi.filter(\.deVerificat).count }
+  var obs: [Observatie] { observatii ?? [] }
 }
 
 enum Eveniment {
@@ -136,12 +175,12 @@ enum Motor {
   // Corecteaza un document; evenimentele ajung pe firul principal. Intoarce mesajul de eroare daca
   // scriptul s-a oprit fara rezultat (altfel nil).
   static func corecteaza(
-    fisier: URL, model: ModelClaude, unelte: Unelte, script: URL, lucrare: Lucrare,
+    fisier: URL, model: ModelClaude, mod: ModLucru, unelte: Unelte, script: URL, lucrare: Lucrare,
     laEveniment: @escaping @MainActor (Eveniment) -> Void
   ) async -> String? {
     let p = lucrare.proces
     p.executableURL = URL(fileURLWithPath: unelte.node)
-    p.arguments = [script.path, "--json", "--model", model.rawValue, fisier.path]
+    p.arguments = [script.path, "--json", "--mod", mod.rawValue, "--model", model.rawValue, fisier.path]
     var mediu = ProcessInfo.processInfo.environment
     mediu["CORECTOR_CLAUDE"] = unelte.claude
     let directoare = [unelte.node, unelte.claude].map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }

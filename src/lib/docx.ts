@@ -50,7 +50,14 @@ export function deschideDocx(octeti: Uint8Array): Docx {
 
 // Aceeasi arhiva, cu partea principala inlocuita; ordinea intrarilor ramane.
 export function salveazaDocx(d: Docx, xml: string): Uint8Array {
-  return zipSync({ ...d.intrari, [d.cale]: strToU8(xml) }, { level: 6 });
+  return salveazaDocxParti(d, { [d.cale]: xml });
+}
+
+// La fel, dar cu mai multe parti inlocuite (corpul, antetele, subsolurile, notele).
+export function salveazaDocxParti(d: Docx, parti: Record<string, string>): Uint8Array {
+  const intrari = { ...d.intrari };
+  for (const [cale, xml] of Object.entries(parti)) intrari[cale] = strToU8(xml);
+  return zipSync(intrari, { level: 6 });
 }
 
 // ---------------------------------------------------------------- XML
@@ -409,4 +416,88 @@ export function aplicaCorecturi(a: AnalizaDocx, corecturi: Corectura[], rev: Rev
     }
   }
   return { xml: tokeni.join(""), aplicari };
+}
+
+
+// ---------------------------------------------------------------- documentul intreg
+
+// Modul „verificare” se uita la tot documentul, nu doar la corp: antetele si subsolurile tin numarul de
+// inregistrare, telefoanele si numele institutiei, iar acolo stau de obicei greselile ramase neatinse.
+// Paragrafele primesc un numar global, in ordinea partilor, ca modelul sa trimita corecturile pe el.
+export type FelParte = "corp" | "antet" | "subsol" | "note";
+
+export interface ParteDocx {
+  cale: string;
+  fel: FelParte;
+  analiza: AnalizaDocx;
+}
+
+export interface DocumentIntreg {
+  parti: ParteDocx[];
+}
+
+export interface ParagrafIntreg extends ParagrafText {
+  fel: FelParte;
+}
+
+const PARTI_IN_PLUS = /^word\/(header\d+|footer\d+|footnotes|endnotes)\.xml$/;
+
+export function analizeazaIntreg(d: Docx): DocumentIntreg {
+  const cai = [d.cale, ...Object.keys(d.intrari).filter((c) => c !== d.cale && PARTI_IN_PLUS.test(c)).sort()];
+  const fel = (cale: string): FelParte =>
+    cale.includes("/header") ? "antet" : cale.includes("/footer") ? "subsol" : /footnotes|endnotes/.test(cale) ? "note" : "corp";
+  return {
+    parti: cai.flatMap((cale) => {
+      const octeti = d.intrari[cale];
+      return octeti ? [{ cale, fel: fel(cale), analiza: analizeazaDocument(strFromU8(octeti)) }] : [];
+    }),
+  };
+}
+
+// Numarul global al fiecarui paragraf -> (partea, numarul din parte).
+function harta(doc: DocumentIntreg): { parte: number; local: number }[] {
+  const h: { parte: number; local: number }[] = [];
+  doc.parti.forEach((p, parte) => p.analiza.paragrafe.forEach((_, local) => h.push({ parte, local })));
+  return h;
+}
+
+export function paragrafeIntreg(doc: DocumentIntreg): ParagrafIntreg[] {
+  const rezultat: ParagrafIntreg[] = [];
+  let i = 0;
+  for (const p of doc.parti) {
+    const deCorectat = new Map(paragrafeDeCorectat(p.analiza).map((x) => [x.i, x.text]));
+    for (let local = 0; local < p.analiza.paragrafe.length; local++, i++) {
+      const text = deCorectat.get(local);
+      if (text !== undefined) rezultat.push({ i, text, fel: p.fel });
+    }
+  }
+  return rezultat;
+}
+
+// Corecturile, cu numerele globale, puse in partile lor. `xml` are doar partile atinse.
+export function aplicaCorecturiIntreg(
+  doc: DocumentIntreg, corecturi: Corectura[], rev: Revizie
+): { xml: Record<string, string>; aplicari: Aplicare[] } {
+  const h = harta(doc);
+  const aplicari: Aplicare[] = corecturi.map((c) => ({ ...c, stare: "negasita", inainte: "", dupa: "" }));
+  const grupuri = new Map<number, { indici: number[]; locale: Corectura[] }>();
+  corecturi.forEach((c, k) => {
+    const loc = h[c.i];
+    if (!loc) return;
+    const g = grupuri.get(loc.parte) ?? { indici: [], locale: [] };
+    g.indici.push(k);
+    g.locale.push({ ...c, i: loc.local });
+    grupuri.set(loc.parte, g);
+  });
+  const xml: Record<string, string> = {};
+  for (const [parte, g] of grupuri) {
+    const p = doc.parti[parte]!;
+    const r = aplicaCorecturi(p.analiza, g.locale, rev);
+    xml[p.cale] = r.xml;
+    r.aplicari.forEach((a, j) => {
+      const k = g.indici[j]!;
+      aplicari[k] = { ...a, i: corecturi[k]!.i };
+    });
+  }
+  return { xml, aplicari };
 }

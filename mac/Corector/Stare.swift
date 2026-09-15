@@ -37,6 +37,9 @@ final class Corector: ObservableObject {
   @Published var model: ModelClaude = ModelClaude(rawValue: UserDefaults.standard.string(forKey: "model") ?? "") ?? .opus {
     didSet { UserDefaults.standard.set(model.rawValue, forKey: "model") }
   }
+  @Published var mod: ModLucru = ModLucru(rawValue: UserDefaults.standard.string(forKey: "mod") ?? "") ?? .corectura {
+    didSet { UserDefaults.standard.set(mod.rawValue, forKey: "mod") }
+  }
   @Published var unelte: Unelte?
   @Published var problema: String?
   @Published var pregatit = false
@@ -116,7 +119,7 @@ final class Corector: ObservableObject {
         $0.inceputLa = Date()
         $0.nota = nil
       }
-      let eroare = await Motor.corecteaza(fisier: document.url, model: model, unelte: unelte, script: script, lucrare: lucrare) { [weak self] e in
+      let eroare = await Motor.corecteaza(fisier: document.url, model: model, mod: mod, unelte: unelte, script: script, lucrare: lucrare) { [weak self] e in
         guard let self else { return }
         switch e {
         case .inceput(let loturi): self.actualizeaza(id, .inLucru(gata: 0, total: loturi))

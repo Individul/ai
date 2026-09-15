@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bugetCaractere, cerereCorectura, corecturiDinClaudeCode, evenimentClaudeCode, mesajEroareClaudeCode, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR } from "./corector";
+import { bugetCaractere, cerereCorectura, corecturiDinClaudeCode, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajVerificare, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR } from "./corector";
 
 describe("impartePeLoturi", () => {
   it("umple loturile in ordine, fara sa depaseasca plafonul; un paragraf lung sta singur", () => {
@@ -115,5 +115,31 @@ describe("mesajEroareClaudeCode", () => {
     expect(() => corecturiDinClaudeCode(JSON.stringify({ type: "result", subtype: "success", is_error: true, result: autentificare.slice(13) }), new Set([1]))).toThrow(/nu e logat/);
     expect(mesajEroareClaudeCode("Claude AI usage limit reached|1789400000")).toMatch(/^Ai atins limita planului/);
     expect(mesajEroareClaudeCode("Credit balance is too low")).toBe("Credit balance is too low");
+  });
+});
+
+describe("verificarea intregului document", () => {
+  it("trimite paragrafele cu locul lor si citeste corecturile impreuna cu observatiile", () => {
+    expect(JSON.parse(mesajVerificare([{ i: 3, text: "Penitenciarul nr.6", fel: "antet" }]))).toEqual({
+      paragrafe: [{ i: 3, unde: "antet", text: "Penitenciarul nr.6" }],
+    });
+    expect(PROMPT_VERIFICARE).toContain("observatii");
+
+    const raspuns = JSON.stringify({
+      corecturi: [{ i: 3, vechi: "nr.6", nou: "nr. 6", tip: "punctuație", motiv: "Spațiu după „nr.”." }],
+      observatii: [
+        { tip: "date", text: "„din 02.01.2018” față de „reținut la 02.10.2018”: datele nu se potrivesc." },
+        { tip: "inventat", text: "tip necunoscut" },
+        { tip: "lipsa", text: "   " },
+      ],
+    });
+    expect(extrageVerificare(raspuns, new Set([3]))).toEqual({
+      corecturi: [{ i: 3, vechi: "nr.6", nou: "nr. 6", tip: "punctuație", motiv: "Spațiu după „nr.”." }],
+      observatii: [
+        { tip: "date", text: "„din 02.01.2018” față de „reținut la 02.10.2018”: datele nu se potrivesc." },
+        { tip: "altele", text: "tip necunoscut" },
+      ],
+    });
+    expect(extrageVerificare('{"corecturi":[],"observatii":[]}', new Set([1]))).toEqual({ corecturi: [], observatii: [] });
   });
 });

@@ -17,6 +17,8 @@ export const LOTURI_PARALELE = 4;
 export const AUTOR_REVIZII = "Corector AI";
 export const TIPURI_CORECTURA = ["ortografie", "gramatică", "punctuație", "formulare"] as const;
 
+export const LIMITA_VERIFICARE = 40_000; // caractere pe document, in modul verificare (o singura cerere)
+
 export interface CerereText {
   model: string;
   sistem: string;
@@ -59,7 +61,8 @@ Corectezi:
 - formularea: frazele greoaie, ambigue sau nefirești, pe care le reformulezi în stil administrativ oficial, clar și concis.
 Reguli:
 - Nu schimba sensul, cifrele, datele, numele proprii, numerele actelor și trimiterile la articole, puncte sau alineate.
-- La ortografie și diacritice păstrezi cuvântul autorului, doar îl scrii corect („detinere” devine „deținere”, nu „detenție”); alt cuvânt propui doar ca formulare, când cel folosit e greșit sau nepotrivit.
+- La ortografie și diacritice păstrezi cuvântul autorului, doar îl scrii corect („detinere” devine „deținere”, nu „detenție”); alt cuvânt propui doar ca formulare, când cel folosit e greșit sau nepotrivit. Regula asta privește sinonimele, nu greșelile de tipar: pe acelea le corectezi chiar dacă iese alt cuvânt („epizoade” → „episoade”, „hotărîri” → „hotărâri”).
+- Dacă documentul are și text în limba rusă (antet, ștampile, denumiri), îl corectezi după normele limbii ruse („учереждение” → „учреждение”).
 - Verifici acordul predicatului cu subiectul, inclusiv când subiectul e departe de verb („rezultatele ... se vor prezenta”).
 - Nu corecta ce e deja corect și nu reformula un paragraf bun doar din preferință.
 - Nu semnala diferența dintre ş/ţ cu sedilă și ș/ț cu virgulă.
@@ -107,15 +110,18 @@ const faraDiacritice = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").
 
 // Raspunsul modelului -> corecturile valide pentru paragrafele din lot. Arunca doar daca raspunsul
 // nu e JSON cu o lista; intrarile stricate se sar.
-export function extrageCorecturi(text: string, indici: Set<number>): Corectura[] {
+function jsonDinText(text: string): unknown {
   const curat = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  let d: unknown;
   try {
-    d = JSON.parse(curat);
+    return JSON.parse(curat);
   } catch {
     const obiect = /\{[\s\S]*\}/.exec(curat)?.[0];
-    try { d = obiect ? JSON.parse(obiect) : null; } catch { d = null; }
+    try { return obiect ? JSON.parse(obiect) : null; } catch { return null; }
   }
+}
+
+export function extrageCorecturi(text: string, indici: Set<number>): Corectura[] {
+  const d = jsonDinText(text);
   const lista = Array.isArray(d) ? d : Array.isArray((d as { corecturi?: unknown })?.corecturi) ? (d as { corecturi: unknown[] }).corecturi : null;
   if (!lista) throw new Error("Modelul nu a întors lista de corecturi.");
   const corecturi: Corectura[] = [];
@@ -142,7 +148,7 @@ export function numara(n: number, singular: string, plural: string): string {
 // `result` din --output-format json sau ultimul rand din stream-json. Corecturile vin din `structured_output`,
 // daca exista, altfel din textul `result` (promptul cere JSON). Arunca la eroarea raportata de Claude Code
 // sau la un raspuns care nu e JSON.
-export function corecturiDinClaudeCode(iesire: string, indici: Set<number>): { corecturi: Corectura[]; cost_usd: number } {
+export function continutClaudeCode(iesire: string): { brut: string; cost_usd: number } {
   let d: Record<string, unknown>;
   try {
     d = JSON.parse(iesire);
@@ -152,8 +158,20 @@ export function corecturiDinClaudeCode(iesire: string, indici: Set<number>): { c
   if (d.is_error === true || (typeof d.subtype === "string" && d.subtype !== "success")) {
     throw new Error(mesajEroareClaudeCode(`Claude Code: ${String(d.result ?? d.subtype ?? "eroare").slice(0, 300)}`));
   }
-  const brut = d.structured_output !== undefined ? JSON.stringify(d.structured_output) : String(d.result ?? "");
-  return { corecturi: extrageCorecturi(brut, indici), cost_usd: Number(d.total_cost_usd ?? 0) || 0 };
+  return {
+    brut: d.structured_output !== undefined ? JSON.stringify(d.structured_output) : String(d.result ?? ""),
+    cost_usd: Number(d.total_cost_usd ?? 0) || 0,
+  };
+}
+
+export function corecturiDinClaudeCode(iesire: string, indici: Set<number>): { corecturi: Corectura[]; cost_usd: number } {
+  const { brut, cost_usd } = continutClaudeCode(iesire);
+  return { corecturi: extrageCorecturi(brut, indici), cost_usd };
+}
+
+export function verificareDinClaudeCode(iesire: string, indici: Set<number>): { corecturi: Corectura[]; observatii: Observatie[]; cost_usd: number } {
+  const { brut, cost_usd } = continutClaudeCode(iesire);
+  return { ...extrageVerificare(brut, indici), cost_usd };
 }
 
 // Un rand din `claude -p --output-format stream-json --verbose`. `jurnal` e ce se scrie in jurnalul de
@@ -208,4 +226,49 @@ export function mesajEroareClaudeCode(mesaj: string): string {
     return `Ai atins limita planului Claude; reîncearcă după resetare. (${mesaj.slice(0, 160)})`;
   }
   return mesaj;
+}
+
+
+// ---------------------------------------------------------------- verificarea intregului document
+
+// Modul „verificare” trimite tot documentul intr-o singura cerere (corp, antete, subsoluri, note) si cere
+// doua liste: corecturile care se pot pune direct in text si observatiile care cer om — contradictii intre
+// date aflate in locuri diferite, campuri ramase necompletate, formatare rupta, indoieli juridice.
+export const TIPURI_OBSERVATIE = ["date", "juridic", "formatare", "lipsa", "altele"] as const;
+
+export interface Observatie {
+  tip: string;
+  text: string;
+}
+
+export const PROMPT_VERIFICARE = `${PROMPT_CORECTOR}
+
+Primești acum TOT documentul, nu doar corpul: fiecare paragraf are și „unde”: corp, antet, subsol sau note.
+Răspunzi cu JSON: {"corecturi":[{"i":număr,"vechi":"...","nou":"...","tip":"...","motiv":"..."}],"observatii":[{"tip":"date|juridic|formatare|lipsa|altele","text":"..."}]}
+- "corecturi": aceleași reguli ca mai sus, pentru tot documentul, inclusiv antetul și subsolul.
+- "observatii": ce nu se poate repara prin înlocuire de text. Cauți în special:
+  - "date": cifre, date calendaristice sau nume care se contrazic între ele în locuri diferite ale documentului;
+  - "juridic": trimiteri la acte care nu se potrivesc cu ce se cere, condiții ale normei invocate care nu sunt arătate în text, solicitări care nu decurg din norma citată;
+  - "formatare": indici sau exponenți pierduți, bold ori italic rupt la mijloc de frază, enumerări cu separatori amestecați;
+  - "lipsa": rubrici rămase goale (număr de înregistrare, dată, număr de file, semnătură);
+  - "altele": neconcordanțe între versiunea română și cea rusă, denumiri oficiale greșite.
+- Fiecare observație începe cu citatul scurt din document, apoi ce e în neregulă și ce ar trebui verificat. Cel mult 20 de observații, cele mai importante primele.
+- Nu inventa: dacă nu ai ce semnala, întorci "observatii":[].`;
+
+export function mesajVerificare(paragrafe: { i: number; text: string; fel: string }[]): string {
+  return JSON.stringify({ paragrafe: paragrafe.map((p) => ({ i: p.i, unde: p.fel, text: p.text })) });
+}
+
+export function extrageVerificare(text: string, indici: Set<number>): { corecturi: Corectura[]; observatii: Observatie[] } {
+  const d = jsonDinText(text) as { corecturi?: unknown; observatii?: unknown } | null;
+  const corecturi = extrageCorecturi(JSON.stringify({ corecturi: Array.isArray(d?.corecturi) ? d.corecturi : [] }), indici);
+  const observatii: Observatie[] = [];
+  for (const x of (Array.isArray(d?.observatii) ? d.observatii : []) as Record<string, unknown>[]) {
+    const continut = String(x?.text ?? "").trim();
+    if (!continut) continue;
+    const tip = TIPURI_OBSERVATIE.includes(String(x?.tip) as (typeof TIPURI_OBSERVATIE)[number]) ? String(x.tip) : "altele";
+    observatii.push({ tip, text: continut.slice(0, 700) });
+    if (observatii.length >= 20) break;
+  }
+  return { corecturi, observatii };
 }

@@ -48,7 +48,7 @@ Pentru verificări vizuale folosește `npm run dev:worker` (port 8787), care ser
 
 Capcana: `wrangler dev` își face lista de assets o singură dată, la pornire, din `dist`. Dacă rulezi `npm run build` cât timp serverul merge, răspunde 404 la CSS și JavaScript. Repornește `npm run dev:worker`. Prima cerere cu corp după pornire poate pica cu „Network connection lost” în proxy-ul local; a doua merge.
 
-Teste: `npm test`. Tipuri: `npm run check`. Deploy: `npm run deploy` (tokenul Cloudflare e în `CLOUDFLARE_API_TOKEN`, din `~/.zshrc`).
+Teste: `npm test`. Tipuri: `npm run check`. Deploy: `npm run deploy` (tokenul Cloudflare e în `CLOUDFLARE_API_TOKEN`, din `~/.zshrc`). **Capcană (15 sept. 2026):** shell-ul uneltei Bash din Claude Code nu încarcă `~/.zshrc`, deci wrangler cade pe o autentificare OAuth veche și `wrangler d1 migrations apply ai --remote` răspunde 7403 („account is not valid or is not authorized”). Comenzile spre Cloudflare se rulează prin `zsh -ic '…'`, care încarcă `~/.zshrc`; `npx wrangler whoami` arată „User API Token … read from the CLOUDFLARE_API_TOKEN environment variable” când e bine. Ordinea la o migrație nouă: întâi `npm run migrate:remote`, apoi `npm run deploy`.
 
 ## Documentation
 

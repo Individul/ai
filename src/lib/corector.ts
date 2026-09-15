@@ -179,6 +179,14 @@ export function mesajEroareLocal(motor: MotorLocal, mesaj: string): string {
   return motor === "gemini" ? mesajEroareAntigravity(mesaj) : mesajEroareClaudeCode(mesaj);
 }
 
+// Erori care tin de furnizor, nu de contul tau sau de cerere: se reincearca. Vazut pe viu la 15 sept. 2026,
+// pe Gemini 3.8 Flash: „UNAVAILABLE (code 503): No capacity available for model gemini-3.8-flash-high”.
+export function eroareTrecatoare(mesaj: string): boolean {
+  // Limitele planului si autentificarea nu se rezolva prin reincercare.
+  if (/limita planului|usage limit|quota|RESOURCE_EXHAUSTED|nu e logat|authentication|rate[_ ]limit/i.test(mesaj)) return false;
+  return /No capacity|nu are capacitate|UNAVAILABLE|overloaded|temporarily unavailable|\b(500|502|503|529)\b/i.test(mesaj);
+}
+
 // Rezultatul lui `claude -p` (Claude Code pe planul personal): mesajul `result` din --output-format json sau
 // ultimul rand din stream-json. Corecturile vin din `structured_output`, daca exista, altfel din textul
 // `result` (promptul cere JSON). Arunca la eroarea raportata de Claude Code sau la un raspuns care nu e JSON.
@@ -211,6 +219,9 @@ export function continutAntigravity(iesire: string): ContinutLocal {
   const stare = String(d.status ?? "");
   if (stare !== "SUCCESS") {
     throw new Error(mesajEroareAntigravity(`Gemini: ${String(d.error ?? d.response ?? (stare || "eroare")).slice(0, 300)}`));
+  }
+  if (typeof d.response !== "string" || !d.response.trim()) {
+    throw new Error("Gemini a răspuns fără text. Încearcă din nou.");
   }
   const consum = (d.usage ?? {}) as Record<string, unknown>;
   return { brut: String(d.response ?? ""), cost_usd: 0, jetoane: Number(consum.total_tokens ?? 0) || 0 };
@@ -275,6 +286,9 @@ export function mesajEroareAntigravity(mesaj: string): string {
   if (/UNAUTHENTICATED|unauthenticated|not (logged|signed) in|sign in|log in|401|credentials|token (is )?(expired|invalid)/i.test(mesaj)) {
     return "Antigravity nu e logat sau autentificarea a expirat. În Terminal rulează „agy”, loghează-te cu contul tău Google, apoi apasă „reîncearcă”.";
   }
+  if (/No capacity|UNAVAILABLE|503/i.test(mesaj)) {
+    return "Google nu are capacitate acum pentru modelul ales. Încearcă peste câteva minute sau alege alt model.";
+  }
   if (/quota|RESOURCE_EXHAUSTED|rate[_ ]limit|limit reached|429/i.test(mesaj)) {
     return `Ai atins limita planului Google; reîncearcă după resetare. (${mesaj.slice(0, 160)})`;
   }
@@ -314,6 +328,10 @@ export function mesajVerificare(paragrafe: { i: number; text: string; fel: strin
 
 export function extrageVerificare(text: string, indici: Set<number>): { corecturi: Corectura[]; observatii: Observatie[] } {
   const d = jsonDinText(text) as { corecturi?: unknown; observatii?: unknown } | null;
+  // Un raspuns care nu e JSON nu inseamna „document curat”: mai bine o eroare decat o lista goala mincinoasa.
+  if (!Array.isArray(d?.corecturi) && !Array.isArray(d?.observatii)) {
+    throw new Error("Modelul nu a întors verificarea (nici corecturi, nici observații). Încearcă din nou sau alege alt model.");
+  }
   const corecturi = extrageCorecturi(JSON.stringify({ corecturi: Array.isArray(d?.corecturi) ? d.corecturi : [] }), indici);
   const observatii: Observatie[] = [];
   for (const x of (Array.isArray(d?.observatii) ? d.observatii : []) as Record<string, unknown>[]) {

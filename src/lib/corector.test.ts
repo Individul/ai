@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bugetCaractere, cerereCorectura, continutLocal, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR, type MotorLocal } from "./corector";
+import { bugetCaractere, cerereCorectura, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR, type MotorLocal } from "./corector";
 
 describe("impartePeLoturi", () => {
   it("umple loturile in ordine, fara sa depaseasca plafonul; un paragraf lung sta singur", () => {
@@ -111,6 +111,14 @@ describe("motoarele locale", () => {
     expect(mesajEroareLocal("gemini", "Gemini: RESOURCE_EXHAUSTED quota")).toMatch(/^Ai atins limita planului Google/);
     expect(mesajEroareLocal("gemini", "Gemini: ceva neasteptat")).toBe("Gemini: ceva neasteptat");
     expect(mesajEroareLocal("claude", "Claude AI usage limit reached")).toMatch(/^Ai atins limita planului Claude/);
+    expect(mesajEroareLocal("gemini", 'Gemini: API error: UNAVAILABLE (code 503): No capacity available for model gemini-3.8-flash-high')).toMatch(/^Google nu are capacitate/);
+  });
+
+  it("se reincearca doar ce tine de furnizor, nu limitele planului sau autentificarea", () => {
+    expect(eroareTrecatoare(mesajEroareLocal("gemini", "Gemini: UNAVAILABLE (code 503): No capacity available"))).toBe(true);
+    expect(eroareTrecatoare("Claude Code s-a oprit fără rezultat: overloaded_error [cod 1].")).toBe(true);
+    expect(eroareTrecatoare(mesajEroareLocal("gemini", "Gemini: RESOURCE_EXHAUSTED quota"))).toBe(false);
+    expect(eroareTrecatoare(mesajEroareLocal("claude", "OAuth access token is invalid"))).toBe(false);
   });
 });
 
@@ -169,5 +177,9 @@ describe("verificarea intregului document", () => {
       ],
     });
     expect(extrageVerificare('{"corecturi":[],"observatii":[]}', new Set([1]))).toEqual({ corecturi: [], observatii: [] });
+    // Un raspuns stricat nu se citeste ca „document curat”: 15 sept. 2026, Gemini 3.8 Flash a intors text
+    // fara JSON dupa 125.000 de jetoane, iar documentul parea fara greseli.
+    expect(() => extrageVerificare("Am verificat documentul și nu am observații.", new Set([1]))).toThrow(/nu a întors verificarea/);
+    expect(() => extrageVerificare('{"corecturi":[{"i":1,', new Set([1]))).toThrow(/nu a întors verificarea/);
   });
 });

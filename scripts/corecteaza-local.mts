@@ -40,15 +40,16 @@ import {
   paragrafeIntreg, salveazaDocx, salveazaDocxParti, type Corectura, type ParagrafText, type StareAplicare,
 } from "../src/lib/docx.ts";
 import {
-  AUTOR_REVIZII, continutLocal, evenimentClaudeCode, extrageCorecturi, extrageVerificare, impartePeLoturi,
-  LIMITA_PARAGRAF, LIMITA_VERIFICARE, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, MOTOARE_LOCALE,
-  numara, PROMPT_CORECTOR, PROMPT_VERIFICARE, type MotorLocal, type Observatie,
+  AUTOR_REVIZII, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageCorecturi, extrageVerificare,
+  impartePeLoturi, LIMITA_PARAGRAF, LIMITA_VERIFICARE, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal,
+  MOTOARE_LOCALE, numara, PROMPT_CORECTOR, PROMPT_VERIFICARE, type ContinutLocal, type MotorLocal, type Observatie,
 } from "../src/lib/corector.ts";
 
 const PARALELE = 3;
 const TIMP_LOT_MS = 8 * 60_000;
 const TIMP_AGY = "7m"; // propriul lui plafon, sub al nostru, ca sa raspunda cu o eroare, nu sa fie omorat
 const ESEC_RAPID_MS = 60_000; // doar un esec rapid (pornire, raspuns stricat) se reincearca; o asteptare lunga, nu
+const PAUZA_REINCERCARE_MS = 20_000; // cand furnizorul zice ca modelul e ocupat
 const UNELTE: Record<MotorLocal, string> = {
   claude: process.env.CORECTOR_CLAUDE || "claude",
   gemini: process.env.CORECTOR_AGY || "agy",
@@ -122,8 +123,9 @@ interface Eticheta {
 
 const NUME_MOTOR: Record<MotorLocal, string> = { claude: "Claude Code", gemini: "Antigravity" };
 
-// O cerere catre CLI-ul motorului; intoarce raspunsul brut, de citit cu continutLocal.
-function cere(motor: MotorLocal, intrare: string, prompt: string, model: string, eticheta: Eticheta, laStare: (mesaj: string) => void): Promise<string> {
+// O cerere catre CLI-ul motorului, cu raspunsul deja citit (continutLocal), ca si erorile raportate de el
+// sa intre in reincercare.
+function cere(motor: MotorLocal, intrare: string, prompt: string, model: string, eticheta: Eticheta, laStare: (mesaj: string) => void): Promise<ContinutLocal> {
   return new Promise((rezolva, respinge) => {
     const t0 = Date.now();
     const unealta = UNELTE[motor];
@@ -194,22 +196,34 @@ function cere(motor: MotorLocal, intrare: string, prompt: string, model: string,
         return;
       }
       if (!rezultat) {
-        const rapid = Date.now() - t0 < ESEC_RAPID_MS;
-        respinge(new EroareLot(mesajEroareLocal(motor, `${nume} s-a oprit fără rezultat${erori.trim() ? `: ${erori.trim().slice(0, 200)}` : ""}${cod ? ` [cod ${cod}]` : ""}.`), rapid));
+        const mesaj = mesajEroareLocal(motor, `${nume} s-a oprit fără rezultat${erori.trim() ? `: ${erori.trim().slice(0, 200)}` : ""}${cod ? ` [cod ${cod}]` : ""}.`);
+        respinge(new EroareLot(mesaj, Date.now() - t0 < ESEC_RAPID_MS || eroareTrecatoare(mesaj)));
         return;
       }
-      rezolva(rezultat);
+      try {
+        rezolva(continutLocal(motor, rezultat));
+      } catch (e) {
+        // Un raspuns citit, dar cu eroare inauntru (model ocupat, neautentificat): se reincearca doar
+        // cand e vina furnizorului.
+        const mesaj = (e as Error).message;
+        respinge(new EroareLot(mesaj, eroareTrecatoare(mesaj)));
+      }
     });
     if (motor !== "gemini") p.stdin?.end(intrare);
   });
 }
 
-// `cere`, cu o singura reincercare daca a picat repede (pornire, raspuns stricat).
-async function cereCuReincercare(motor: MotorLocal, intrare: string, prompt: string, model: string, eticheta: Eticheta, laStare: (mesaj: string) => void): Promise<string> {
+// `cere`, cu o singura reincercare daca a picat repede (pornire, raspuns stricat) sau daca furnizorul a
+// raspuns ca e ocupat. La al doilea caz asteapta putin, altfel da tot peste modelul ocupat.
+async function cereCuReincercare(motor: MotorLocal, intrare: string, prompt: string, model: string, eticheta: Eticheta, laStare: (mesaj: string) => void): Promise<ContinutLocal> {
   try {
     return await cere(motor, intrare, prompt, model, eticheta, laStare);
   } catch (e) {
     if (!(e instanceof EroareLot) || !e.rapid) throw e;
+    if (eroareTrecatoare(e.message)) {
+      laStare(`${e.message} Reîncerc…`);
+      await new Promise((r) => setTimeout(r, PAUZA_REINCERCARE_MS));
+    }
     return cere(motor, intrare, prompt, model, eticheta, laStare);
   }
 }
@@ -252,8 +266,7 @@ async function corecteaza(fisier: string, alegere: Alegere, anunta: (e: Evenimen
       const parte = loturi[k]!;
       const eticheta = { fisier, parte: k + 1, caractere: parte.reduce((s, x) => s + x.text.length, 0) };
       try {
-        const brut = await cereCuReincercare(motor, JSON.stringify({ paragrafe: parte }), PROMPT_CORECTOR, cli, eticheta, laStare);
-        const r = continutLocal(motor, brut);
+        const r = await cereCuReincercare(motor, JSON.stringify({ paragrafe: parte }), PROMPT_CORECTOR, cli, eticheta, laStare);
         rezultate[k] = extrageCorecturi(r.brut, new Set(parte.map((x) => x.i)));
         cost += r.cost_usd;
         jetoane += r.jetoane;
@@ -291,8 +304,7 @@ async function verifica(fisier: string, alegere: Alegere, anunta: (e: Eveniment)
   }
 
   const laStare = (mesaj: string) => anunta({ tip: "stare", fisier, mesaj });
-  const brut = await cereCuReincercare(motor, mesajVerificare(paragrafe), PROMPT_VERIFICARE, cli, { fisier, parte: 1, caractere }, laStare);
-  const r = continutLocal(motor, brut);
+  const r = await cereCuReincercare(motor, mesajVerificare(paragrafe), PROMPT_VERIFICARE, cli, { fisier, parte: 1, caractere }, laStare);
   const { corecturi: cerute, observatii } = extrageVerificare(r.brut, new Set(paragrafe.map((p) => p.i)));
   anunta({ tip: "progres", fisier, gata: 1, total: 1 });
 

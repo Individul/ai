@@ -10,7 +10,7 @@
 //
 // Textul care se vede, dar nu se corecteaza (corectura iese "blocata"): campurile (cuprins,
 // trimiteri, numere de pagina), reviziile existente, casetele de text si caracterele care nu sunt
-// text (tab, rand nou). Antetele, subsolurile si notele de subsol nu se trimit deloc.
+// text (tab, rand nou). Modul corectura citeste doar corpul; modul verificare, tot documentul (analizeazaIntreg).
 
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
@@ -226,11 +226,13 @@ export interface Operatie {
 
 const CUVINTE = /[\p{L}\p{M}\p{N}]+|\s+|[^\p{L}\p{M}\p{N}\s]/gu;
 
-// Diferentele pe cuvinte (LCS), ca revizia sa marcheze "sa" -> "să", nu toata fraza.
-export function diferente(vechi: string, nou: string): Operatie[] {
-  const a = [...vechi.matchAll(CUVINTE)].map((m) => ({ t: normalizeaza(m[0], STRICT), de: m.index!, pana: m.index! + m[0].length }));
+// Diferentele pe cuvinte (LCS), ca revizia sa marcheze "sa" -> "să", nu toata fraza. `exact`: fara
+// echivalentele STRICT, ca un text aprobat (mentiunea despre datele personale) sa intre caracter cu caracter.
+export function diferente(vechi: string, nou: string, exact = false): Operatie[] {
+  const egal = (t: string) => (exact ? t : normalizeaza(t, STRICT));
+  const a = [...vechi.matchAll(CUVINTE)].map((m) => ({ t: egal(m[0]), de: m.index!, pana: m.index! + m[0].length }));
   const b = [...nou.matchAll(CUVINTE)].map((m) => m[0]);
-  const bn = b.map((t) => normalizeaza(t, STRICT));
+  const bn = b.map(egal);
   const n = a.length, m = b.length;
   if (n * m > 250_000) return [{ de: 0, pana: vechi.length, ins: nou }];
   const lat = m + 1;
@@ -266,6 +268,7 @@ export interface Corectura {
   nou: string;
   tip: string;
   motiv: string;
+  exact?: boolean; // fara echivalenta ş/ţ = ș/ț: textul nou intra caracter cu caracter (doar in cod, nu de la model)
 }
 
 // aplicata: e in document ca revizie; negasita: "vechi" nu apare in paragraf; suprapusa: apare doar
@@ -363,7 +366,7 @@ export function aplicaCorecturi(a: AnalizaDocx, corecturi: Corectura[], rev: Rev
     for (const k of indici) {
       const c = corecturi[k]!;
       const ap = aplicari[k]!;
-      if (normalizeaza(c.vechi, STRICT) === normalizeaza(c.nou, STRICT)) { ap.stare = "fara_schimbare"; continue; }
+      if (c.exact ? c.vechi === c.nou : normalizeaza(c.vechi, STRICT) === normalizeaza(c.nou, STRICT)) { ap.stare = "fara_schimbare"; continue; }
       const cautat = normalizeaza(c.vechi, LARG);
       let poz = -1;
       let aparitii = 0;
@@ -380,7 +383,7 @@ export function aplicaCorecturi(a: AnalizaDocx, corecturi: Corectura[], rev: Rev
       const stergeri: [number, number][] = [];
       const inserari: { unde: Map<number, string>; poz: number; text: string }[] = [];
       let valid = true;
-      for (const o of diferente(ap.vechi, c.nou)) {
+      for (const o of diferente(ap.vechi, c.nou, c.exact)) {
         const de = poz + o.de, pana = poz + o.pana, ins = curataInserat(o.ins);
         if (pana > de) {
           for (let x = de; x < pana; x++) if (!p.editabil[x]) valid = false;
@@ -418,6 +421,43 @@ export function aplicaCorecturi(a: AnalizaDocx, corecturi: Corectura[], rev: Rev
   return { xml: tokeni.join(""), aplicari };
 }
 
+
+// ---------------------------------------------------------------- paragraf nou
+
+export interface BucataNoua {
+  text: string;
+  bold?: boolean;
+}
+
+// Un paragraf nou la sfarsitul corpului (inaintea proprietatilor sectiunii finale), inserat ca revizie:
+// w:ins pe run-uri si pe semnul de paragraf, ca respingerea in Word sa-l scoata cu totul.
+// `marime` e in jumatati de punct (20 = 10 pt).
+export function adaugaParagrafLaSfarsit(xml: string, bucati: BucataNoua[], rev: Revizie, marime?: number): string {
+  const tokeni = xml.match(TOKEN) ?? [];
+  const body = (function gaseste(n: Nod): Nod | null {
+    for (const c of n.copii) {
+      if (c.nume === "w:body") return c;
+      const g = gaseste(c);
+      if (g) return g;
+    }
+    return null;
+  })(arbore(tokeni));
+  if (!body) throw new EroareDocx("Documentul nu are corp.");
+  const ultimul = body.copii.filter((c) => c.nume !== "#text").at(-1);
+  const unde = ultimul?.nume === "w:sectPr" ? ultimul.de : body.pana;
+
+  let id = idMaxim(tokeni) + 1;
+  const atribute = () => `w:id="${id++}" w:author="${escapeazaAtribut(rev.autor)}" w:date="${rev.data}"`;
+  const sz = marime ? `<w:sz w:val="${marime}"/><w:szCs w:val="${marime}"/>` : "";
+  const runuri = bucati
+    .filter((b) => b.text)
+    .map((b) => `<w:r><w:rPr>${b.bold ? "<w:b/><w:bCs/>" : ""}${sz}</w:rPr><w:t xml:space="preserve">${escapeaza(curataInserat(b.text))}</w:t></w:r>`)
+    .join("");
+  const semn = `<w:rPr><w:ins ${atribute()}/>${sz}</w:rPr>`;
+  const paragraf = `<w:p><w:pPr><w:spacing w:line="276" w:lineRule="auto"/><w:jc w:val="both"/>${semn}</w:pPr><w:ins ${atribute()}>${runuri}</w:ins></w:p>`;
+  tokeni[unde] = paragraf + tokeni[unde]!;
+  return tokeni.join("");
+}
 
 // ---------------------------------------------------------------- documentul intreg
 

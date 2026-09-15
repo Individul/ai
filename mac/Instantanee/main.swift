@@ -58,7 +58,7 @@ func exemplu() -> Rezultat {
       Observatie(tip: "date", text: "„durata executării pedepsei din 02.01.2018” față de „reținut de facto la 02.10.2018”: aceeași dată apare diferit, iar de ea depinde calculul termenului. De verificat în dosar."),
       Observatie(tip: "lipsa", text: "Rubrica de înregistrare „.09.2026 nr. 5/” a rămas fără zi și fără număr."),
     ],
-    motor: "gemini", model: "pro", jetoane: 128_400
+    motor: "gemini", model: "pro", jetoane: 128_400, mentiune: "adaugata"
   )
 }
 

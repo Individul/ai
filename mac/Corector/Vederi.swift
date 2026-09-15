@@ -383,6 +383,7 @@ struct RandDocument: View {
       }
       if r.deVerificat > 0 { parti.append("\(r.deVerificat) de verificat") }
       if !r.obs.isEmpty { parti.append(numara(r.obs.count, "observație", "observații")) }
+      if let mentiune = r.textMentiune { parti.append(mentiune) }
       if !r.esecuri.isEmpty { parti.append("\(numara(r.esecuri.count, "parte nereușită", "părți nereușite"))") }
       parti.append(durata(r.secunde))
       if let eticheta = r.eticheta { parti.append(eticheta) }

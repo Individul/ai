@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import {
-  analizeazaDocument, analizeazaIntreg, aplicaCorecturi, aplicaCorecturiIntreg, deschideDocx, diferente, EroareDocx,
-  paragrafeDeCorectat, paragrafeIntreg, salveazaDocx, salveazaDocxParti, type Corectura,
+  adaugaParagrafLaSfarsit, analizeazaDocument, analizeazaIntreg, aplicaCorecturi, aplicaCorecturiIntreg, deschideDocx, diferente,
+  EroareDocx, paragrafeDeCorectat, paragrafeIntreg, salveazaDocx, salveazaDocxParti, type Corectura,
 } from "./docx";
 
 const doc = (corp: string) =>
@@ -35,6 +35,42 @@ function bineFormat(xml: string): boolean {
   }
   return stiva.length === 0;
 }
+
+describe("adaugaParagrafLaSfarsit", () => {
+  it("pune paragraful ca revizie inaintea sectiunii finale: acceptat apare, respins dispare", () => {
+    const xml = doc(par(run("Primul.")) + par(`<w:ins w:id="7" w:author="X" w:date="${REV.data}">${run("Deja inserat.")}</w:ins>`));
+    const nou = adaugaParagrafLaSfarsit(xml, [{ text: "Atenție: " }, { text: "Legea nr. 1", bold: true }, { text: " & rest." }], REV, 20);
+    expect(bineFormat(nou)).toBe(true);
+    expect(nou.indexOf("Legea nr. 1")).toBeLessThan(nou.indexOf("<w:sectPr/>"));
+    expect(textDupa(nou, "accept").at(-1)).toBe("Atenție: Legea nr. 1 & rest.");
+    expect(textDupa(nou, "resping")).not.toContain("Atenție: Legea nr. 1 & rest.");
+    // id-urile noi trec de cele existente; si semnul de paragraf e inserat, ca respingerea sa scoata tot paragraful
+    expect(nou).toMatch(/<w:rPr><w:ins w:id="8" [^>]*\/><w:sz w:val="20"\/><w:szCs w:val="20"\/><\/w:rPr><\/w:pPr><w:ins w:id="9" /);
+    expect(nou).toContain('<w:rPr><w:b/><w:bCs/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr><w:t xml:space="preserve">Legea nr. 1</w:t>');
+    expect(nou).toContain("&amp; rest.");
+  });
+
+  it("fara sectPr, paragraful merge la sfarsitul corpului", () => {
+    const xml = `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${par(run("Unu."))}</w:body></w:document>`;
+    const nou = adaugaParagrafLaSfarsit(xml, [{ text: "Doi." }], REV);
+    expect(textDupa(nou, "accept")).toEqual(["Unu.", "Doi."]);
+    expect(nou.endsWith("</w:ins></w:p></w:body></w:document>")).toBe(true);
+    expect(() => adaugaParagrafLaSfarsit("<w:document/>", [{ text: "x" }], REV)).toThrow(EroareDocx);
+  });
+});
+
+describe("corecturi exacte", () => {
+  it("la exact, ş/ţ cu sedila se inlocuiesc cu ș/ț; fara, raman echivalente si nu se ating", () => {
+    const a = analizeazaDocument(doc(par(run("Atenţie: conţine date."))));
+    const obisnuita = aplicaCorecturi(a, [c(0, "Atenţie: conţine date.", "Atenție: conține date.")], REV);
+    expect(obisnuita.aplicari[0]!.stare).toBe("fara_schimbare");
+    const exacta = aplicaCorecturi(a, [{ ...c(0, "Atenţie: conţine date.", "Atenție: conține date."), exact: true }], REV);
+    expect(exacta.aplicari[0]!.stare).toBe("aplicata");
+    expect(textDupa(exacta.xml, "accept")).toEqual(["Atenție: conține date."]);
+    expect(textDupa(exacta.xml, "resping")).toEqual(["Atenţie: conţine date."]);
+    expect(diferente("conţine", "conține", true)).toEqual([{ de: 0, pana: 7, ins: "conține" }]);
+  });
+});
 
 describe("analizeazaDocument", () => {
   it("scoate textul paragrafelor, si din tabele, cu entitatile decodate", () => {

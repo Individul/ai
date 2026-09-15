@@ -159,8 +159,19 @@ struct Rezultat: Decodable, Hashable {
   let motor: String?
   let model: String?
   let jetoane: Int?
+  let mentiune: String? // prezenta | corectata | adaugata | de_verificat
 
   var deVerificat: Int { corecturi.filter(\.deVerificat).count }
+
+  // Mentiunea despre datele cu caracter personal, doar cand s-a schimbat ceva; una deja in regula nu apare.
+  var textMentiune: String? {
+    switch mentiune {
+    case "adaugata": return "mențiunea despre date personale adăugată"
+    case "corectata": return "mențiunea despre date personale adusă la forma aprobată"
+    case "de_verificat": return "mențiunea despre date personale de verificat"
+    default: return nil
+    }
+  }
   var obs: [Observatie] { observatii ?? [] }
 
   // „Opus”, „Gemini Pro”: cu ce a fost facut, ca sa se compare doua treceri prin acelasi document.

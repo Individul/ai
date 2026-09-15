@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bugetCaractere, cerereCorectura, corecturiDinClaudeCode, evenimentClaudeCode, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR } from "./corector";
+import { bugetCaractere, cerereCorectura, corecturiDinClaudeCode, evenimentClaudeCode, mesajEroareClaudeCode, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR } from "./corector";
 
 describe("impartePeLoturi", () => {
   it("umple loturile in ordine, fara sa depaseasca plafonul; un paragraf lung sta singur", () => {
@@ -104,5 +104,16 @@ describe("evenimentClaudeCode", () => {
     expect(evenimentClaudeCode(JSON.stringify({ type: "result", subtype: "error_during_execution", is_error: true, result: "Claude AI usage limit reached" })))
       .toMatchObject({ fel: "rezultat", jurnal: { eroare: "Claude AI usage limit reached" } });
     expect(evenimentClaudeCode("nu e json")).toBeNull();
+  });
+});
+
+
+describe("mesajEroareClaudeCode", () => {
+  it("spune pe romaneste cand Claude Code nu e logat sau a atins limita; restul raman neschimbate", () => {
+    const autentificare = 'Claude Code: Failed to authenticate. API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"OAuth access token is invalid."}}';
+    expect(mesajEroareClaudeCode(autentificare)).toMatch(/nu e logat.*\/login/);
+    expect(() => corecturiDinClaudeCode(JSON.stringify({ type: "result", subtype: "success", is_error: true, result: autentificare.slice(13) }), new Set([1]))).toThrow(/nu e logat/);
+    expect(mesajEroareClaudeCode("Claude AI usage limit reached|1789400000")).toMatch(/^Ai atins limita planului/);
+    expect(mesajEroareClaudeCode("Credit balance is too low")).toBe("Credit balance is too low");
   });
 });

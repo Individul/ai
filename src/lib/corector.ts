@@ -150,7 +150,7 @@ export function corecturiDinClaudeCode(iesire: string, indici: Set<number>): { c
     throw new Error(`Claude Code nu a întors JSON: ${iesire.trim().slice(0, 200) || "nimic"}`);
   }
   if (d.is_error === true || (typeof d.subtype === "string" && d.subtype !== "success")) {
-    throw new Error(`Claude Code: ${String(d.result ?? d.subtype ?? "eroare").slice(0, 300)}`);
+    throw new Error(mesajEroareClaudeCode(`Claude Code: ${String(d.result ?? d.subtype ?? "eroare").slice(0, 300)}`));
   }
   const brut = d.structured_output !== undefined ? JSON.stringify(d.structured_output) : String(d.result ?? "");
   return { corecturi: extrageCorecturi(brut, indici), cost_usd: Number(d.total_cost_usd ?? 0) || 0 };
@@ -196,4 +196,16 @@ export function evenimentClaudeCode(rand: string): EvenimentClaudeCode | null {
   if (tip === "assistant") Object.assign(jurnal, { blocuri: blocuri(d.message?.content), stop: d.message?.stop_reason });
   if (tip === "user") jurnal.blocuri = blocuri(d.message?.content);
   return { fel: "altul", jurnal };
+}
+
+// Erorile lui Claude Code pe care omul le rezolva singur, spuse pe romaneste; restul raman cum sunt.
+// Vazut pe viu la 15 sept. 2026: "Failed to authenticate. API Error: 401 ... OAuth access token is invalid."
+export function mesajEroareClaudeCode(mesaj: string): string {
+  if (/OAuth|authentication_error|Failed to authenticate|Invalid API key|\/login|not logged in/i.test(mesaj)) {
+    return "Claude Code nu e logat sau autentificarea a expirat. În Terminal rulează „claude”, scrie „/login” și loghează-te cu contul tău, apoi apasă „reîncearcă”.";
+  }
+  if (/usage limit|rate[_ ]limit|limit reached/i.test(mesaj)) {
+    return `Ai atins limita planului Claude; reîncearcă după resetare. (${mesaj.slice(0, 160)})`;
+  }
+  return mesaj;
 }

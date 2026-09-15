@@ -29,7 +29,7 @@ import {
   type StareAplicare,
 } from "../src/lib/docx.ts";
 import {
-  AUTOR_REVIZII, corecturiDinClaudeCode, evenimentClaudeCode, impartePeLoturi, LIMITA_PARAGRAF, numara, PROMPT_CORECTOR,
+  AUTOR_REVIZII, corecturiDinClaudeCode, evenimentClaudeCode, impartePeLoturi, LIMITA_PARAGRAF, mesajEroareClaudeCode, numara, PROMPT_CORECTOR,
 } from "../src/lib/corector.ts";
 
 const PARALELE = 3;
@@ -146,7 +146,7 @@ function lot(
         return;
       }
       if (!rezultat) {
-        respinge(new EroareLot(`Claude Code s-a oprit fără rezultat${erori.trim() ? `: ${erori.trim().slice(0, 200)}` : ""}${cod ? ` [cod ${cod}]` : ""}.`, rapid));
+        respinge(new EroareLot(mesajEroareClaudeCode(`Claude Code s-a oprit fără rezultat${erori.trim() ? `: ${erori.trim().slice(0, 200)}` : ""}${cod ? ` [cod ${cod}]` : ""}.`), rapid));
         return;
       }
       try {

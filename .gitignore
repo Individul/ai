@@ -4,3 +4,4 @@ dist/
 node_modules/
 .dev.vars
 worker-configuration.d.ts
+mac/build/

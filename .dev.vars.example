@@ -10,3 +10,5 @@ ZAI_API_KEY=
 # ZAI_API_BASE=
 # Cheia DeepSeek (platform.deepseek.com, sold preplatit). Fara ea, chatul pe modelele deepseek-* raspunde 503.
 DEEPSEEK_API_KEY=
+# Cheia Anthropic (platform.claude.com → API keys, cu credit). Fara ea, corectorul pe modelele Claude raspunde 503.
+ANTHROPIC_API_KEY=

@@ -113,7 +113,7 @@ describe("motorul deepseek", () => {
     expect(motorModel("deepseek-v4-flash")).toBe("deepseek");
     expect(TARIFE["deepseek-v4-flash"]).toMatchObject({ motor: "deepseek", intrare: 0.14, intrare_cache: 0.0028, iesire: 0.28 });
     expect(TARIFE["glm-5.3-flash"]).toMatchObject({ intrare_cache: 0.03 });
-    expect(NUME_MOTOR).toEqual({ gemini: "Gemini", zai: "Z.AI", deepseek: "DeepSeek" });
+    expect(NUME_MOTOR).toEqual({ gemini: "Gemini", zai: "Z.AI", deepseek: "DeepSeek", claude: "Claude" });
   });
 });
 

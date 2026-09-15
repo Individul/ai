@@ -22,7 +22,33 @@ export interface CerereText {
   sistem: string;
   utilizator: string;
   maxTokens: number;
+  schema?: Record<string, unknown>; // impusa acolo unde motorul o accepta (Claude); celelalte cer doar JSON
 }
+
+// Schema raspunsului corectorului. Limitele Anthropic: additionalProperties false la fiecare obiect,
+// fara minLength / maxLength (lungimile le verifica extrageCorecturi).
+export const SCHEMA_CORECTURI: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    corecturi: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          i: { type: "integer" },
+          vechi: { type: "string" },
+          nou: { type: "string" },
+          tip: { type: "string", enum: ["ortografie", "gramatică", "punctuație", "formulare"] },
+          motiv: { type: "string" },
+        },
+        required: ["i", "vechi", "nou", "tip", "motiv"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["corecturi"],
+  additionalProperties: false,
+};
 
 export const PROMPT_CORECTOR = `Ești corector de limba română pentru documentele de serviciu ale sistemului penitenciar din Republica Moldova (rapoarte, note informative, demersuri, dispoziții, procese-verbale).
 Primești paragrafele unui document ca JSON: {"paragrafe":[{"i":număr,"text":"..."}]}.
@@ -73,6 +99,7 @@ export function cerereCorectura(model: string, lot: ParagrafText[]): CerereText 
     sistem: PROMPT_CORECTOR,
     utilizator: JSON.stringify({ paragrafe: lot.map((p) => ({ i: p.i, text: p.text })) }),
     maxTokens: 32_768, // tokenii de gandire intra in plafon
+    schema: SCHEMA_CORECTURI,
   };
 }
 

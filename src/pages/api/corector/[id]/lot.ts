@@ -8,6 +8,7 @@ import { corecteazaLot, EroareCorectare } from "../../../../lib/motor";
 import { citesteJson, eroare, json } from "../../../../lib/api";
 import { EroareGemini } from "../../../../lib/gemini";
 import { EroareZai } from "../../../../lib/zai";
+import { EroareClaude } from "../../../../lib/claude";
 import { bugetCaractere, LIMITA_LOT_SERVER, LIMITA_LOTURI } from "../../../../lib/corector";
 import type { ParagrafText } from "../../../../lib/docx";
 
@@ -41,7 +42,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     return json({ corecturi: r.corecturi });
   } catch (e) {
     if (e instanceof EroareCorectare) await adaugaLaCorectare(env.DB, corectare.id, { ...e.consum, caractere, reusit: false });
-    const status = (e instanceof EroareGemini || e instanceof EroareZai) && e.status === 503 ? 503 : 502;
+    const status = (e instanceof EroareGemini || e instanceof EroareZai || e instanceof EroareClaude) && e.status === 503 ? 503 : 502;
     return eroare(status, `Modelul nu a putut corecta lotul: ${(e as Error).message}`);
   }
 };

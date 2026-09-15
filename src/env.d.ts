@@ -23,6 +23,8 @@ declare namespace Cloudflare {
     ZAI_API_BASE?: string;
     // Cheia DeepSeek (platform.deepseek.com, sold preplatit), pentru modelele deepseek-*. Fara ea, 503.
     DEEPSEEK_API_KEY?: string;
+    // Cheia Anthropic (platform.claude.com), pentru modelele Claude ale corectorului. Fara ea, 503.
+    ANTHROPIC_API_KEY?: string;
     // Doar in .dev.vars, pentru dezvoltare locala. Ignorat in productie.
     DEV_EMAIL?: string;
   }

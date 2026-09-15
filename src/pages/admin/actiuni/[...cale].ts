@@ -27,7 +27,7 @@ import { cheieR2 } from "../../../lib/fisiere";
 import { scoateDinIndex } from "../../../lib/indexare";
 import { stergeText } from "../../../lib/text";
 import {
-  LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, esteModel, esteStare, slug, valideazaAudio, valideazaCatalog, valideazaSursa,
+  LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, TARIFE, esteModel, esteStare, slug, valideazaAudio, valideazaCatalog, valideazaSursa,
 } from "../../../lib/validare";
 import { seteazaSetare, seteazaUtilizator } from "../../../lib/consum";
 
@@ -176,6 +176,7 @@ export const POST: APIRoute = async ({ params, request, url, redirect }) => {
     if (!Number.isInteger(limita) || limita < 0 || limita > 10_000) return laConsum({ eroare: "Limita implicită trebuie să fie un număr întreg." });
     const model = (f.model ?? "").trim();
     if (!esteModel(model)) return laConsum({ eroare: "Model necunoscut." });
+    if (TARIFE[model]!.doar_corector) return laConsum({ eroare: "Modelele Claude sunt doar pentru corector; alege alt model pentru chat." });
     const modelCorector = (f.model_corector ?? "").trim();
     if (!esteModel(modelCorector)) return laConsum({ eroare: "Modelul corectorului e necunoscut." });
     const buget = Number((f.buget_context ?? "").replace(/[.\s]/g, ""));

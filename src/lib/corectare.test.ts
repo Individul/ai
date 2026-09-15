@@ -4,7 +4,7 @@ import {
   adaugaLaCorectare, citesteCorectare, consumUtilizator, corectariUtilizator, costPropriu, costTotalToti, creeazaCorectare,
   incheieCorectare, inregistreazaIntrebare, intrebariAzi, modelCorector, raportUtilizatori, seteazaSetare,
 } from "./consum";
-import { corecteazaLot, EroareCorectare, type ApelText } from "./motor";
+import { corecteazaLot, EroareCorectare, raspunde, type ApelText } from "./motor";
 import { PROMPT_CORECTOR } from "./corector";
 import { creeazaCatalog } from "./db";
 
@@ -79,6 +79,12 @@ describe("corecteazaLot", () => {
 
     await corecteazaLot({ DB: env.DB, FISIERE: env.FISIERE, DEEPSEEK_API_KEY: "d" }, "deepseek-flash", [{ i: 4, text: "insa" }], apel);
     expect(cereri[1]!.slice(0, 3)).toEqual(["deepseek", "d", "https://api.deepseek.com"]);
+
+    // Claude: cheia Anthropic, schema impusa, costul la tariful Sonnet 5 (2 $ / 10 $ per M)
+    const c = await corecteazaLot({ DB: env.DB, FISIERE: env.FISIERE, ANTHROPIC_API_KEY: "a" }, "claude-sonnet-5", [{ i: 4, text: "insa" }], apel);
+    expect(cereri[2]!.slice(0, 3)).toEqual(["claude", "a", "https://api.anthropic.com"]);
+    expect(cereri[2]![3].schema).toBeDefined();
+    expect(c.cost_microdolari).toBe(3000);
   });
 
   it("fara cheie da 503; un raspuns ilizibil poarta consumul, ca sa intre in jurnal", async () => {
@@ -87,5 +93,14 @@ describe("corecteazaLot", () => {
     const e = await corecteazaLot({ DB: env.DB, FISIERE: env.FISIERE, GEMINI_API_KEY: "g" }, "gemini-3.5-flash-lite", [{ i: 0, text: "x" }], apel).catch((x) => x);
     expect(e).toBeInstanceOf(EroareCorectare);
     expect((e as EroareCorectare).consum).toMatchObject({ tokens_intrare: 1000, cost_microdolari: 550 });
+  });
+});
+
+describe("modelele Claude la chat", () => {
+  it("raspunde refuza modelele doar pentru corector", async () => {
+    const catalog = await creeazaCatalog(env.DB, "penala", { titlu: "Legislația penală", stare: "activ" });
+    await expect(raspunde({ DB: env.DB, FISIERE: env.FISIERE, ANTHROPIC_API_KEY: "a" }, {
+      model: "claude-sonnet-5", catalog, istoric: [], intrebare: "?", buget: 1000,
+    })).rejects.toMatchObject({ status: 409 });
   });
 });

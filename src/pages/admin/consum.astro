@@ -8,7 +8,7 @@ import {
 } from "../../lib/consum";
 import { aziChisinau, fmtMoment, fmtZi } from "../../lib/data";
 import { cursUsd } from "../../lib/curs";
-import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, MODELE, TARIFE, motorModel, stareVarf } from "../../lib/validare";
+import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, MODELE, MODELE_CHAT, TARIFE, motorModel, stareVarf } from "../../lib/validare";
 import { textVarf } from "../../lib/varf";
 import { listeazaCataloage } from "../../lib/db";
 import { listaIncalzire } from "../../lib/incalzire";
@@ -64,7 +64,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
     <label>
       <span>Model</span>
       <select name="model">
-        {MODELE.map((m) => <option value={m} selected={m === model}>{descriereModel(m)}</option>)}
+        {MODELE_CHAT.map((m) => <option value={m} selected={m === model}>{descriereModel(m)}</option>)}
       </select>
     </label>
     <label>

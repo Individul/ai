@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bugetCaractere, cerereCorectura, corecturiDinClaudeCode, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR } from "./corector";
+import { bugetCaractere, cerereCorectura, corecturiDinClaudeCode, evenimentClaudeCode, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR } from "./corector";
 
 describe("impartePeLoturi", () => {
   it("umple loturile in ordine, fara sa depaseasca plafonul; un paragraf lung sta singur", () => {
@@ -83,5 +83,26 @@ describe("corecturiDinClaudeCode", () => {
   it("arunca la eroarea raportata sau la iesire care nu e JSON", () => {
     expect(() => corecturiDinClaudeCode(JSON.stringify({ subtype: "error_max_turns", is_error: true, result: "Credit balance is too low" }), new Set([1]))).toThrow(/Credit balance/);
     expect(() => corecturiDinClaudeCode("Invalid API key · Please run /login", new Set([1]))).toThrow(/nu a întors JSON/);
+  });
+});
+
+describe("evenimentClaudeCode", () => {
+  it("recunoaste rezultatul, reincercarile si pastreaza in jurnal doar cifrele, fara text", () => {
+    const rezultat = evenimentClaudeCode(JSON.stringify({ type: "result", subtype: "success", is_error: false, num_turns: 1, duration_ms: 42000, result: "{\"corecturi\":[{\"vechi\":\"text secret\"}]}", total_cost_usd: 0.03 }));
+    expect(rezultat).toMatchObject({ fel: "rezultat", jurnal: { type: "result", num_turns: 1, duration_ms: 42000, cost_usd: 0.03, structured_output: false } });
+    expect(JSON.stringify(rezultat!.jurnal)).not.toContain("text secret");
+
+    expect(evenimentClaudeCode(JSON.stringify({ type: "system", subtype: "api_retry", attempt: 3, max_retries: 10, error_status: 429, error: "rate_limit", retry_delay_ms: 8000 })))
+      .toMatchObject({ fel: "reincercare", eroare: "rate_limit", incercare: 3, max: 10 });
+
+    const asistent = evenimentClaudeCode(JSON.stringify({ type: "assistant", message: { content: [{ type: "thinking", thinking: "secret" }, { type: "tool_use", name: "StructuredOutput", input: { x: "secret" } }], stop_reason: "tool_use" } }));
+    expect(asistent).toMatchObject({ fel: "altul", jurnal: { blocuri: ["thinking", "tool_use:StructuredOutput"], stop: "tool_use" } });
+    expect(JSON.stringify(asistent!.jurnal)).not.toContain("secret");
+  });
+
+  it("la eroare pune mesajul in jurnal; randurile care nu sunt JSON se sar", () => {
+    expect(evenimentClaudeCode(JSON.stringify({ type: "result", subtype: "error_during_execution", is_error: true, result: "Claude AI usage limit reached" })))
+      .toMatchObject({ fel: "rezultat", jurnal: { eroare: "Claude AI usage limit reached" } });
+    expect(evenimentClaudeCode("nu e json")).toBeNull();
   });
 });

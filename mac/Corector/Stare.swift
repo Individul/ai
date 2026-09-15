@@ -20,6 +20,8 @@ final class Corector: ObservableObject {
     let id = UUID()
     let url: URL
     var stare: StareDocument = .inAsteptare
+    var inceputLa: Date?
+    var nota: String?
 
     var nume: String { url.lastPathComponent }
 
@@ -110,13 +112,20 @@ final class Corector: ObservableObject {
       let lucrare = Motor.Lucrare()
       lucrareCurenta = (id, lucrare)
       actualizeaza(id, .inLucru(gata: 0, total: 0))
+      modifica(id) {
+        $0.inceputLa = Date()
+        $0.nota = nil
+      }
       let eroare = await Motor.corecteaza(fisier: document.url, model: model, unelte: unelte, script: script, lucrare: lucrare) { [weak self] e in
         guard let self else { return }
         switch e {
         case .inceput(let loturi): self.actualizeaza(id, .inLucru(gata: 0, total: loturi))
-        case .progres(let gata, let total): self.actualizeaza(id, .inLucru(gata: gata, total: total))
+        case .progres(let gata, let total):
+          self.actualizeaza(id, .inLucru(gata: gata, total: total))
+          self.modifica(id) { $0.nota = nil }
         case .rezultat(let r): self.actualizeaza(id, .gata(r))
         case .eroare(let mesaj): self.actualizeaza(id, .eroare(mesaj))
+        case .stare(let mesaj): self.modifica(id) { $0.nota = mesaj }
         }
       }
       lucrareCurenta = nil
@@ -126,6 +135,11 @@ final class Corector: ObservableObject {
         actualizeaza(id, .eroare(eroare))
       }
     }
+  }
+
+  private func modifica(_ id: UUID, _ schimbare: (inout Document) -> Void) {
+    guard let k = documente.firstIndex(where: { $0.id == id }) else { return }
+    schimbare(&documente[k])
   }
 
   private func actualizeaza(_ id: UUID, _ stare: StareDocument) {

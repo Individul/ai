@@ -6,30 +6,37 @@
 // Ruleaza Claude Code in mod neinteractiv (`claude -p`), logat cu contul tau, pe calculatorul tau: folosire
 // individuala obisnuita a Claude Code. Abonamentul nu se poate folosi din Worker (regulile Anthropic,
 // "Authentication and credential use"), deci pe planul personal corectorul merge doar asa, local.
-// Acelasi prompt, aceeasi schema si aceleasi revizii Word ca in hub (src/lib/corector.ts, src/lib/docx.ts);
-// hub-ul nu vede nimic si nu se scrie in jurnal. Documentul corectat se scrie langa original, cu
-// " (corectat)" in nume.
+// Acelasi prompt si aceleasi revizii Word ca in hub (src/lib/corector.ts, src/lib/docx.ts); hub-ul nu vede
+// nimic si nu se scrie in jurnalul lui. Documentul corectat se scrie langa original, cu " (corectat)" in nume.
 //
-// --json: cate un eveniment JSON pe rand, pentru aplicatie: inceput, progres, rezultat, eroare.
+// Fara --json-schema (15 sept. 2026): cu Claude Code 2.1.32 si --tools "", cererile cu schema au stat
+// 10 minute fara raspuns, de doua ori la rand. Promptul cere oricum JSON, iar corecturiDinClaudeCode il
+// scoate din text. Iesirea e stream-json, ca reincercarile lui Claude Code (limite, supraincarcare) sa se
+// vada in aplicatie si in jurnalul de diagnostic (~/Library/Logs/Corector/AAAA-LL-ZZ.jsonl: felul
+// evenimentelor si cifrele, fara textul documentului).
+//
+// --json: cate un eveniment JSON pe rand, pentru aplicatie: inceput, progres, stare, rezultat, eroare.
 // CORECTOR_CLAUDE: calea catre `claude` (aplicatia o gaseste singura; pornita din Finder nu are PATH-ul
 // din Terminal). Fara ea, scriptul refuza sa ruleze din interiorul unei sesiuni Claude Code, unde
 // `claude -p` ramane blocat.
 
-import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { spawn, type ChildProcess } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
   analizeazaDocument, aplicaCorecturi, deschideDocx, paragrafeDeCorectat, salveazaDocx, type Corectura, type ParagrafText,
   type StareAplicare,
 } from "../src/lib/docx.ts";
 import {
-  AUTOR_REVIZII, corecturiDinClaudeCode, impartePeLoturi, LIMITA_PARAGRAF, numara, PROMPT_CORECTOR, SCHEMA_CORECTURI,
+  AUTOR_REVIZII, corecturiDinClaudeCode, evenimentClaudeCode, impartePeLoturi, LIMITA_PARAGRAF, numara, PROMPT_CORECTOR,
 } from "../src/lib/corector.ts";
 
 const PARALELE = 3;
-const TIMP_LOT_MS = 10 * 60_000;
+const TIMP_LOT_MS = 8 * 60_000;
+const ESEC_RAPID_MS = 60_000; // doar un esec rapid (pornire, raspuns stricat) se reincearca; o asteptare lunga, nu
 const CLAUDE = process.env.CORECTOR_CLAUDE || "claude";
+const DIR_JURNAL = join(homedir(), "Library", "Logs", "Corector");
 
 interface CorecturaAfisata {
   stare: StareAplicare;
@@ -54,31 +61,98 @@ interface RezultatDocument {
 type Eveniment =
   | { tip: "inceput"; fisier: string; loturi: number; paragrafe: number }
   | { tip: "progres"; fisier: string; gata: number; total: number }
+  | { tip: "stare"; fisier: string; mesaj: string }
   | ({ tip: "rezultat" } & RezultatDocument)
   | { tip: "eroare"; fisier: string; mesaj: string };
 
-function lot(paragrafe: ParagrafText[], model: string): Promise<{ corecturi: Corectura[]; cost_usd: number }> {
+// Procesele `claude -p` mor odata cu scriptul: butonul „oprește” din aplicatie trimite SIGTERM.
+const copii = new Set<ChildProcess>();
+for (const semnal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(semnal, () => {
+    for (const c of copii) c.kill("SIGTERM");
+    process.exit(143);
+  });
+}
+
+function jurnalizeaza(date: Record<string, unknown>) {
+  try {
+    mkdirSync(DIR_JURNAL, { recursive: true });
+    appendFileSync(join(DIR_JURNAL, `${new Date().toISOString().slice(0, 10)}.jsonl`), `${JSON.stringify({ la: new Date().toISOString(), ...date })}\n`);
+  } catch {
+    // jurnalul e doar pentru diagnostic
+  }
+}
+
+class EroareLot extends Error {
+  rapid: boolean;
+  constructor(mesaj: string, rapid: boolean) {
+    super(mesaj);
+    this.rapid = rapid;
+  }
+}
+
+function lot(
+  paragrafe: ParagrafText[], model: string, eticheta: { fisier: string; parte: number }, laStare: (mesaj: string) => void
+): Promise<{ corecturi: Corectura[]; cost_usd: number }> {
   return new Promise((rezolva, respinge) => {
+    const t0 = Date.now();
+    const jurnal = (d: Record<string, unknown>) =>
+      jurnalizeaza({ fisier: basename(eticheta.fisier), parte: eticheta.parte, model, dupa_s: Math.round((Date.now() - t0) / 1000), ...d });
     // Director temporar: fara CLAUDE.md-ul proiectului in context. Fara unelte: modelul doar citeste si raspunde.
     const p = spawn(CLAUDE, [
-      "-p", "--output-format", "json", "--no-session-persistence", "--tools", "", "--model", model,
-      "--system-prompt", PROMPT_CORECTOR, "--json-schema", JSON.stringify(SCHEMA_CORECTURI),
+      "-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "", "--model", model,
+      "--system-prompt", PROMPT_CORECTOR,
     ], { cwd: tmpdir(), stdio: ["pipe", "pipe", "pipe"] });
-    let iesire = "";
+    copii.add(p);
+    jurnal({ eveniment: "pornit", paragrafe: paragrafe.length, caractere: paragrafe.reduce((s, x) => s + x.text.length, 0) });
+
+    let rest = "";
+    let rezultat: string | null = null;
     let erori = "";
-    p.stdout.on("data", (b) => (iesire += b));
+    let expirat = false;
+    const citeste = (rand: string) => {
+      const e = evenimentClaudeCode(rand);
+      if (!e) return;
+      jurnal(e.jurnal);
+      if (e.fel === "rezultat") rezultat = rand;
+      if (e.fel === "reincercare") laStare(`Claude reîncearcă: ${e.eroare} (încercarea ${e.incercare}${e.max ? ` din ${e.max}` : ""})`);
+    };
+    p.stdout.on("data", (b) => {
+      rest += b;
+      for (let k = rest.indexOf("\n"); k >= 0; k = rest.indexOf("\n")) {
+        citeste(rest.slice(0, k));
+        rest = rest.slice(k + 1);
+      }
+    });
     p.stderr.on("data", (b) => (erori += b));
-    const ceas = setTimeout(() => p.kill("SIGTERM"), TIMP_LOT_MS);
+    const ceas = setTimeout(() => {
+      expirat = true;
+      p.kill("SIGTERM");
+    }, TIMP_LOT_MS);
     p.on("error", (e) => {
+      copii.delete(p);
       clearTimeout(ceas);
-      respinge(new Error(`Nu pot porni „claude” (${e.message}). Instalează Claude Code și loghează-te cu contul tău.`));
+      jurnal({ eveniment: "nu_porneste", mesaj: e.message });
+      respinge(new EroareLot(`Nu pot porni „claude” (${e.message}). Instalează Claude Code și loghează-te cu contul tău.`, false));
     });
     p.on("close", (cod) => {
+      copii.delete(p);
       clearTimeout(ceas);
+      if (rest.trim()) citeste(rest);
+      jurnal({ eveniment: "inchis", cod, expirat, stderr: erori.trim().slice(0, 300) || undefined });
+      const rapid = Date.now() - t0 < ESEC_RAPID_MS;
+      if (expirat) {
+        respinge(new EroareLot(`Claude nu a răspuns în ${TIMP_LOT_MS / 60_000} minute. Detalii în ~/Library/Logs/Corector.`, false));
+        return;
+      }
+      if (!rezultat) {
+        respinge(new EroareLot(`Claude Code s-a oprit fără rezultat${erori.trim() ? `: ${erori.trim().slice(0, 200)}` : ""}${cod ? ` [cod ${cod}]` : ""}.`, rapid));
+        return;
+      }
       try {
-        rezolva(corecturiDinClaudeCode(iesire, new Set(paragrafe.map((x) => x.i))));
+        rezolva(corecturiDinClaudeCode(rezultat, new Set(paragrafe.map((x) => x.i))));
       } catch (e) {
-        respinge(new Error(`${(e as Error).message}${erori.trim() ? ` (${erori.trim().slice(0, 200)})` : ""}${cod ? ` [cod ${cod}]` : ""}`));
+        respinge(new EroareLot((e as Error).message, rapid));
       }
     });
     p.stdin.end(JSON.stringify({ paragrafe }));
@@ -102,6 +176,7 @@ async function corecteaza(fisier: string, model: string, anunta: (e: Eveniment) 
   const t0 = Date.now();
   if (!paragrafe.length) return { fisier, iesire: null, aplicate: 0, corecturi: [], cost_usd: 0, secunde: 0, esecuri: [] };
 
+  const laStare = (mesaj: string) => anunta({ tip: "stare", fisier, mesaj });
   const rezultate: Corectura[][] = loturi.map(() => []);
   const esecuri: string[] = [];
   let cost = 0;
@@ -110,8 +185,15 @@ async function corecteaza(fisier: string, model: string, anunta: (e: Eveniment) 
   await Promise.all(Array.from({ length: Math.min(PARALELE, loturi.length) }, async () => {
     while (urmatorul < loturi.length) {
       const k = urmatorul++;
+      const eticheta = { fisier, parte: k + 1 };
       try {
-        const r = await lot(loturi[k]!, model).catch(() => lot(loturi[k]!, model)); // o reincercare
+        let r: { corecturi: Corectura[]; cost_usd: number };
+        try {
+          r = await lot(loturi[k]!, model, eticheta, laStare);
+        } catch (e) {
+          if (!(e instanceof EroareLot) || !e.rapid) throw e;
+          r = await lot(loturi[k]!, model, eticheta, laStare); // o reincercare, doar dupa un esec rapid
+        }
         rezultate[k] = r.corecturi;
         cost += r.cost_usd;
       } catch (e) {
@@ -141,6 +223,7 @@ async function corecteaza(fisier: string, model: string, anunta: (e: Eveniment) 
 function afiseazaProgres(e: Eveniment) {
   if (e.tip === "inceput") console.log(`\n${basename(e.fisier)}`);
   if (e.tip === "progres") process.stdout.write(`\r  ${e.gata} din ${numara(e.total, "parte", "părți")}…${e.gata === e.total ? "\n" : ""}`);
+  if (e.tip === "stare") console.log(`\n  ${e.mesaj}`);
 }
 
 function afiseazaRezultat(r: RezultatDocument, model: string) {

@@ -138,9 +138,10 @@ export function numara(n: number, singular: string, plural: string): string {
   return `${n}${n >= 20 && (rest === 0 || rest >= 20) ? " de" : ""} ${plural}`;
 }
 
-// Rezultatul `claude -p --output-format json --json-schema` (Claude Code pe planul personal, comanda
-// locala `npm run corecteaza`): corecturile vin in `structured_output`; fara el, din textul `result`.
-// Arunca la eroarea raportata de Claude Code sau la un raspuns care nu e JSON.
+// Rezultatul lui `claude -p` (Claude Code pe planul personal, comanda locala si aplicatia de Mac): mesajul
+// `result` din --output-format json sau ultimul rand din stream-json. Corecturile vin din `structured_output`,
+// daca exista, altfel din textul `result` (promptul cere JSON). Arunca la eroarea raportata de Claude Code
+// sau la un raspuns care nu e JSON.
 export function corecturiDinClaudeCode(iesire: string, indici: Set<number>): { corecturi: Corectura[]; cost_usd: number } {
   let d: Record<string, unknown>;
   try {
@@ -153,4 +154,46 @@ export function corecturiDinClaudeCode(iesire: string, indici: Set<number>): { c
   }
   const brut = d.structured_output !== undefined ? JSON.stringify(d.structured_output) : String(d.result ?? "");
   return { corecturi: extrageCorecturi(brut, indici), cost_usd: Number(d.total_cost_usd ?? 0) || 0 };
+}
+
+// Un rand din `claude -p --output-format stream-json --verbose`. `jurnal` e ce se scrie in jurnalul de
+// diagnostic al comenzii locale: felul evenimentului si cifrele, niciodata textul documentului sau al
+// raspunsului (doar mesajul de eroare, cand Claude Code raporteaza una).
+export type EvenimentClaudeCode =
+  | { fel: "rezultat"; jurnal: Record<string, unknown> }
+  | { fel: "reincercare"; eroare: string; incercare: number; max: number | null; jurnal: Record<string, unknown> }
+  | { fel: "altul"; jurnal: Record<string, unknown> };
+
+export function evenimentClaudeCode(rand: string): EvenimentClaudeCode | null {
+  let d: Record<string, any>;
+  try {
+    d = JSON.parse(rand);
+  } catch {
+    return null;
+  }
+  if (!d || typeof d !== "object") return null;
+  const tip = String(d.type ?? "");
+  const subtip = typeof d.subtype === "string" ? d.subtype : undefined;
+  const jurnal: Record<string, unknown> = { type: tip, subtype: subtip };
+  const blocuri = (x: unknown) =>
+    (Array.isArray(x) ? x : []).map((b: any) => (b?.type === "tool_use" ? `tool_use:${b.name}` : b?.type === "tool_result" && b.is_error ? "tool_result:eroare" : String(b?.type)));
+  if (tip === "result") {
+    Object.assign(jurnal, {
+      is_error: d.is_error, num_turns: d.num_turns, duration_ms: d.duration_ms, duration_api_ms: d.duration_api_ms,
+      cost_usd: d.total_cost_usd, structured_output: d.structured_output !== undefined,
+    });
+    if (d.is_error || (subtip && subtip !== "success")) jurnal.eroare = String(d.result ?? subtip).slice(0, 300);
+    return { fel: "rezultat", jurnal };
+  }
+  if (tip === "system" && subtip === "api_retry") {
+    const eroare = String(d.error ?? d.error_status ?? "eroare necunoscută");
+    const incercare = Number(d.attempt ?? 0);
+    const max = typeof d.max_retries === "number" ? d.max_retries : null;
+    Object.assign(jurnal, { eroare, incercare, max, error_status: d.error_status, retry_delay_ms: d.retry_delay_ms });
+    return { fel: "reincercare", eroare, incercare, max, jurnal };
+  }
+  if (tip === "system" && subtip === "init") Object.assign(jurnal, { model: d.model, unelte: Array.isArray(d.tools) ? d.tools.length : undefined, versiune: d.claude_code_version });
+  if (tip === "assistant") Object.assign(jurnal, { blocuri: blocuri(d.message?.content), stop: d.message?.stop_reason });
+  if (tip === "user") jurnal.blocuri = blocuri(d.message?.content);
+  return { fel: "altul", jurnal };
 }

@@ -228,7 +228,13 @@ struct RandDocument: View {
         Image(systemName: iconita).font(.system(size: 20)).foregroundStyle(culoareIconita(p)).frame(width: 24)
         VStack(alignment: .leading, spacing: 2) {
           Text(document.nume).font(.system(size: 14, weight: .semibold)).foregroundStyle(p.text).lineLimit(1).truncationMode(.middle)
-          Text(descriere).font(.system(size: 12.5)).foregroundStyle(culoareDescriere(p)).fixedSize(horizontal: false, vertical: true)
+          if document.activ, document.inceputLa != nil {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+              Text(descriere(acum: context.date)).font(.system(size: 12.5)).foregroundStyle(culoareDescriere(p)).fixedSize(horizontal: false, vertical: true)
+            }
+          } else {
+            Text(descriere(acum: Date())).font(.system(size: 12.5)).foregroundStyle(culoareDescriere(p)).fixedSize(horizontal: false, vertical: true)
+          }
         }
         Spacer(minLength: 8)
         actiuni(p)
@@ -303,12 +309,19 @@ struct RandDocument: View {
     return p.estompat
   }
 
-  private var descriere: String {
+  private func durata(_ secunde: Int) -> String {
+    secunde < 60 ? "\(secunde) s" : "\(secunde / 60) min \(secunde % 60) s"
+  }
+
+  private func descriere(acum: Date) -> String {
     switch document.stare {
     case .inAsteptare:
       return "În așteptare"
     case .inLucru(let gata, let total):
-      return total == 0 ? "Se citește documentul…" : "Se corectează: \(gata) din \(numara(total, "parte", "părți"))…"
+      var parti = [total == 0 ? "Se citește documentul…" : "Se corectează: \(gata) din \(numara(total, "parte", "părți"))"]
+      if let inceput = document.inceputLa { parti.append(durata(max(0, Int(acum.timeIntervalSince(inceput))))) }
+      if let nota = document.nota { parti.append(nota) }
+      return parti.joined(separator: " · ")
     case .gata(let r):
       var parti: [String] = []
       if r.aplicate > 0 {
@@ -318,7 +331,7 @@ struct RandDocument: View {
       }
       if r.deVerificat > 0 { parti.append("\(r.deVerificat) de verificat") }
       if !r.esecuri.isEmpty { parti.append("\(numara(r.esecuri.count, "parte nereușită", "părți nereușite"))") }
-      parti.append(r.secunde < 60 ? "\(r.secunde) s" : "\(r.secunde / 60) min \(r.secunde % 60) s")
+      parti.append(durata(r.secunde))
       return parti.joined(separator: " · ")
     case .eroare(let mesaj):
       return mesaj

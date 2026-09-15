@@ -64,6 +64,7 @@ enum Eveniment {
   case progres(gata: Int, total: Int)
   case rezultat(Rezultat)
   case eroare(String)
+  case stare(String) // de exemplu, Claude reincearca dupa o limita atinsa
 
   static func din(_ rand: Data) -> Eveniment? {
     struct Antet: Decodable {
@@ -79,6 +80,7 @@ enum Eveniment {
     case "progres": return .progres(gata: a.gata ?? 0, total: a.total ?? 0)
     case "rezultat": return (try? JSONDecoder().decode(Rezultat.self, from: rand)).map { .rezultat($0) }
     case "eroare": return .eroare(a.mesaj ?? "eroare necunoscută")
+    case "stare": return a.mesaj.map { .stare($0) }
     default: return nil
     }
   }

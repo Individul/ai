@@ -78,7 +78,7 @@ if let k = argumente.firstIndex(of: "--ecrane"), k + 1 < argumente.count {
     c.pregatit = true
     c.documente = [
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Nota informativa.docx"), stare: .gata(exemplu())),
-      Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Raport lunar septembrie.docx"), stare: .inLucru(gata: 3, total: 7)),
+      Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Raport lunar septembrie.docx"), stare: .inLucru(gata: 3, total: 7), inceputLa: Date().addingTimeInterval(-192), nota: "Claude reîncearcă: rate_limit (încercarea 2 din 10)"),
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Demers.docx"), stare: .inAsteptare),
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Dispozitie.docx"), stare: .eroare("Claude Code: nu ești logat. Rulează o dată „claude” în Terminal.")),
     ]

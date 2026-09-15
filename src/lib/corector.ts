@@ -144,11 +144,45 @@ export function numara(n: number, singular: string, plural: string): string {
   return `${n}${n >= 20 && (rest === 0 || rest >= 20) ? " de" : ""} ${plural}`;
 }
 
-// Rezultatul lui `claude -p` (Claude Code pe planul personal, comanda locala si aplicatia de Mac): mesajul
-// `result` din --output-format json sau ultimul rand din stream-json. Corecturile vin din `structured_output`,
-// daca exista, altfel din textul `result` (promptul cere JSON). Arunca la eroarea raportata de Claude Code
-// sau la un raspuns care nu e JSON.
-export function continutClaudeCode(iesire: string): { brut: string; cost_usd: number } {
+// ---------------------------------------------------------------- motoarele locale (planurile personale)
+//
+// Pe calculatorul lui Dumitru corectorul merge pe doua planuri personale, fiecare prin CLI-ul lui oficial,
+// logat cu contul lui: Claude Code (`claude`) pe planul Claude si Antigravity (`agy`) pe planul Google.
+// Din Worker niciunul nu se poate folosi (regulile de autentificare ale ambilor), deci hub-ul ramane pe
+// chei de API, iar corectorul pe planuri e doar local (comanda si aplicatia de Mac).
+export const MOTOARE_LOCALE = ["claude", "gemini"] as const;
+export type MotorLocal = (typeof MOTOARE_LOCALE)[number];
+
+// Numele scurte din comanda -> modelul cerut CLI-ului. La Antigravity adancimea gandirii face parte din nume.
+export const MODELE_LOCALE: Record<MotorLocal, Record<string, string>> = {
+  claude: { opus: "opus", sonnet: "sonnet", haiku: "haiku" },
+  gemini: { pro: "gemini-3.1-pro-high", flash: "gemini-3.8-flash-high" },
+};
+
+export function modelLocal(motor: MotorLocal, nume: string): string | null {
+  return MODELE_LOCALE[motor][nume] ?? null;
+}
+
+// Ce a intors CLI-ul: raspunsul brut (promptul cere JSON) si cat a consumat. Claude Code raporteaza
+// echivalentul in dolari, Antigravity doar jetoanele; pe planurile personale, nimic nu se factureaza.
+export interface ContinutLocal {
+  brut: string;
+  cost_usd: number;
+  jetoane: number;
+}
+
+export function continutLocal(motor: MotorLocal, iesire: string): ContinutLocal {
+  return motor === "gemini" ? continutAntigravity(iesire) : continutClaudeCode(iesire);
+}
+
+export function mesajEroareLocal(motor: MotorLocal, mesaj: string): string {
+  return motor === "gemini" ? mesajEroareAntigravity(mesaj) : mesajEroareClaudeCode(mesaj);
+}
+
+// Rezultatul lui `claude -p` (Claude Code pe planul personal): mesajul `result` din --output-format json sau
+// ultimul rand din stream-json. Corecturile vin din `structured_output`, daca exista, altfel din textul
+// `result` (promptul cere JSON). Arunca la eroarea raportata de Claude Code sau la un raspuns care nu e JSON.
+export function continutClaudeCode(iesire: string): ContinutLocal {
   let d: Record<string, unknown>;
   try {
     d = JSON.parse(iesire);
@@ -161,17 +195,25 @@ export function continutClaudeCode(iesire: string): { brut: string; cost_usd: nu
   return {
     brut: d.structured_output !== undefined ? JSON.stringify(d.structured_output) : String(d.result ?? ""),
     cost_usd: Number(d.total_cost_usd ?? 0) || 0,
+    jetoane: 0,
   };
 }
 
-export function corecturiDinClaudeCode(iesire: string, indici: Set<number>): { corecturi: Corectura[]; cost_usd: number } {
-  const { brut, cost_usd } = continutClaudeCode(iesire);
-  return { corecturi: extrageCorecturi(brut, indici), cost_usd };
-}
-
-export function verificareDinClaudeCode(iesire: string, indici: Set<number>): { corecturi: Corectura[]; observatii: Observatie[]; cost_usd: number } {
-  const { brut, cost_usd } = continutClaudeCode(iesire);
-  return { ...extrageVerificare(brut, indici), cost_usd };
+// Rezultatul lui `agy -p --output-format json` (Antigravity, planul Google): un singur obiect, cu raspunsul
+// in `response`. Nu raporteaza cost, fiindca cererile intra in plan; pentru comparatie retinem jetoanele.
+export function continutAntigravity(iesire: string): ContinutLocal {
+  let d: Record<string, unknown>;
+  try {
+    d = JSON.parse(iesire);
+  } catch {
+    throw new Error(`Antigravity nu a întors JSON: ${iesire.trim().slice(0, 200) || "nimic"}`);
+  }
+  const stare = String(d.status ?? "");
+  if (stare !== "SUCCESS") {
+    throw new Error(mesajEroareAntigravity(`Gemini: ${String(d.error ?? d.response ?? (stare || "eroare")).slice(0, 300)}`));
+  }
+  const consum = (d.usage ?? {}) as Record<string, unknown>;
+  return { brut: String(d.response ?? ""), cost_usd: 0, jetoane: Number(consum.total_tokens ?? 0) || 0 };
 }
 
 // Un rand din `claude -p --output-format stream-json --verbose`. `jurnal` e ce se scrie in jurnalul de
@@ -224,6 +266,17 @@ export function mesajEroareClaudeCode(mesaj: string): string {
   }
   if (/usage limit|rate[_ ]limit|limit reached/i.test(mesaj)) {
     return `Ai atins limita planului Claude; reîncearcă după resetare. (${mesaj.slice(0, 160)})`;
+  }
+  return mesaj;
+}
+
+// Acelasi lucru pentru Antigravity (planul Google).
+export function mesajEroareAntigravity(mesaj: string): string {
+  if (/UNAUTHENTICATED|unauthenticated|not (logged|signed) in|sign in|log in|401|credentials|token (is )?(expired|invalid)/i.test(mesaj)) {
+    return "Antigravity nu e logat sau autentificarea a expirat. În Terminal rulează „agy”, loghează-te cu contul tău Google, apoi apasă „reîncearcă”.";
+  }
+  if (/quota|RESOURCE_EXHAUSTED|rate[_ ]limit|limit reached|429/i.test(mesaj)) {
+    return `Ai atins limita planului Google; reîncearcă după resetare. (${mesaj.slice(0, 160)})`;
   }
   return mesaj;
 }

@@ -73,11 +73,12 @@ struct Continut: View {
           Text("Corector").font(.system(size: 30, weight: .semibold, design: .rounded)).foregroundStyle(p.text)
           Text(".").font(.system(size: 30, weight: .semibold, design: .rounded)).foregroundStyle(p.violet)
         }
-        Text("Trage un document Word, iar Claude îl corectează: ortografie, gramatică, punctuație și frazele greoaie. Primești același document, cu fiecare corectură ca modificare urmărită în Word.")
+        Text("Trage un document Word, iar \(corector.motor.nume) îl corectează: ortografie, gramatică, punctuație și frazele greoaie. Primești același document, cu fiecare corectură ca modificare urmărită în Word.")
           .font(.system(size: 14)).foregroundStyle(p.text2).fixedSize()
       }
 
       AlegereMod()
+      AlegereMotor()
       AlegereModel()
 
       if let problema = corector.problema {
@@ -119,7 +120,7 @@ struct Continut: View {
         }
       }
 
-      Text("Folosește Claude Code logat cu contul tău, deci planul tău Claude. Textul documentelor ajunge la Anthropic; nu încărca date cu caracter personal sau cu acces limitat. Documentul corectat se salvează lângă original, cu „(corectat)” în nume; originalul rămâne neatins.")
+      Text("Folosește \(corector.motor.numeUnealta) logat cu contul tău, deci \(corector.motor.descriere). Textul documentelor ajunge la \(corector.motor.furnizor); nu încărca date cu caracter personal sau cu acces limitat. Documentul corectat se salvează lângă original, cu „(corectat)” în nume; originalul rămâne neatins.")
         .font(.system(size: 11.5)).foregroundStyle(p.sters).fixedSize()
     }
   }
@@ -171,6 +172,21 @@ struct AlegereMod: View {
   }
 }
 
+struct AlegereMotor: View {
+  @EnvironmentObject private var corector: Corector
+  @Environment(\.colorScheme) private var schema
+
+  var body: some View {
+    let p = Paleta(schema: schema)
+    HStack(spacing: 8) {
+      Text("Motor").font(.system(size: 12, weight: .bold)).textCase(.uppercase).foregroundStyle(p.sters).frame(width: 46, alignment: .leading)
+      ForEach(MotorLocal.allCases) { m in
+        Capsula(titlu: m.nume, descriere: m.descriere, ales: m == corector.motor) { corector.motor = m }
+      }
+    }
+  }
+}
+
 struct AlegereModel: View {
   @EnvironmentObject private var corector: Corector
   @Environment(\.colorScheme) private var schema
@@ -179,7 +195,7 @@ struct AlegereModel: View {
     let p = Paleta(schema: schema)
     HStack(spacing: 8) {
       Text("Model").font(.system(size: 12, weight: .bold)).textCase(.uppercase).foregroundStyle(p.sters).frame(width: 46, alignment: .leading)
-      ForEach(ModelClaude.allCases) { m in
+      ForEach(corector.motor.modele) { m in
         Capsula(titlu: m.nume, descriere: m.descriere, ales: m == corector.model) { corector.model = m }
       }
     }
@@ -369,6 +385,7 @@ struct RandDocument: View {
       if !r.obs.isEmpty { parti.append(numara(r.obs.count, "observație", "observații")) }
       if !r.esecuri.isEmpty { parti.append("\(numara(r.esecuri.count, "parte nereușită", "părți nereușite"))") }
       parti.append(durata(r.secunde))
+      if let eticheta = r.eticheta { parti.append(eticheta) }
       return parti.joined(separator: " · ")
     case .eroare(let mesaj):
       return mesaj

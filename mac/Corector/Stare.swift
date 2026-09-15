@@ -34,8 +34,17 @@ final class Corector: ObservableObject {
   }
 
   @Published var documente: [Document] = []
-  @Published var model: ModelClaude = ModelClaude(rawValue: UserDefaults.standard.string(forKey: "model") ?? "") ?? .opus {
-    didSet { UserDefaults.standard.set(model.rawValue, forKey: "model") }
+  // Motorul si modelul se tin minte, iar modelul separat pentru fiecare motor: trecerea de la Claude la
+  // Gemini si inapoi pastreaza ce ai ales la fiecare.
+  @Published var motor: MotorLocal = Corector.motorSalvat {
+    didSet {
+      UserDefaults.standard.set(motor.rawValue, forKey: "motor")
+      if model.motor != motor { model = Corector.modelSalvat(motor) }
+      problema = problemaUnelte()
+    }
+  }
+  @Published var model: ModelLocal = Corector.modelSalvat(Corector.motorSalvat) {
+    didSet { UserDefaults.standard.set(model.rawValue, forKey: "model-\(model.motor.rawValue)") }
   }
   @Published var mod: ModLucru = ModLucru(rawValue: UserDefaults.standard.string(forKey: "mod") ?? "") ?? .corectura {
     didSet { UserDefaults.standard.set(mod.rawValue, forKey: "mod") }
@@ -53,23 +62,32 @@ final class Corector: ObservableObject {
     if desfacute.contains(id) { desfacute.remove(id) } else { desfacute.insert(id) }
   }
 
+  static var motorSalvat: MotorLocal {
+    MotorLocal(rawValue: UserDefaults.standard.string(forKey: "motor") ?? "") ?? .claude
+  }
+
+  static func modelSalvat(_ motor: MotorLocal) -> ModelLocal {
+    let salvat = ModelLocal(rawValue: UserDefaults.standard.string(forKey: "model-\(motor.rawValue)") ?? "")
+    return salvat?.motor == motor ? salvat! : motor.modelImplicit
+  }
+
   var script: URL? = Bundle.main.url(forResource: "motor", withExtension: "mjs")
   private var lucrareCurenta: (id: UUID, lucrare: Motor.Lucrare)?
   private var ruleaza = false
 
   func pregateste() async {
     let gasite = await Task.detached { Motor.gasesteUnelte() }.value
-    if let node = gasite.node, let claude = gasite.claude {
-      unelte = Unelte(node: node, claude: claude)
-      problema = nil
-    } else if gasite.node == nil {
-      problema = "Nu găsesc Node.js. Instalează-l de pe nodejs.org, apoi repornește aplicația."
-    } else {
-      problema = "Nu găsesc Claude Code. Instalează-l, rulează o dată „claude” în Terminal ca să te loghezi cu contul tău, apoi repornește aplicația."
-    }
-    if script == nil { problema = "Lipsește motorul corectorului din aplicație (motor.mjs). Reconstruiește aplicația cu „npm run mac”." }
+    if let node = gasite.node { unelte = Unelte(node: node, claude: gasite.claude, agy: gasite.agy) }
     pregatit = true
+    problema = problemaUnelte()
     porneste()
+  }
+
+  // Lipsa uneltei motorului ales nu blocheaza aplicatia: celalalt motor merge mai departe.
+  private func problemaUnelte() -> String? {
+    if script == nil { return "Lipsește motorul corectorului din aplicație (motor.mjs). Reconstruiește aplicația cu „npm run mac”." }
+    guard let unelte else { return "Nu găsesc Node.js. Instalează-l de pe nodejs.org, apoi repornește aplicația." }
+    return unelte.cale(motor) == nil ? motor.lipseste : nil
   }
 
   func adauga(_ urls: [URL]) {
@@ -119,7 +137,7 @@ final class Corector: ObservableObject {
         $0.inceputLa = Date()
         $0.nota = nil
       }
-      let eroare = await Motor.corecteaza(fisier: document.url, model: model, mod: mod, unelte: unelte, script: script, lucrare: lucrare) { [weak self] e in
+      let eroare = await Motor.corecteaza(fisier: document.url, motor: motor, model: model, mod: mod, unelte: unelte, script: script, lucrare: lucrare) { [weak self] e in
         guard let self else { return }
         switch e {
         case .inceput(let loturi): self.actualizeaza(id, .inLucru(gata: 0, total: loturi))

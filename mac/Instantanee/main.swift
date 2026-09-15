@@ -1,9 +1,9 @@
 // Utilitarul de verificare al aplicatiei (nu intra in Corector.app):
 //   instantanee --icon <dir.iconset>                    iconita, la toate marimile
 //   instantanee --ecrane <dir>                          fereastra in stari de exemplu, tema alba si intunecata
-//   instantanee --cap-la-cap <doc.docx> <motor.mjs> <claude> <dir>
-//                                                       corecteaza documentul prin Motor, cu `claude`-ul dat
-//                                                       (in teste, unul fals), si randeaza rezultatul
+//   instantanee --cap-la-cap <doc.docx> <motor.mjs> <unealta> <dir> [--motor claude|gemini]
+//                                                       corecteaza documentul prin Motor, cu `claude`-ul sau
+//                                                       `agy`-ul dat (in teste, unul fals), si randeaza rezultatul
 // Randarea foloseste ImageRenderer, deci nu cere permisiunea de captura a ecranului.
 
 import AppKit
@@ -53,11 +53,12 @@ func exemplu() -> Rezultat {
       Corectura(stare: "aplicata", tip: "punctuație", vechi: "ca,", nou: "că", motiv: "Fără virgulă după conjuncția „că”.", inainte: "Totodată menționăm ", dupa: " persoanele responsabile vor fi examinate"),
       Corectura(stare: "negasita", tip: "ortografie", vechi: "mentioneam", nou: "menționăm", motiv: "Diacritice lipsă.", inainte: "", dupa: ""),
     ],
-    cost_usd: 0.0412, secunde: 48, esecuri: [],
+    cost_usd: 0, secunde: 48, esecuri: [],
     observatii: [
       Observatie(tip: "date", text: "„durata executării pedepsei din 02.01.2018” față de „reținut de facto la 02.10.2018”: aceeași dată apare diferit, iar de ea depinde calculul termenului. De verificat în dosar."),
       Observatie(tip: "lipsa", text: "Rubrica de înregistrare „.09.2026 nr. 5/” a rămas fără zi și fără număr."),
-    ]
+    ],
+    motor: "gemini", model: "pro", jetoane: 128_400
   )
 }
 
@@ -87,6 +88,9 @@ if let k = argumente.firstIndex(of: "--ecrane"), k + 1 < argumente.count {
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Demers.docx"), stare: .inAsteptare),
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Dispozitie.docx"), stare: .eroare("Claude Code: nu ești logat. Rulează o dată „claude” în Terminal.")),
     ]
+    c.motor = .gemini
+    c.model = .pro
+    c.problema = nil // utilitarul nu are motor.mjs in pachet; ecranele nu arata avertismentul
     for (schema, nume) in [(ColorScheme.light, "alb"), (ColorScheme.dark, "intunecat")] {
       let p = Paleta(schema: schema)
       scriePNG(
@@ -97,7 +101,7 @@ if let k = argumente.firstIndex(of: "--ecrane"), k + 1 < argumente.count {
     }
     let gol = Corector()
     gol.pregatit = true
-    gol.problema = "Nu găsesc Claude Code. Instalează-l, rulează o dată „claude” în Terminal ca să te loghezi cu contul tău, apoi repornește aplicația."
+    gol.problema = MotorLocal.claude.lipseste
     scriePNG(
       Continut(peste: true, alege: {}).padding(28).frame(width: 720).background(Paleta(schema: .light).fundal)
         .environmentObject(gol).environment(\.colorScheme, .light),
@@ -110,16 +114,19 @@ if let k = argumente.firstIndex(of: "--ecrane"), k + 1 < argumente.count {
 if let k = argumente.firstIndex(of: "--cap-la-cap"), k + 4 < argumente.count {
   let docx = URL(fileURLWithPath: argumente[k + 1])
   let script = URL(fileURLWithPath: argumente[k + 2])
-  let claude = argumente[k + 3]
+  let unealta = argumente[k + 3]
   let dir = argumente[k + 4]
+  let motor = argumente.firstIndex(of: "--motor").flatMap { $0 + 1 < argumente.count ? MotorLocal(rawValue: argumente[$0 + 1]) : nil } ?? .claude
   Task { @MainActor in
-    let (node, _) = Motor.gasesteUnelte()
+    let (node, _, _) = Motor.gasesteUnelte()
     guard let node else { print("fara node"); exit(1) }
     let c = Corector()
     c.script = script
-    c.unelte = Unelte(node: node, claude: claude)
+    c.unelte = motor == .claude ? Unelte(node: node, claude: unealta, agy: nil) : Unelte(node: node, claude: nil, agy: unealta)
     c.pregatit = true
-    c.model = .sonnet
+    c.motor = motor
+    c.model = motor == .claude ? .sonnet : .pro
+    c.problema = nil
     c.adauga([docx])
     var stari: [String] = []
     while c.documente.contains(where: \.activ) {

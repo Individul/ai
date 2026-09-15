@@ -3,8 +3,8 @@
 #   npm run mac                  -> mac/build/Corector.app
 #   npm run mac -- --instaleaza  -> si o copiaza in ~/Applications
 # Motorul (scripts/corecteaza-local.mts, cu docx.ts si corector.ts) se impacheteaza cu esbuild in
-# Resources/motor.mjs, deci aplicatia nu depinde de folderul proiectului; are nevoie doar de node si
-# de Claude Code instalate si logate.
+# Resources/motor.mjs, deci aplicatia nu depinde de folderul proiectului; are nevoie doar
+# de node si de CLI-ul motorului ales (Claude Code sau Antigravity) instalate si logate.
 set -euo pipefail
 cd "${0:A:h}/.."
 

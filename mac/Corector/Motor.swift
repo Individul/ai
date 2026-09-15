@@ -1,27 +1,90 @@
 // Motorul aplicatiei: ruleaza scriptul corectorului (Resources/motor.mjs, impachetat din
 // scripts/corecteaza-local.mts) cu node, in modul --json, si citeste evenimentele rand cu rand.
-// Scriptul porneste Claude Code (`claude -p`) logat cu contul utilizatorului: folosire individuala a
-// Claude Code, pe planul lui. Aplicatia nu vede si nu pastreaza nicio cheie sau token.
+// Scriptul porneste, dupa motorul ales, Claude Code (`claude -p`) sau Antigravity (`agy -p`), logate cu
+// conturile utilizatorului: folosire individuala a celor doua unelte, pe planurile lui. Aplicatia nu vede
+// si nu pastreaza nicio cheie sau token.
 
 import Foundation
 
-enum ModelClaude: String, CaseIterable, Identifiable {
-  case opus, sonnet, haiku
+enum MotorLocal: String, CaseIterable, Identifiable {
+  case claude, gemini
 
   var id: String { rawValue }
+
+  var nume: String {
+    switch self {
+    case .claude: return "Claude"
+    case .gemini: return "Gemini"
+    }
+  }
+
+  var descriere: String {
+    switch self {
+    case .claude: return "planul tău Claude"
+    case .gemini: return "planul tău Google"
+    }
+  }
+
+  // Comanda pe care o cauta aplicatia si numele uneltei, pentru mesaje.
+  var unealta: String {
+    switch self {
+    case .claude: return "claude"
+    case .gemini: return "agy"
+    }
+  }
+
+  var numeUnealta: String {
+    switch self {
+    case .claude: return "Claude Code"
+    case .gemini: return "Antigravity"
+    }
+  }
+
+  var furnizor: String {
+    switch self {
+    case .claude: return "Anthropic"
+    case .gemini: return "Google"
+    }
+  }
+
+  var lipseste: String {
+    switch self {
+    case .claude: return "Nu găsesc Claude Code. Instalează-l, rulează o dată „claude” în Terminal ca să te loghezi cu contul tău, apoi repornește aplicația."
+    case .gemini: return "Nu găsesc Antigravity. Instalează-l, rulează o dată „agy” în Terminal ca să te loghezi cu contul tău Google, apoi repornește aplicația."
+    }
+  }
+
+  var modele: [ModelLocal] { ModelLocal.allCases.filter { $0.motor == self } }
+
+  var modelImplicit: ModelLocal { modele.first ?? .opus }
+}
+
+enum ModelLocal: String, CaseIterable, Identifiable {
+  case opus, sonnet, haiku, pro, flash
+
+  var id: String { rawValue }
+
+  var motor: MotorLocal {
+    switch self {
+    case .opus, .sonnet, .haiku: return .claude
+    case .pro, .flash: return .gemini
+    }
+  }
 
   var nume: String {
     switch self {
     case .opus: return "Opus"
     case .sonnet: return "Sonnet"
     case .haiku: return "Haiku"
+    case .pro: return "Pro"
+    case .flash: return "Flash"
     }
   }
 
   var descriere: String {
     switch self {
-    case .opus: return "cel mai atent"
-    case .sonnet: return "mai rapid"
+    case .opus, .pro: return "cel mai atent"
+    case .sonnet, .flash: return "mai rapid"
     case .haiku: return "cel mai rapid"
     }
   }
@@ -93,9 +156,18 @@ struct Rezultat: Decodable, Hashable {
   let secunde: Int
   let esecuri: [String]
   let observatii: [Observatie]?
+  let motor: String?
+  let model: String?
+  let jetoane: Int?
 
   var deVerificat: Int { corecturi.filter(\.deVerificat).count }
   var obs: [Observatie] { observatii ?? [] }
+
+  // „Opus”, „Gemini Pro”: cu ce a fost facut, ca sa se compare doua treceri prin acelasi document.
+  var eticheta: String? {
+    guard let m = model.flatMap({ ModelLocal(rawValue: $0) }) else { return nil }
+    return m.motor == .claude ? m.nume : "\(m.motor.nume) \(m.nume)"
+  }
 }
 
 enum Eveniment {
@@ -127,18 +199,26 @@ enum Eveniment {
 
 struct Unelte: Equatable {
   let node: String
-  let claude: String
+  let claude: String?
+  let agy: String?
+
+  func cale(_ motor: MotorLocal) -> String? {
+    switch motor {
+    case .claude: return claude
+    case .gemini: return agy
+    }
+  }
 }
 
 enum Motor {
   // O aplicatie pornita din Finder nu are PATH-ul din Terminal: cautam intr-un shell de login, apoi in
   // locurile obisnuite.
-  static func gasesteUnelte() -> (node: String?, claude: String?) {
-    var node: String?
-    var claude: String?
+  static func gasesteUnelte() -> (node: String?, claude: String?, agy: String?) {
+    var gasite: [String: String] = [:]
+    let cautate = ["node", "claude", "agy"]
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-    p.arguments = ["-lc", "echo \"NODE=$(command -v node)\"; echo \"CLAUDE=$(command -v claude)\""]
+    p.arguments = ["-lc", cautate.map { "echo \"\($0)=$(command -v \($0))\"" }.joined(separator: "; ")]
     let iesire = Pipe()
     p.standardOutput = iesire
     p.standardError = FileHandle.nullDevice
@@ -147,19 +227,17 @@ enum Motor {
       let date = iesire.fileHandleForReading.readDataToEndOfFile()
       p.waitUntilExit()
       for rand in String(decoding: date, as: UTF8.self).split(separator: "\n") {
-        if rand.hasPrefix("NODE="), rand.count > 5 { node = String(rand.dropFirst(5)) }
-        if rand.hasPrefix("CLAUDE="), rand.count > 7 { claude = String(rand.dropFirst(7)) }
+        guard let egal = rand.firstIndex(of: "="), egal < rand.index(before: rand.endIndex) else { continue }
+        gasite[String(rand[..<egal])] = String(rand[rand.index(after: egal)...])
       }
     }
     let fm = FileManager.default
     let acasa = fm.homeDirectoryForCurrentUser.path
-    if node.map({ !fm.isExecutableFile(atPath: $0) }) ?? true {
-      node = ["/opt/homebrew/bin/node", "/usr/local/bin/node"].first(where: fm.isExecutableFile(atPath:))
+    let obisnuite = ["\(acasa)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"]
+    for nume in cautate where gasite[nume].map({ !fm.isExecutableFile(atPath: $0) }) ?? true {
+      gasite[nume] = obisnuite.map { "\($0)/\(nume)" }.first(where: fm.isExecutableFile(atPath:))
     }
-    if claude.map({ !fm.isExecutableFile(atPath: $0) }) ?? true {
-      claude = ["\(acasa)/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"].first(where: fm.isExecutableFile(atPath:))
-    }
-    return (node, claude)
+    return (gasite["node"], gasite["claude"], gasite["agy"])
   }
 
   final class Lucrare: @unchecked Sendable {
@@ -175,15 +253,16 @@ enum Motor {
   // Corecteaza un document; evenimentele ajung pe firul principal. Intoarce mesajul de eroare daca
   // scriptul s-a oprit fara rezultat (altfel nil).
   static func corecteaza(
-    fisier: URL, model: ModelClaude, mod: ModLucru, unelte: Unelte, script: URL, lucrare: Lucrare,
+    fisier: URL, motor: MotorLocal, model: ModelLocal, mod: ModLucru, unelte: Unelte, script: URL, lucrare: Lucrare,
     laEveniment: @escaping @MainActor (Eveniment) -> Void
   ) async -> String? {
+    guard let unealta = unelte.cale(motor) else { return motor.lipseste }
     let p = lucrare.proces
     p.executableURL = URL(fileURLWithPath: unelte.node)
-    p.arguments = [script.path, "--json", "--mod", mod.rawValue, "--model", model.rawValue, fisier.path]
+    p.arguments = [script.path, "--json", "--motor", motor.rawValue, "--mod", mod.rawValue, "--model", model.rawValue, fisier.path]
     var mediu = ProcessInfo.processInfo.environment
-    mediu["CORECTOR_CLAUDE"] = unelte.claude
-    let directoare = [unelte.node, unelte.claude].map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }
+    mediu[motor == .claude ? "CORECTOR_CLAUDE" : "CORECTOR_AGY"] = unealta
+    let directoare = [unelte.node, unealta].map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }
     mediu["PATH"] = (directoare + [mediu["PATH"] ?? "/usr/bin:/bin"]).joined(separator: ":")
     p.environment = mediu
     let iesire = Pipe()

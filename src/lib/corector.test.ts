@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bugetCaractere, cerereCorectura, corecturiDinClaudeCode, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajVerificare, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR } from "./corector";
+import { bugetCaractere, cerereCorectura, continutLocal, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR, type MotorLocal } from "./corector";
 
 describe("impartePeLoturi", () => {
   it("umple loturile in ordine, fara sa depaseasca plafonul; un paragraf lung sta singur", () => {
@@ -68,21 +68,49 @@ describe("plafoane", () => {
   });
 });
 
-describe("corecturiDinClaudeCode", () => {
+describe("continutLocal", () => {
   const corectura = { i: 1, vechi: "insa", nou: "însă", tip: "ortografie", motiv: "î și ă" };
-  it("ia corecturile din structured_output, cu costul raportat", () => {
+  const corecturi = (motor: MotorLocal, iesire: string) => {
+    const c = continutLocal(motor, iesire);
+    return { corecturi: extrageCorecturi(c.brut, new Set([1])), cost_usd: c.cost_usd, jetoane: c.jetoane };
+  };
+
+  it("Claude Code: ia corecturile din structured_output, cu costul raportat", () => {
     const iesire = JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "", structured_output: { corecturi: [corectura] }, total_cost_usd: 0.0123 });
-    expect(corecturiDinClaudeCode(iesire, new Set([1]))).toEqual({ corecturi: [corectura], cost_usd: 0.0123 });
+    expect(corecturi("claude", iesire)).toEqual({ corecturi: [corectura], cost_usd: 0.0123, jetoane: 0 });
   });
 
-  it("fara structured_output, citeste textul din result", () => {
+  it("Claude Code: fara structured_output, citeste textul din result", () => {
     const iesire = JSON.stringify({ type: "result", subtype: "success", is_error: false, result: JSON.stringify({ corecturi: [corectura] }) });
-    expect(corecturiDinClaudeCode(iesire, new Set([1]))).toEqual({ corecturi: [corectura], cost_usd: 0 });
+    expect(corecturi("claude", iesire)).toEqual({ corecturi: [corectura], cost_usd: 0, jetoane: 0 });
+  });
+
+  it("Antigravity: ia raspunsul si jetoanele, fara cost (intra in planul Google)", () => {
+    const iesire = JSON.stringify({ conversation_id: "x", status: "SUCCESS", response: `\`\`\`json\n${JSON.stringify({ corecturi: [corectura] })}\n\`\`\``, usage: { input_tokens: 14_649, output_tokens: 4_652, total_tokens: 19_301 } });
+    expect(corecturi("gemini", iesire)).toEqual({ corecturi: [corectura], cost_usd: 0, jetoane: 19_301 });
   });
 
   it("arunca la eroarea raportata sau la iesire care nu e JSON", () => {
-    expect(() => corecturiDinClaudeCode(JSON.stringify({ subtype: "error_max_turns", is_error: true, result: "Credit balance is too low" }), new Set([1]))).toThrow(/Credit balance/);
-    expect(() => corecturiDinClaudeCode("Invalid API key · Please run /login", new Set([1]))).toThrow(/nu a întors JSON/);
+    expect(() => corecturi("claude", JSON.stringify({ subtype: "error_max_turns", is_error: true, result: "Credit balance is too low" }))).toThrow(/Credit balance/);
+    expect(() => corecturi("claude", "Invalid API key · Please run /login")).toThrow(/nu a întors JSON/);
+    expect(() => corecturi("gemini", JSON.stringify({ status: "ERROR", error: "model overloaded" }))).toThrow(/model overloaded/);
+    expect(() => corecturi("gemini", "panic: agy crashed")).toThrow(/nu a întors JSON/);
+  });
+});
+
+describe("motoarele locale", () => {
+  it("fiecare motor are modelele lui, cu nume scurte in comanda", () => {
+    expect(modelLocal("claude", "opus")).toBe("opus");
+    expect(modelLocal("gemini", "pro")).toBe("gemini-3.1-pro-high");
+    expect(modelLocal("gemini", "opus")).toBeNull();
+    expect(Object.keys(MODELE_LOCALE.gemini)).toEqual(["pro", "flash"]);
+  });
+
+  it("spune pe romaneste cand Antigravity nu e logat sau a atins limita", () => {
+    expect(mesajEroareLocal("gemini", "Gemini: request failed: UNAUTHENTICATED")).toMatch(/nu e logat.*agy/);
+    expect(mesajEroareLocal("gemini", "Gemini: RESOURCE_EXHAUSTED quota")).toMatch(/^Ai atins limita planului Google/);
+    expect(mesajEroareLocal("gemini", "Gemini: ceva neasteptat")).toBe("Gemini: ceva neasteptat");
+    expect(mesajEroareLocal("claude", "Claude AI usage limit reached")).toMatch(/^Ai atins limita planului Claude/);
   });
 });
 
@@ -112,7 +140,7 @@ describe("mesajEroareClaudeCode", () => {
   it("spune pe romaneste cand Claude Code nu e logat sau a atins limita; restul raman neschimbate", () => {
     const autentificare = 'Claude Code: Failed to authenticate. API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"OAuth access token is invalid."}}';
     expect(mesajEroareClaudeCode(autentificare)).toMatch(/nu e logat.*\/login/);
-    expect(() => corecturiDinClaudeCode(JSON.stringify({ type: "result", subtype: "success", is_error: true, result: autentificare.slice(13) }), new Set([1]))).toThrow(/nu e logat/);
+    expect(() => continutLocal("claude", JSON.stringify({ type: "result", subtype: "success", is_error: true, result: autentificare.slice(13) }))).toThrow(/nu e logat/);
     expect(mesajEroareClaudeCode("Claude AI usage limit reached|1789400000")).toMatch(/^Ai atins limita planului/);
     expect(mesajEroareClaudeCode("Credit balance is too low")).toBe("Credit balance is too low");
   });

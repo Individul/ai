@@ -90,8 +90,10 @@ function nuSAPutut(aplicari: Aplicare[], o: Observatie): string | null {
   return a && a.stare !== "aplicata" ? NEAPLICATE[a.stare] ?? "nu s-a putut pune în document" : null;
 }
 
-function randObservatie(o: Observatie, acceptata: boolean, problema: string | null, comuta: () => void): HTMLLIElement {
-  const li = element("li");
+// Fiecare observatie are o alegere: cele cu solutie aplicabila intra in document cand le accepti, iar
+// celelalte se bifeaza dupa ce le rezolvi de mana (bifa e doar pentru tine, documentul nu se schimba).
+function randObservatie(o: Observatie, aleasa: boolean, problema: string | null, comuta: () => void): HTMLLIElement {
+  const li = element("li", aleasa && !o.corectura ? "bifata" : undefined);
   li.appendChild(element("div", "tip", ETICHETA_OBSERVATIE[o.tip] ?? ETICHETA_OBSERVATIE.altele));
   li.appendChild(element("p", "text", o.text));
   if (o.solutie) {
@@ -100,20 +102,18 @@ function randObservatie(o: Observatie, acceptata: boolean, problema: string | nu
     solutie.appendChild(document.createTextNode(o.solutie));
     li.appendChild(solutie);
   }
-  if (o.corectura) {
-    const alegere = element("div", "alegere");
-    // Butonul „ales” e cel care arată starea de acum; celălalt o schimbă.
-    for (const [titlu, vrea] of [["Acceptă soluția", true], ["Lasă cum e", false]] as const) {
-      const buton = element("button", vrea === acceptata ? "ales" : undefined, titlu);
-      buton.type = "button";
-      buton.addEventListener("click", () => { if (vrea !== acceptata) comuta(); });
-      alegere.appendChild(buton);
-    }
-    li.appendChild(alegere);
-    if (problema) li.appendChild(element("p", "problema", `Soluția acceptată ${problema.replace(/^de verificat: /, "")}.`));
-  } else {
-    li.appendChild(element("p", "manual", "Nu se poate pune automat: completează tu în document."));
+  if (!o.corectura) li.appendChild(element("p", "manual", "Nu se poate pune automat: completează tu în document, apoi bifează."));
+  const alegere = element("div", "alegere");
+  // Butonul „ales” arată starea de acum; celălalt o schimbă.
+  const titluri = o.corectura ? ["Acceptă soluția", "Lasă cum e"] : ["Am rezolvat", "Încă nu"];
+  for (const [titlu, vrea] of [[titluri[0]!, true], [titluri[1]!, false]] as const) {
+    const buton = element("button", vrea === aleasa ? "ales" : undefined, titlu);
+    buton.type = "button";
+    buton.addEventListener("click", () => { if (vrea !== aleasa) comuta(); });
+    alegere.appendChild(buton);
   }
+  li.appendChild(alegere);
+  if (problema) li.appendChild(element("p", "problema", `Soluția acceptată ${problema.replace(/^de verificat: /, "")}.`));
   return li;
 }
 
@@ -252,9 +252,10 @@ function porneste(radacina: HTMLElement) {
       scrie("Se pun corecturile în document…");
       const numeIesire = `${fisier.name.replace(/\.docx$/i, "")} (corectat).docx`;
       // Soluțiile observațiilor intră în document doar dacă le accepți; documentul se reface la fiecare alegere.
-      const acceptate = new Set<number>();
+      // „alese” ține și soluțiile acceptate (intră în document), și observațiile bifate ca rezolvate de mână.
+      const alese = new Set<number>();
       const arata = () => {
-        const solutii = observatii.flatMap((o, k) => (acceptate.has(k) && o.corectura ? [corecturaDinSolutie(o)] : []));
+        const solutii = observatii.flatMap((o, k) => (alese.has(k) && o.corectura ? [corecturaDinSolutie(o)] : []));
         const pus = aplicaCuMentiune(docx, doc, [...corecturiModel, ...solutii], rev);
         if (Object.values(pus.xml).some(xmlStricat)) {
           throw new Error("Documentul corectat nu a ieșit valid, așa că nu l-am pus la descărcare.");
@@ -274,14 +275,17 @@ function porneste(radacina: HTMLElement) {
           : deVerificat.length ? "Nicio corectură nu a putut fi pusă automat în document." : "Nu am găsit greșeli în document.";
         const frazaVerificat = deVerificat.length ? ` ${numara(deVerificat.length, "propunere", "propuneri")} de verificat manual, mai jos.` : "";
         const frazaObservatii = observatii.length ? ` ${numara(observatii.length, "observație", "observații")} pentru tine, mai jos.` : "";
-        const frazaSolutii = acceptate.size ? ` ${numara(acceptate.size, "soluție acceptată", "soluții acceptate")} din observații.` : "";
-        rezumat.textContent = `${frazaAplicate}${frazaVerificat}${FRAZA_MENTIUNE[pus.mentiune]}${frazaObservatii}${frazaSolutii}${partiale ? ` Atenție: ${partiale}.` : ""}`;
-        listaObservatii.replaceChildren(...observatii.map((o, k) => randObservatie(o, acceptate.has(k), nuSAPutut(pus.aplicari, o), () => {
-          if (acceptate.has(k)) acceptate.delete(k); else acceptate.add(k);
+        const solutiiPuse = observatii.filter((o, k) => alese.has(k) && o.corectura).length;
+        const bifate = alese.size - solutiiPuse;
+        const frazaSolutii = solutiiPuse ? ` ${numara(solutiiPuse, "soluție acceptată", "soluții acceptate")} din observații.` : "";
+        const frazaBifate = bifate ? ` ${numara(bifate, "observație bifată", "observații bifate")} de tine.` : "";
+        rezumat.textContent = `${frazaAplicate}${frazaVerificat}${FRAZA_MENTIUNE[pus.mentiune]}${frazaObservatii}${frazaSolutii}${frazaBifate}${partiale ? ` Atenție: ${partiale}.` : ""}`;
+        listaObservatii.replaceChildren(...observatii.map((o, k) => randObservatie(o, alese.has(k), nuSAPutut(pus.aplicari, o), () => {
+          if (alese.has(k)) alese.delete(k); else alese.add(k);
           try {
             arata();
           } catch (e) {
-            acceptate.delete(k);
+            alese.delete(k);
             scrie((e as Error).message, true);
           }
         })));

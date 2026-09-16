@@ -73,7 +73,7 @@ const descriere = (d: (typeof documente)[number]) => {
         doar numele fișierului, numărul de corecturi și costul. Nu încărca documente cu date cu caracter personal sau cu acces limitat.
         La „corectură” se lucrează pe corpul documentului, cu tot cu tabele; la „verificare” intră și antetele, subsolurile
         și notele de subsol, iar modelul spune în plus ce a găsit și nu poate repara singur: date care se contrazic,
-        rubrici necompletate, formatare ruptă, îndoieli juridice. Fiecare observație vine cu o soluție; unde soluția e o înlocuire de text, o poți accepta cu un clic sau o poți lăsa cum e. La fiecare document se verifică și mențiunea obligatorie
+        rubrici necompletate, formatare ruptă, îndoieli juridice. Fiecare observație vine cu o soluție: unde e o înlocuire de text, o accepți cu un clic și intră în document; unde o completezi tu în Word, o bifezi ca rezolvată, ca să știi pe unde ai rămas. La fiecare document se verifică și mențiunea obligatorie
         despre datele cu caracter personal: dacă lipsește sau e în altă formă, e pusă în forma aprobată, tot ca modificare urmărită.
       </p>
       {varf && <p class:list={["lamurire", "varf", { activ: varf.activ }]}>{varf.text.replace("fiecare întrebare", "fiecare document")}</p>}
@@ -131,6 +131,8 @@ const descriere = (d: (typeof documente)[number]) => {
   .observatii :global(.alegere button:hover) { border-color: rgba(var(--violet-rgb), 0.6); color: var(--text); }
   .observatii :global(.alegere button.ales) { background: var(--violet); border-color: var(--violet); color: var(--pe-accent); }
   .observatii :global(.manual) { font-size: 12.5px; color: var(--faint); }
+  .observatii :global(li.bifata) { opacity: 0.55; }
+  .observatii :global(li.bifata .tip)::after { content: " · rezolvată"; color: var(--verde); }
   .observatii :global(.problema) { font-size: 12.5px; color: var(--coral); }
   .zona {
     position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;

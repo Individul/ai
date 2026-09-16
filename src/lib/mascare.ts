@@ -17,7 +17,8 @@
 import { caLaCautare, type Corectura } from "./docx";
 import { numara, type Observatie } from "./corector";
 import {
-  DECLANSATORI, GRADE, NUME_FALSE, NU_SUNT_NUME, PRENUME, PRENUME_FALSE_F, PRENUME_FALSE_M, PRENUME_M,
+  DECLANSATORI, DECLANSATORI_RU, GRADE, NUME_FALSE, NU_SUNT_NUME, PRENUME, PRENUME_FALSE_F, PRENUME_FALSE_M,
+  PRENUME_M,
 } from "./nume-md";
 
 export const NIVELURI = ["fara", "identificatori", "tot"] as const;
@@ -71,7 +72,7 @@ const hartaGoala = (nivel: Nivel): Harta => ({
 
 const faraDiacritice = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const RADACINA = 4; // „Cazacu” si „Cazacului” sunt acelasi om: potrivirea se face pe primele litere
-const radacina = (s: string) => faraDiacritice(s).replace(/[^a-z0-9]/g, "").slice(0, RADACINA);
+const radacina = (s: string) => faraDiacritice(s).replace(/[^\p{L}\p{N}]/gu, "").slice(0, RADACINA);
 const cifre = (s: string) => s.replace(/\D/g, "");
 
 // ---------------------------------------------------------------- gasirea datelor
@@ -86,7 +87,7 @@ const TIPARE: Tipar[] = [
   { fel: "idnp", re: /(?:IDNP|C\.P\.|cod(?:ul)? personal)\D{0,12}(\d{9,15})/gi, grup: 1 },
   { fel: "idnp", re: /\b[0-2]\d{12}\b/g },
   { fel: "telefon", re: /\+373[\s.\-()]*\d[\d\s.\-()]{6,12}\d/g },
-  { fel: "telefon", re: /(?:tel|telefon|mob|mobil|fax|cel)\.?\s*:?\s*([\d+][\d\s.\-()]{6,16}\d)/gi, grup: 1 },
+  { fel: "telefon", re: /(?:tel|telefon|mob|mobil|fax|cel|тел|телефон|факс|моб)[\p{L}-]*\.?\s*:?\s*([\d+][\d\s.\-()]{6,16}\d)/giu, grup: 1 },
   { fel: "act", re: /(?:seria|buletin(?:ul)? de identitate|pa[sșş]aport(?:ul)?)[^\n]{0,24}?\b([A-Z]{0,2} ?\d{6,9})\b/gi, grup: 1 },
   { fel: "auto", re: /(?:înmatriculare|inmatriculare|automobil(?:ul)?|autoturism(?:ul)?)[^\n]{0,24}?\b([A-Z]{3} ?\d{3})\b/gi, grup: 1 },
   { fel: "adresa", re: /\b(?:[Ss]tr\.|[Ss]trada|[Bb]d\.|[Bb]ulevardul|[SsȘșŞş]os\.|[SsȘșŞş]oseaua)\s+(?:(?:[\p{Lu}]\.|[\p{Lu}][\p{L}-]*|cel|de|la|din)[  ]*){1,4}(?:,?\s*(?:nr\.?\s*)?\d+[A-Za-z]?)?(?:,?\s*ap\.?\s*\d+)?/gu },
@@ -106,6 +107,8 @@ function cuvinteDin(text: string): Cuv[] {
 }
 
 const DECLANSATOR = new Set([...DECLANSATORI, "lui"]);
+const DECLANSATOR_RU = new Set(DECLANSATORI_RU);
+const CHIRILIC = /\p{Script=Cyrillic}/u;
 const GRAD = new Set(GRADE);
 const cuMajuscula = (c: Cuv) => c.text[0] !== c.text[0]!.toLowerCase();
 
@@ -134,11 +137,13 @@ function inainte(cuv: Cuv[], sir: Cuv[]): [string, string] {
 function esteNume(cuv: Cuv[], sir: Cuv[]): boolean {
   const utile = sir.filter((c) => !NU_SUNT_NUME.has(c.norm) && c.text.length >= 3);
   if (!utile.length) return false;
+  const [unu, doi] = inainte(cuv, sir);
+  if (utile.every((c) => CHIRILIC.test(c.text))) return DECLANSATOR_RU.has(unu) || DECLANSATOR_RU.has(doi);
   if (utile.some((c) => PRENUME.has(c.norm))) return true;
   // MAJUSCULELE confirma un nume doar cand nu pot fi o abreviere: „BUZILĂ Anatolie”, nu „IDNP”.
   if (utile.some((c) => c.caps && (c.text.length >= 5 || utile.length >= 2))) return true;
   const taiate = sir.filter((c) => !utile.includes(c)).map((c) => c.norm);
-  return [...taiate, ...inainte(cuv, sir)].some((w) => DECLANSATOR.has(w) || GRAD.has(w));
+  return [...taiate, unu, doi].some((w) => DECLANSATOR.has(w) || GRAD.has(w));
 }
 
 // Sirul curatat de cuvintele care sigur nu sunt nume („Domnul Cazacu Valeriu” -> „Cazacu Valeriu”).
@@ -191,7 +196,7 @@ export function gasesteDate(paragrafe: { i: number; text: string }[], mereu: str
       if (!esteNume(cuv, s)) continue;
       const taiat = taie(s);
       if (!taiat.length || acoperit(p.i, taiat[0]!.de, taiat[taiat.length - 1]!.pana)) continue;
-      for (const c of taiat) radacini.add(radacina(c.text));
+      for (const c of taiat) if (radacina(c.text)) radacini.add(radacina(c.text));
     }
   }
 
@@ -413,9 +418,12 @@ const subMultime = (a: Set<string>, b: Set<string>) => [...a].every((c) => b.has
 
 const ZILE = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
-export function verificaDate(entitati: Entitate[]): Observatie[] {
+export function verificaDate(entitati: Entitate[], paragrafe: { i: number; text: string }[] = []): Observatie[] {
   const observatii: Observatie[] = [];
   const valori = (fel: Fel) => [...new Set(entitati.filter((e) => e.fel === fel).map((e) => e.text.trim()))];
+  const texte = new Map(paragrafe.map((p) => [p.i, p.text]));
+  // Actele au antetul in doua limbi; ce e scris inaintea datei spune in care din ele se afla.
+  const rusa = (e: Entitate) => CHIRILIC.test((texte.get(e.i) ?? "").slice(Math.max(0, e.de - 24), e.de));
 
   // Acelasi om scris in doua feluri. Forma scurta („Cazacu Valeriu” fata de „Cazacu Valeriu Simion”) e
   // fireasca, deci se semnaleaza doar cand niciuna nu e cuprinsa in cealalta.
@@ -465,6 +473,45 @@ export function verificaDate(entitati: Entitate[]): Observatie[] {
       text: `Numărul de telefon „${t}” are ${numara(n.length, "cifră", "cifre")} după prefixul de țară, nu 8.`,
       solutie: "Verifică numărul și scrie-l întreg.",
     });
+  }
+
+  // Contactele din varianta romana fata de cele din varianta rusa: chiar nepotrivirea pe care mascarea i-ar
+  // lua-o modelului (la demersul din septembrie 2026, faxul difera intre cele doua antete).
+  for (const fel of ["telefon", "email"] as const) {
+    const cheie = (e: Entitate) => (fel === "email" ? e.text.trim().toLowerCase() : cifre(e.text).replace(/^373/, "").replace(/^0/, ""));
+    const arata = (lista: Entitate[]) => [...new Set(lista.map((e) => e.text.trim()))].join("”, „");
+    // Doar in acelasi paragraf: antetul tine cele doua variante una langa alta, iar o alta adresa din
+    // document (cea din blocul de semnatura) n-are ce cauta in comparatie.
+    for (const i of new Set(entitati.filter((e) => e.fel === fel).map((e) => e.i))) {
+      const ale = entitati.filter((e) => e.fel === fel && e.i === i);
+      const ro = ale.filter((e) => !rusa(e));
+      const ru = ale.filter(rusa);
+      if (!ro.length || !ru.length) continue;
+      const laFel = [...new Set(ro.map(cheie))].join("|") === [...new Set(ru.map(cheie))].join("|");
+      if (laFel) continue;
+      observatii.push({
+        tip: "date",
+        text: `${fel === "email" ? "Adresa de e-mail din varianta română nu se potrivește cu cea" : "Numărul de telefon din varianta română nu se potrivește cu cel"} din varianta rusă: „${arata(ro)}” față de „${arata(ru)}”.`,
+        solutie: "Vezi care e cel bun și scrie-l la fel în ambele antete.",
+      });
+    }
+  }
+
+  const telefoane = valori("telefon");
+  for (let a = 0; a < telefoane.length; a++) {
+    for (let b = a + 1; b < telefoane.length; b++) {
+      const x = cifre(telefoane[a]!).replace(/^373/, "").replace(/^0/, "");
+      const y = cifre(telefoane[b]!).replace(/^373/, "").replace(/^0/, "");
+      if (x.length !== y.length || x === y) continue;
+      let diferite = 0;
+      for (let k = 0; k < x.length; k++) if (x[k] !== y[k]) diferite++;
+      if (diferite > 2) continue;
+      observatii.push({
+        tip: "date",
+        text: `Două numere de telefon aproape la fel, în locuri diferite: „${telefoane[a]}” și „${telefoane[b]}”.`,
+        solutie: "Vezi care e cel bun și scrie-l la fel peste tot, inclusiv în varianta rusă.",
+      });
+    }
   }
 
   for (const d of valori("nastere")) {

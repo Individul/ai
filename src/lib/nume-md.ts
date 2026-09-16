@@ -47,6 +47,7 @@ colonel sergent plutonier sublocotenent general avocat avocatul procuror procuro
 detinutul condamnatul inculpatul invinuitul banuitul petitionarul reclamantul cetateanul numitul
 administratiei ministerului directiei sectiei serviciului institutiei departamentului inspectoratului
 republicii moldovei romaniei judecatoriei procuraturii curtii apelului guvernului parlamentului
+balti soroca cahul apel central penal penala procedura sentinta decizia incheierea dosarul
 centrului biroului oficiului comisiei consiliului nationale nationala penitenciarelor statului
 nota informativa raport demers dispozitie proces verbal cerere sesizare referinta atentie documentul
 articolul alineatul punctul litera capitolul sectiunea titlul numarul data anul luna ziua ora
@@ -59,6 +60,14 @@ dl dlui dna dnei dna-lui d-l d-lui d-na d-nei domnul domnului doamna doamnei cet
 numitul numita numitului numitei condamnatul condamnata condamnatului condamnatei detinutul detinuta
 detinutului detinutei inculpatul inculpata invinuitul invinuita banuitul banuita petitionarul petitionara
 reclamantul reclamanta avocatul avocata subsemnatul subsemnata executat executa privinta
+`.trim().split(/\s+/);
+
+// Partea rusa a actelor e, de regula, antetul institutiei, scris tot cu majuscule. Acolo un nume se ia numai
+// dupa un declansator rusesc, altfel „МИНИСТЕРСТВО ЮСТИЦИИ” ar deveni nume de om.
+export const DECLANSATORI_RU = `
+осужденный осужденного осужденному осужденная гражданин гражданина гражданке гражданину задержанный
+обвиняемый обвиняемого подозреваемый подозреваемого заключенный заключенного потерпевший потерпевшего
+г-н г-на г-жа г-же адвокат адвоката начальник начальника директор директора
 `.trim().split(/\s+/);
 
 // Gradele si functiile dupa care, in blocul de semnatura, vine un nume.

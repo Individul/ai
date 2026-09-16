@@ -2,6 +2,7 @@
 //
 //   - aplicatia Corector (mac/, `npm run mac`), care include acest script impachetat si il ruleaza cu --json;
 //   - din Terminal: npm run corecteaza -- "/cale/Document.docx" [--motor claude|gemini] [--model …] [--mod verificare]
+//     [--mascare tot|identificatori|fara] [--arata-ce-pleaca]
 //
 // Doua motoare, fiecare prin CLI-ul lui oficial, logat cu contul tau:
 //   - claude (implicit): Claude Code (`claude -p`), planul tau Claude. Modele: opus, sonnet, haiku.
@@ -26,6 +27,10 @@
 // mesajului si se citeste un singur JSON (--output-format json). Jurnalul de diagnostic
 // (~/Library/Logs/Corector/AAAA-LL-ZZ.jsonl) tine felul evenimentelor si cifrele, fara textul documentului.
 //
+// Datele personale se mascheaza inainte de plecare (src/lib/mascare.ts): numele si identificatorii se
+// inlocuiesc cu date false dar plauzibile, iar corecturile intoarse se desfac inapoi. Harta ramane in acest
+// proces si nu se scrie nicaieri. --arata-ce-pleaca scrie in directorul temporar exact textul trimis.
+//
 // --json: cate un eveniment JSON pe rand, pentru aplicatie: inceput, progres, stare, rezultat, eroare.
 // CORECTOR_CLAUDE / CORECTOR_AGY: caile catre `claude` si `agy` (aplicatia le gaseste singura; pornita din
 // Finder nu are PATH-ul din Terminal). Fara CORECTOR_CLAUDE, scriptul refuza motorul claude din interiorul
@@ -40,6 +45,10 @@ import {
   type DocumentIntreg, type Docx, type StareAplicare,
 } from "../src/lib/docx.ts";
 import { aplicaCuMentiune, type RezultatMentiune } from "../src/lib/mentiune.ts";
+import {
+  desfaceCorecturi, desfaceObservatii, gasesteDate, mascheaza, NIVEL_IMPLICIT, NIVELURI, rezumatMascare,
+  scapatInDocument, verificaDate, type Harta, type Nivel,
+} from "../src/lib/mascare.ts";
 import {
   AUTOR_REVIZII, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageCorecturi, extrageVerificare,
   impartePeLoturi, LIMITA_PARAGRAF, LIMITA_VERIFICARE, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal,
@@ -58,6 +67,12 @@ const UNELTE: Record<MotorLocal, string> = {
 const DIR_JURNAL = join(homedir(), "Library", "Logs", "Corector");
 
 type Mod = "corectura" | "verificare";
+
+interface Mascare {
+  nivel: Nivel;
+  rezumat: string;   // „3 nume, 1 IDNP și 1 telefon”; gol cand nu s-a ascuns nimic
+  sarite: number;    // corecturi aruncate de paznici: atingeau datele mascate
+}
 
 interface CorecturaAfisata {
   stare: StareAplicare;
@@ -78,6 +93,7 @@ interface RezultatDocument {
   mentiune: RezultatMentiune | null; // null doar cand documentul n-are text
   plan: Corectura[];             // corecturile modelului, cu numarul paragrafului: aplicatia le poate pune
                                  // din nou, cu alte solutii acceptate din observatii (modul --reaplica)
+  mascare: Mascare;              // ce s-a ascuns inainte de plecare si cate corecturi au fost sarite din cauza asta
   motor: MotorLocal;
   model: string;           // numele scurt, cel din comanda
   cost_usd: number;        // Claude Code; la Antigravity ramane 0
@@ -248,13 +264,30 @@ const afisabile = (aplicari: { stare: StareAplicare; tip: string; vechi: string;
 
 // Corecturile modelului si mentiunea obligatorie (src/lib/mentiune.ts, acelasi cod ca in hub), puse in document.
 // Documentul corectat se scrie doar daca s-a schimbat ceva.
-function puneInDocument(fisier: string, docx: Docx, doc: DocumentIntreg, corecturiModel: Corectura[], iesireCeruta?: string | null) {
+function puneInDocument(fisier: string, docx: Docx, doc: DocumentIntreg, corecturiModel: Corectura[], iesireCeruta?: string | null, harta?: Harta) {
   const { xml, aplicari, mentiune } = aplicaCuMentiune(docx, doc, corecturiModel, { autor: AUTOR_REVIZII, data: acum() });
+  // Ultimul paznic: un nume inventat n-are voie sa ajunga in actul real, mai bine nu scriem deloc.
+  if (harta && scapatInDocument(aplicari, harta)) {
+    throw new Error("O corectură aducea înapoi un nume mascat, așa că nu am scris documentul. Încearcă din nou sau rulează fără mascare.");
+  }
   const corecturi = afisabile(aplicari);
   const aplicate = corecturi.filter((a) => a.stare === "aplicata").length;
   const iesire = aplicate || mentiune === "adaugata" ? iesireCeruta || numeLibera(fisier) : null;
   if (iesire) writeFileSync(iesire, salveazaDocxParti(docx, xml));
   return { iesire, aplicate, corecturi, mentiune };
+}
+
+// --arata-ce-pleaca: exact textul trimis modelului, scris in directorul temporar, ca sa se poata verifica ce
+// a ramas din datele personale. Doar la cerere; in jurnalul de diagnostic nu ajunge niciodata text.
+function arataCePleaca(alegere: Alegere, fisier: string, mesaj: string, laStare: (mesaj: string) => void) {
+  if (!alegere.cePleaca) return;
+  const cale = join(tmpdir(), `corector-ce-pleaca-${basename(fisier).replace(/\.docx$/i, "")}.json`);
+  try {
+    writeFileSync(cale, mesaj);
+    laStare(`Textul trimis modelului: ${cale}`);
+  } catch {
+    // e doar pentru verificare
+  }
 }
 
 // ---------------------------------------------------------------- modul corectura (corpul, pe loturi)
@@ -264,10 +297,15 @@ async function corecteaza(fisier: string, alegere: Alegere, anunta: (e: Evenimen
   const docx = deschideDocx(new Uint8Array(readFileSync(fisier)));
   const doc = analizeazaIntreg(docx);
   const paragrafe = paragrafeDeCorectat(doc.parti[0]!.analiza).filter((p) => p.text.length <= LIMITA_PARAGRAF);
-  const loturi = impartePeLoturi(paragrafe);
+  // Datele se cauta in tot documentul (numele din antet se mascheaza si in corp), dar pleaca doar corpul.
+  const toate = paragrafeIntreg(doc);
+  const entitati = gasesteDate(toate);
+  const { paragrafe: deTrimis, harta } = mascheaza(paragrafe, alegere.mascare, entitati);
+  const loturi = impartePeLoturi(deTrimis);
   anunta({ tip: "inceput", fisier, loturi: loturi.length, paragrafe: paragrafe.length, mod: "corectura", motor });
   const t0 = Date.now();
-  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, plan: [], motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
+  const mascare: Mascare = { nivel: alegere.mascare, rezumat: rezumatMascare(harta), sarite: 0 };
+  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, plan: [], mascare, motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
   if (!paragrafe.length) return gol;
 
   const laStare = (mesaj: string) => anunta({ tip: "stare", fisier, mesaj });
@@ -283,7 +321,9 @@ async function corecteaza(fisier: string, alegere: Alegere, anunta: (e: Evenimen
       const parte = loturi[k]!;
       const eticheta = { fisier, parte: k + 1, caractere: parte.reduce((s, x) => s + x.text.length, 0) };
       try {
-        const r = await cereCuReincercare(motor, JSON.stringify({ paragrafe: parte }), PROMPT_CORECTOR, cli, eticheta, laStare);
+        const mesaj = JSON.stringify({ paragrafe: parte });
+        if (k === 0) arataCePleaca(alegere, fisier, mesaj, laStare);
+        const r = await cereCuReincercare(motor, mesaj, PROMPT_CORECTOR, cli, eticheta, laStare);
         rezultate[k] = extrageCorecturi(r.brut, new Set(parte.map((x) => x.i)));
         cost += r.cost_usd;
         jetoane += r.jetoane;
@@ -296,9 +336,12 @@ async function corecteaza(fisier: string, alegere: Alegere, anunta: (e: Evenimen
   }));
   if (esecuri.length === loturi.length) throw new Error(esecuri[0]);
 
-  const corecturiModel = rezultate.flat();
-  const pus = puneInDocument(fisier, docx, doc, corecturiModel);
-  return { ...gol, ...pus, plan: corecturiModel, cost_usd: cost, jetoane, secunde: secunde(t0), esecuri };
+  const { corecturi: corecturiModel, sarite } = desfaceCorecturi(rezultate.flat(), harta);
+  const pus = puneInDocument(fisier, docx, doc, corecturiModel, null, harta);
+  return {
+    ...gol, ...pus, plan: corecturiModel, observatii: verificaDate(entitati, toate),
+    mascare: { ...mascare, sarite }, cost_usd: cost, jetoane, secunde: secunde(t0), esecuri,
+  };
 }
 
 // ---------------------------------------------------------------- modul verificare (tot documentul, o cerere)
@@ -309,21 +352,32 @@ async function verifica(fisier: string, alegere: Alegere, anunta: (e: Eveniment)
   const doc = analizeazaIntreg(docx);
   const paragrafe = paragrafeIntreg(doc).filter((p) => p.text.length <= LIMITA_PARAGRAF);
   const caractere = paragrafe.reduce((s, p) => s + p.text.length, 0);
+  const entitati = gasesteDate(paragrafe);
+  const { paragrafe: deTrimis, harta } = mascheaza(paragrafe, alegere.mascare, entitati);
   anunta({ tip: "inceput", fisier, loturi: 1, paragrafe: paragrafe.length, mod: "verificare", motor });
   const t0 = Date.now();
-  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, plan: [], motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
+  const mascare: Mascare = { nivel: alegere.mascare, rezumat: rezumatMascare(harta), sarite: 0 };
+  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, plan: [], mascare, motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
   if (!paragrafe.length) return gol;
   if (caractere > LIMITA_VERIFICARE) {
     throw new Error(`Documentul are ${caractere.toLocaleString("ro-RO")} de caractere, peste plafonul de ${LIMITA_VERIFICARE.toLocaleString("ro-RO")} al verificării. Folosește modul „corectură”.`);
   }
 
   const laStare = (mesaj: string) => anunta({ tip: "stare", fisier, mesaj });
-  const r = await cereCuReincercare(motor, mesajVerificare(paragrafe), PROMPT_VERIFICARE, cli, { fisier, parte: 1, caractere }, laStare);
-  const { corecturi: cerute, observatii } = extrageVerificare(r.brut, new Set(paragrafe.map((p) => p.i)));
+  const mesaj = mesajVerificare(deTrimis);
+  arataCePleaca(alegere, fisier, mesaj, laStare);
+  const r = await cereCuReincercare(motor, mesaj, PROMPT_VERIFICARE, cli, { fisier, parte: 1, caractere }, laStare);
+  const raspuns = extrageVerificare(r.brut, new Set(paragrafe.map((p) => p.i)));
   anunta({ tip: "progres", fisier, gata: 1, total: 1 });
 
-  const pus = puneInDocument(fisier, docx, doc, cerute);
-  return { ...gol, ...pus, observatii, plan: cerute, cost_usd: r.cost_usd, jetoane: r.jetoane, secunde: secunde(t0) };
+  const { corecturi: cerute, sarite } = desfaceCorecturi(raspuns.corecturi, harta);
+  const { observatii: aleModelului, sarite: sariteObservatii } = desfaceObservatii(raspuns.observatii, harta);
+  const pus = puneInDocument(fisier, docx, doc, cerute, null, harta);
+  return {
+    ...gol, ...pus, observatii: [...verificaDate(entitati, paragrafe), ...aleModelului], plan: cerute,
+    mascare: { ...mascare, sarite: sarite + sariteObservatii },
+    cost_usd: r.cost_usd, jetoane: r.jetoane, secunde: secunde(t0),
+  };
 }
 
 const acum = () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -352,6 +406,7 @@ function reaplica(intrare: string): RezultatDocument {
   const pus = puneInDocument(plan.fisier, docx, doc, corecturi, plan.iesire);
   return {
     fisier: plan.fisier, ...pus, observatii: [], plan: corecturi,
+    mascare: { nivel: "fara" as Nivel, rezumat: "", sarite: 0 },
     motor: plan.motor ?? "claude", model: plan.model ?? "", cost_usd: 0, jetoane: 0, secunde: secunde(t0), esecuri: [],
   };
 }
@@ -388,6 +443,10 @@ function afiseazaRezultat(r: RezultatDocument) {
     de_verificat: "găsită în altă formă, dar nu s-a putut înlocui automat; de verificat",
   };
   if (r.mentiune && r.mentiune !== "prezenta") console.log(`  mențiunea despre datele cu caracter personal: ${mentiuni[r.mentiune]}`);
+  if (r.mascare.rezumat) {
+    const sarite = r.mascare.sarite ? `; ${numara(r.mascare.sarite, "corectură sărită", "corecturi sărite")}, atingeau datele mascate` : "";
+    console.log(`  ascunse înainte de trimitere: ${r.mascare.rezumat}${sarite}`);
+  }
   if (r.esecuri.length) console.log(`  Atenție: ${numara(r.esecuri.length, "parte", "părți")} nu s-au putut corecta: ${r.esecuri[0]}`);
 }
 
@@ -395,22 +454,25 @@ function afiseazaRezultat(r: RezultatDocument) {
 
 const argumente = process.argv.slice(2);
 const json = argumente.includes("--json");
-const OPTIUNI = ["--motor", "--model", "--mod"] as const;
+const OPTIUNI = ["--motor", "--model", "--mod", "--mascare"] as const;
 const valoare = (nume: string, implicit: string) => {
   const k = argumente.indexOf(nume);
   return k >= 0 ? argumente[k + 1] ?? implicit : implicit;
 };
-const folosire = 'Folosire: npm run corecteaza -- "/cale/Document.docx" [--motor claude|gemini] [--model opus|sonnet|haiku|pro|flash] [--mod verificare]';
+const folosire = 'Folosire: npm run corecteaza -- "/cale/Document.docx" [--motor claude|gemini] [--model opus|sonnet|haiku|pro|flash] [--mod verificare] [--mascare tot|identificatori|fara]';
 const motor = MOTOARE_LOCALE.find((m) => m === valoare("--motor", "claude"));
 const mod: Mod = valoare("--mod", "corectura") === "verificare" ? "verificare" : "corectura";
+const mascare = NIVELURI.find((n) => n === valoare("--mascare", NIVEL_IMPLICIT));
 const dupaOptiune = new Set(OPTIUNI.map((o) => argumente.indexOf(o) + 1).filter((k) => k > 0));
 const fisiere = argumente.filter((a, k) => !a.startsWith("--") && !dupaOptiune.has(k));
 const scrieEveniment = (e: Eveniment) => process.stdout.write(`${JSON.stringify(e)}\n`);
 
 interface Alegere {
   motor: MotorLocal;
-  model: string; // numele scurt
-  cli: string;   // numele cerut CLI-ului
+  model: string;    // numele scurt
+  cli: string;      // numele cerut CLI-ului
+  mascare: Nivel;   // ce se ascunde inainte de plecare
+  cePleaca: boolean; // scrie in directorul temporar exact textul trimis
 }
 
 // Reaplicarea nu cere model, deci trece inaintea verificarilor de motor.
@@ -428,13 +490,17 @@ if (!motor) {
   console.error(`Motor necunoscut. ${folosire}`);
   process.exit(1);
 }
+if (!mascare) {
+  console.error(`Nivel de mascare necunoscut. Alege: ${NIVELURI.join(", ")}.`);
+  process.exit(1);
+}
 const model = valoare("--model", motor === "gemini" ? "pro" : "opus");
 const cli = modelLocal(motor, model);
 if (!cli) {
   console.error(`Modelul „${model}” nu există la motorul ${motor}. Alege: ${Object.keys(MODELE_LOCALE[motor]).join(", ")}.`);
   process.exit(1);
 }
-const alegere: Alegere = { motor, model, cli };
+const alegere: Alegere = { motor, model, cli, mascare, cePleaca: argumente.includes("--arata-ce-pleaca") };
 
 if (motor === "claude" && process.env.CLAUDECODE && !process.env.CORECTOR_CLAUDE) {
   console.error("Rulează comanda într-un Terminal obișnuit, nu dintr-o sesiune Claude Code.");

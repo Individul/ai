@@ -50,6 +50,15 @@ describe("gasirea datelor personale", () => {
     expect(felurile(e, "persoana")).toEqual(["Ghelbert Zaporojan", "Mocanu Vladislav", "BUZILĂ Anatolie"]);
   });
 
+  it("nu atinge antetul rusesc, dar ia numele dupa un declansator rusesc", () => {
+    const e = gasesteDate([
+      { i: 0, text: "МИНИСТЕРСТВО ЮСТИЦИИ РЕСПУБЛИКИ МОЛДОВА" },
+      { i: 1, text: "Пенитенциарное учреждение №.6-Сорока" },
+      { i: 2, text: "В отношении осужденного Казаку Валерий принято решение." },
+    ]);
+    expect(felurile(e, "persoana")).toEqual(["Казаку Валерий"]);
+  });
+
   it("mai mascheaza si cuvintele cerute de om", () => {
     const e = gasesteDate([{ i: 0, text: "Dosarul a fost preluat de Osoianu." }], ["Osoianu"]);
     expect(felurile(e, "persoana")).toEqual(["Osoianu"]);
@@ -193,8 +202,21 @@ describe("verificarile care raman in cod", () => {
     expect(texte.some((t) => t.includes("nu poate exista"))).toBe(true);
   });
 
+  it("vede contactele care difera intre varianta romana si cea rusa, pe acelasi rand", () => {
+    // In acte cele doua variante stau una langa alta, despartite de tab-uri (antetul demersului din Soroca).
+    const antet = [
+      { i: 0, text: "tel: 0 230 23674, fax: 0 230 23674\t\tТел. 0 230 23674; Тел-факс: 0 230 23567" },
+      { i: 1, text: "e-mail: p6secretariat@anp.gov.md\t\tэл.адрес: p6secretariat@anp.gov.md" },
+      { i: 2, text: "Relații suplimentare la e-mail: p6special@anp.gov.md" },
+    ];
+    const texte = verificaDate(gasesteDate(antet), antet).map((o) => o.text);
+    expect(texte.some((t) => t.includes("varianta rusă") && t.includes("23567"))).toBe(true);
+    // Alta adresa, din alt loc al documentului, nu intra in comparatie.
+    expect(texte.some((t) => t.includes("p6special"))).toBe(false);
+  });
+
   it("tace cand datele sunt in regula", () => {
-    expect(verificaDate(gasesteDate(ACT))).toEqual([]);
+    expect(verificaDate(gasesteDate(ACT), ACT)).toEqual([]);
   });
 });
 

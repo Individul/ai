@@ -73,7 +73,7 @@ const descriere = (d: (typeof documente)[number]) => {
         doar numele fișierului, numărul de corecturi și costul. Nu încărca documente cu date cu caracter personal sau cu acces limitat.
         La „corectură” se lucrează pe corpul documentului, cu tot cu tabele; la „verificare” intră și antetele, subsolurile
         și notele de subsol, iar modelul spune în plus ce a găsit și nu poate repara singur: date care se contrazic,
-        rubrici necompletate, formatare ruptă, îndoieli juridice. La fiecare document se verifică și mențiunea obligatorie
+        rubrici necompletate, formatare ruptă, îndoieli juridice. Fiecare observație vine cu o soluție; unde soluția e o înlocuire de text, o poți accepta cu un clic sau o poți lăsa cum e. La fiecare document se verifică și mențiunea obligatorie
         despre datele cu caracter personal: dacă lipsește sau e în altă formă, e pusă în forma aprobată, tot ca modificare urmărită.
       </p>
       {varf && <p class:list={["lamurire", "varf", { activ: varf.activ }]}>{varf.text.replace("fiecare întrebare", "fiecare document")}</p>}
@@ -121,6 +121,17 @@ const descriere = (d: (typeof documente)[number]) => {
   .observatii :global(li) { display: flex; flex-direction: column; gap: 3px; padding: 12px 0 12px 14px; border-bottom: 1px solid var(--line); border-left: 2px solid rgba(var(--galben-rgb), 0.55); }
   .observatii :global(.tip) { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--wip); }
   .observatii :global(.text) { font-size: 14.5px; color: var(--text-2); overflow-wrap: anywhere; }
+  .observatii :global(.solutie) { font-size: 14px; color: var(--text-2); overflow-wrap: anywhere; }
+  .observatii :global(.solutie b) { color: var(--verde); }
+  .observatii :global(.alegere) { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; }
+  .observatii :global(.alegere button) {
+    font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 12px; border-radius: 999px;
+    border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .observatii :global(.alegere button:hover) { border-color: rgba(var(--violet-rgb), 0.6); color: var(--text); }
+  .observatii :global(.alegere button.ales) { background: var(--violet); border-color: var(--violet); color: var(--pe-accent); }
+  .observatii :global(.manual) { font-size: 12.5px; color: var(--faint); }
+  .observatii :global(.problema) { font-size: 12.5px; color: var(--coral); }
   .zona {
     position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     padding: 34px 20px; border-radius: 18px; border: 1.5px dashed rgba(var(--violet-rgb), 0.45);

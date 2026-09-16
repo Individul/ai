@@ -343,7 +343,10 @@ function afiseazaRezultat(r: RezultatDocument) {
     : `cost echivalent raportat de Claude Code: ${r.cost_usd.toFixed(4)} $ (pe planul Max intră în limitele planului)`;
   console.log(`  ${r.secunde} s, ${NUME_MOTOR[r.motor]} ${r.model}; ${consum}`);
   for (const c of deVerificat) console.log(`  de verificat (${c.stare}): „${c.vechi}” → „${c.nou}” · ${c.motiv}`);
-  for (const o of r.observatii) console.log(`  observație (${o.tip}): ${o.text}`);
+  for (const o of r.observatii) {
+    console.log(`  observație (${o.tip}): ${o.text}`);
+    if (o.solutie) console.log(`     soluție: ${o.solutie}${o.corectura ? ` [„${o.corectura.vechi}” → „${o.corectura.nou}”]` : ""}`);
+  }
   const mentiuni: Record<RezultatMentiune, string> = {
     prezenta: "", corectata: "adusă la forma aprobată", adaugata: "adăugată la sfârșitul documentului",
     de_verificat: "găsită în altă formă, dar nu s-a putut înlocui automat; de verificat",

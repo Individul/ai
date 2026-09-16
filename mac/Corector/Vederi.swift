@@ -467,6 +467,10 @@ struct RandObservatie: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(o.eticheta).font(.system(size: 10.5, weight: .bold)).textCase(.uppercase).foregroundStyle(p.galben)
         Text(o.text).font(.system(size: 13)).foregroundStyle(p.text2).fixedSize(horizontal: false, vertical: true)
+        if let solutie = o.solutie, !solutie.isEmpty {
+          (Text("Soluție: ").foregroundStyle(p.verde) + Text(solutie).foregroundStyle(p.text2))
+            .font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+        }
       }
     }
     .padding(.vertical, 8)

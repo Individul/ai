@@ -175,7 +175,7 @@ describe("verificarea intregului document", () => {
     const raspuns = JSON.stringify({
       corecturi: [{ i: 3, vechi: "nr.6", nou: "nr. 6", tip: "punctuație", motiv: "Spațiu după „nr.”." }],
       observatii: [
-        { tip: "date", text: "„din 02.01.2018” față de „reținut la 02.10.2018”: datele nu se potrivesc." },
+        { tip: "date", text: "„din 02.01.2018” față de „reținut la 02.10.2018”: datele nu se potrivesc.", solutie: "Pune data din sentință în ambele locuri." },
         { tip: "inventat", text: "tip necunoscut" },
         { tip: "lipsa", text: "   " },
       ],
@@ -183,8 +183,8 @@ describe("verificarea intregului document", () => {
     expect(extrageVerificare(raspuns, new Set([3]))).toEqual({
       corecturi: [{ i: 3, vechi: "nr.6", nou: "nr. 6", tip: "punctuație", motiv: "Spațiu după „nr.”." }],
       observatii: [
-        { tip: "date", text: "„din 02.01.2018” față de „reținut la 02.10.2018”: datele nu se potrivesc." },
-        { tip: "altele", text: "tip necunoscut" },
+        { tip: "date", text: "„din 02.01.2018” față de „reținut la 02.10.2018”: datele nu se potrivesc.", solutie: "Pune data din sentință în ambele locuri.", corectura: undefined },
+        { tip: "altele", text: "tip necunoscut", solutie: "", corectura: undefined },
       ],
     });
     expect(extrageVerificare('{"corecturi":[],"observatii":[]}', new Set([1]))).toEqual({ corecturi: [], observatii: [] });
@@ -192,6 +192,20 @@ describe("verificarea intregului document", () => {
     // fara JSON dupa 125.000 de jetoane, iar documentul parea fara greseli.
     expect(() => extrageVerificare("Am verificat documentul și nu am observații.", new Set([1]))).toThrow(/nu a întors verificarea/);
     expect(() => extrageVerificare('{"corecturi":[{"i":1,', new Set([1]))).toThrow(/nu a întors verificarea/);
+  });
+
+  it("citeste solutia si inlocuirea propusa; o inlocuire invalida se arunca, observatia ramane", () => {
+    const raspuns = JSON.stringify({
+      corecturi: [],
+      observatii: [
+        { tip: "date", text: "„Tel-fax: 0 230 23674” față de „Тел-факс: 0 230 23567”.", solutie: "Pune același număr în ambele.", corectura: { i: 1, vechi: "23567", nou: "23674" } },
+        { tip: "lipsa", text: "Rubrica „nr.” e goală.", solutie: "Completează numărul de ieșire." },
+        { tip: "juridic", text: "Trimiterea la art. 470.", solutie: "Verifică textul în vigoare.", corectura: { i: 99, vechi: "x", nou: "y" } },
+      ],
+    });
+    const o = extrageVerificare(raspuns, new Set([1])).observatii;
+    expect(o.map((x) => x.solutie)).toEqual(["Pune același număr în ambele.", "Completează numărul de ieșire.", "Verifică textul în vigoare."]);
+    expect(o.map((x) => x.corectura)).toEqual([{ i: 1, vechi: "23567", nou: "23674" }, undefined, undefined]);
   });
 
   it("arunca observatiile despre mentiunea obligatorie, care se verifica in cod", () => {

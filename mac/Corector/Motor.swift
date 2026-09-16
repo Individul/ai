@@ -115,6 +115,7 @@ enum ModLucru: String, CaseIterable, Identifiable {
 struct Observatie: Decodable, Hashable {
   let tip: String
   let text: String
+  let solutie: String?  // ce propune modelul sa se faca
 
   var eticheta: String {
     switch tip {

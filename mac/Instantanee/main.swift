@@ -55,8 +55,8 @@ func exemplu() -> Rezultat {
     ],
     cost_usd: 0, secunde: 48, esecuri: [],
     observatii: [
-      Observatie(tip: "date", text: "„durata executării pedepsei din 02.01.2018” față de „reținut de facto la 02.10.2018”: aceeași dată apare diferit, iar de ea depinde calculul termenului. De verificat în dosar."),
-      Observatie(tip: "lipsa", text: "Rubrica de înregistrare „.09.2026 nr. 5/” a rămas fără zi și fără număr."),
+      Observatie(tip: "date", text: "„durata executării pedepsei din 02.01.2018” față de „reținut de facto la 02.10.2018”: aceeași dată apare diferit, iar de ea depinde calculul termenului.", solutie: "Compară cu sentința din dosar și pune peste tot data reală a reținerii."),
+      Observatie(tip: "lipsa", text: "Rubrica de înregistrare „.09.2026 nr. 5/” a rămas fără zi și fără număr.", solutie: "Completează ziua și numărul de ieșire din registrul secției."),
     ],
     motor: "gemini", model: "pro", jetoane: 128_400, mentiune: "adaugata"
   )

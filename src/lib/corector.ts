@@ -305,9 +305,18 @@ export function mesajEroareAntigravity(mesaj: string): string {
 // date aflate in locuri diferite, campuri ramase necompletate, formatare rupta, indoieli juridice.
 export const TIPURI_OBSERVATIE = ["date", "juridic", "formatare", "lipsa", "altele"] as const;
 
+// Ce propune modelul pentru o observatie, cand solutia e o inlocuire de text intr-un paragraf.
+export interface CorecturaObservatie {
+  i: number;
+  vechi: string;
+  nou: string;
+}
+
 export interface Observatie {
   tip: string;
-  text: string;
+  text: string;      // citatul si ce e in neregula
+  solutie: string;   // ce trebuie facut, concret
+  corectura?: CorecturaObservatie; // lipseste cand rezolvarea cere ceva ce nu scrie in document
 }
 
 // Eticheta afisata pentru fiecare fel de observatie (aceleasi cuvinte ca in aplicatia de Mac).
@@ -322,7 +331,7 @@ export const ETICHETA_OBSERVATIE: Record<string, string> = {
 export const PROMPT_VERIFICARE = `${PROMPT_CORECTOR}
 
 Primești acum TOT documentul, nu doar corpul: fiecare paragraf are și „unde”: corp, antet, subsol sau note.
-Răspunzi cu JSON: {"corecturi":[{"i":număr,"vechi":"...","nou":"...","tip":"...","motiv":"..."}],"observatii":[{"tip":"date|juridic|formatare|lipsa|altele","text":"..."}]}
+Răspunzi cu JSON: {"corecturi":[{"i":număr,"vechi":"...","nou":"...","tip":"...","motiv":"..."}],"observatii":[{"tip":"date|juridic|formatare|lipsa|altele","text":"...","solutie":"...","corectura":{"i":număr,"vechi":"...","nou":"..."}}]}
 - "corecturi": aceleași reguli ca mai sus, pentru tot documentul, inclusiv antetul și subsolul.
 - "observatii": ce nu se poate repara prin înlocuire de text. Cauți în special:
   - "date": cifre, date calendaristice sau nume care se contrazic între ele în locuri diferite ale documentului;
@@ -330,7 +339,11 @@ Răspunzi cu JSON: {"corecturi":[{"i":număr,"vechi":"...","nou":"...","tip":"..
   - "formatare": indici sau exponenți pierduți, bold ori italic rupt la mijloc de frază, enumerări cu separatori amestecați;
   - "lipsa": rubrici rămase goale (număr de înregistrare, dată, număr de file, semnătură);
   - "altele": neconcordanțe între versiunea română și cea rusă, denumiri oficiale greșite.
-- Fiecare observație începe cu citatul scurt din document, apoi ce e în neregulă și ce ar trebui verificat. Cel mult 20 de observații, cele mai importante primele.
+- "text": citatul scurt din document, apoi ce e în neregulă.
+- "solutie": ce trebuie făcut, concret și scurt. Nu „de verificat”, ci ce anume să scrie sau ce anume să compare omul.
+- "corectura": o pui când soluția e o înlocuire de text într-un singur paragraf, cu aceleași reguli ca la "vechi" / "nou" de mai sus („vechi” copiat exact, o singură apariție în paragraful "i"). O pui mai ales când rezolvarea se vede din document: exponent sau indice pierdut („art. 473/4” → „art. 473⁴”, „pct. 171)” → „pct. 17¹)”), o denumire scrisă altfel decât în restul actului, o trimitere scrisă în două feluri, separatori amestecați într-o enumerare.
+- Dacă rezolvarea cere ceva ce nu scrie în document (numărul de înregistrare, data reală, care dintre două numere de telefon e cel bun, un act pe care nu-l ai), nu pui "corectura" și nu ghici: în "solutie" spui ce are omul de verificat sau de completat.
+- Cel mult 20 de observații, cele mai importante primele.
 - Scrii pentru om: nu pomeni numerele paragrafelor („i”), ci citatul din document.
 - Nu comenta mențiunea despre datele cu caracter personal: se verifică separat.
 - Nu știi ce zi e azi, deci nu spui despre nicio dată din document că e în viitor sau în trecut.
@@ -353,8 +366,15 @@ export const SCHEMA_VERIFICARE: Record<string, unknown> = {
         properties: {
           tip: { type: "string", enum: [...TIPURI_OBSERVATIE] },
           text: { type: "string" },
+          solutie: { type: "string" },
+          corectura: {
+            type: "object",
+            properties: { i: { type: "integer" }, vechi: { type: "string" }, nou: { type: "string" } },
+            required: ["i", "vechi", "nou"],
+            additionalProperties: false,
+          },
         },
-        required: ["tip", "text"],
+        required: ["tip", "text", "solutie"],
         additionalProperties: false,
       },
     },
@@ -375,6 +395,16 @@ export function cerereVerificare(model: string, paragrafe: { i: number; text: st
   };
 }
 
+// Inlocuirea propusa de model pentru o observatie, daca e valida pentru paragrafele trimise.
+function corecturaObservatie(x: unknown, indici: Set<number>): CorecturaObservatie | undefined {
+  const c = x as { i?: unknown; vechi?: unknown; nou?: unknown } | null | undefined;
+  const i = Number(c?.i);
+  const vechi = typeof c?.vechi === "string" ? c.vechi : "";
+  const nou = typeof c?.nou === "string" ? c.nou : null;
+  if (!Number.isInteger(i) || !indici.has(i) || !vechi.trim() || nou === null || vechi.length > 5000 || nou.length > 5000 || vechi === nou) return undefined;
+  return { i, vechi, nou };
+}
+
 export function extrageVerificare(text: string, indici: Set<number>): { corecturi: Corectura[]; observatii: Observatie[] } {
   const d = jsonDinText(text) as { corecturi?: unknown; observatii?: unknown } | null;
   // Un raspuns care nu e JSON nu inseamna „document curat”: mai bine o eroare decat o lista goala mincinoasa.
@@ -387,7 +417,7 @@ export function extrageVerificare(text: string, indici: Set<number>): { corectur
     const continut = String(x?.text ?? "").trim();
     if (!continut || despreMentiune({ text: continut })) continue; // mentiunea obligatorie se verifica in cod
     const tip = TIPURI_OBSERVATIE.includes(String(x?.tip) as (typeof TIPURI_OBSERVATIE)[number]) ? String(x.tip) : "altele";
-    observatii.push({ tip, text: continut.slice(0, 700) });
+    observatii.push({ tip, text: continut.slice(0, 700), solutie: String(x?.solutie ?? "").trim().slice(0, 700), corectura: corecturaObservatie(x?.corectura, indici) });
     if (observatii.length >= 20) break;
   }
   return { corecturi, observatii };

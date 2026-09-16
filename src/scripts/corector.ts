@@ -80,10 +80,40 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, clasa?: string, 
 const inceput = (s: string) => (s.length >= 40 ? `…${s.replace(/^\S*\s/, "")}` : s);
 const sfarsit = (s: string) => (s.length >= 40 ? `${s.replace(/\s\S*$/, "")}…` : s);
 
-function randObservatie(o: Observatie): HTMLLIElement {
+// Corectura propusa de model pentru o observatie, ca sa poata intra in document cand o accepti.
+const corecturaDinSolutie = (o: Observatie): Corectura => ({ ...o.corectura!, tip: "formulare", motiv: o.solutie });
+
+// Cand solutia acceptata n-a putut fi pusa (fragment negasit, text blocat), spunem de ce.
+function nuSAPutut(aplicari: Aplicare[], o: Observatie): string | null {
+  if (!o.corectura) return null;
+  const a = aplicari.find((x) => x.i === o.corectura!.i && x.nou === o.corectura!.nou);
+  return a && a.stare !== "aplicata" ? NEAPLICATE[a.stare] ?? "nu s-a putut pune în document" : null;
+}
+
+function randObservatie(o: Observatie, acceptata: boolean, problema: string | null, comuta: () => void): HTMLLIElement {
   const li = element("li");
   li.appendChild(element("div", "tip", ETICHETA_OBSERVATIE[o.tip] ?? ETICHETA_OBSERVATIE.altele));
   li.appendChild(element("p", "text", o.text));
+  if (o.solutie) {
+    const solutie = element("p", "solutie");
+    solutie.appendChild(element("b", undefined, "Soluție: "));
+    solutie.appendChild(document.createTextNode(o.solutie));
+    li.appendChild(solutie);
+  }
+  if (o.corectura) {
+    const alegere = element("div", "alegere");
+    // Butonul „ales” e cel care arată starea de acum; celălalt o schimbă.
+    for (const [titlu, vrea] of [["Acceptă soluția", true], ["Lasă cum e", false]] as const) {
+      const buton = element("button", vrea === acceptata ? "ales" : undefined, titlu);
+      buton.type = "button";
+      buton.addEventListener("click", () => { if (vrea !== acceptata) comuta(); });
+      alegere.appendChild(buton);
+    }
+    li.appendChild(alegere);
+    if (problema) li.appendChild(element("p", "problema", `Soluția acceptată ${problema.replace(/^de verificat: /, "")}.`));
+  } else {
+    li.appendChild(element("p", "manual", "Nu se poate pune automat: completează tu în document."));
+  }
   return li;
 }
 
@@ -220,33 +250,49 @@ function porneste(radacina: HTMLElement) {
       }
 
       scrie("Se pun corecturile în document…");
-      const pus = aplicaCuMentiune(docx, doc, corecturiModel, rev);
-      if (Object.values(pus.xml).some(xmlStricat)) {
-        throw new Error("Documentul corectat nu a ieșit valid, așa că nu l-am pus la descărcare.");
-      }
-      const aplicate = pus.aplicari.filter((a) => a.stare === "aplicata");
-      const deVerificat = pus.aplicari.filter((a) => NEAPLICATE[a.stare]);
+      const numeIesire = `${fisier.name.replace(/\.docx$/i, "")} (corectat).docx`;
+      // Soluțiile observațiilor intră în document doar dacă le accepți; documentul se reface la fiecare alegere.
+      const acceptate = new Set<number>();
+      const arata = () => {
+        const solutii = observatii.flatMap((o, k) => (acceptate.has(k) && o.corectura ? [corecturaDinSolutie(o)] : []));
+        const pus = aplicaCuMentiune(docx, doc, [...corecturiModel, ...solutii], rev);
+        if (Object.values(pus.xml).some(xmlStricat)) {
+          throw new Error("Documentul corectat nu a ieșit valid, așa că nu l-am pus la descărcare.");
+        }
+        const aplicate = pus.aplicari.filter((a) => a.stare === "aplicata");
+        const deVerificat = pus.aplicari.filter((a) => NEAPLICATE[a.stare]);
+        if (urlDocument) URL.revokeObjectURL(urlDocument);
+        const schimbat = aplicate.length > 0 || pus.mentiune === "adaugata";
+        urlDocument = schimbat ? URL.createObjectURL(new Blob([salveazaDocxParti(docx, pus.xml) as Uint8Array<ArrayBuffer>], { type: TIP_DOCX })) : null;
+        descarca.hidden = !urlDocument;
+        if (urlDocument) {
+          descarca.href = urlDocument;
+          descarca.download = numeIesire;
+        }
+        const frazaAplicate = aplicate.length
+          ? `${numara(aplicate.length, "corectură", "corecturi")} ${aplicate.length === 1 ? "pusă" : "puse"} în document ca modificări urmărite.`
+          : deVerificat.length ? "Nicio corectură nu a putut fi pusă automat în document." : "Nu am găsit greșeli în document.";
+        const frazaVerificat = deVerificat.length ? ` ${numara(deVerificat.length, "propunere", "propuneri")} de verificat manual, mai jos.` : "";
+        const frazaObservatii = observatii.length ? ` ${numara(observatii.length, "observație", "observații")} pentru tine, mai jos.` : "";
+        const frazaSolutii = acceptate.size ? ` ${numara(acceptate.size, "soluție acceptată", "soluții acceptate")} din observații.` : "";
+        rezumat.textContent = `${frazaAplicate}${frazaVerificat}${FRAZA_MENTIUNE[pus.mentiune]}${frazaObservatii}${frazaSolutii}${partiale ? ` Atenție: ${partiale}.` : ""}`;
+        listaObservatii.replaceChildren(...observatii.map((o, k) => randObservatie(o, acceptate.has(k), nuSAPutut(pus.aplicari, o), () => {
+          if (acceptate.has(k)) acceptate.delete(k); else acceptate.add(k);
+          try {
+            arata();
+          } catch (e) {
+            acceptate.delete(k);
+            scrie((e as Error).message, true);
+          }
+        })));
+        listaObservatii.hidden = !observatii.length;
+        lista.replaceChildren(...[...aplicate, ...deVerificat].sort((x, y) => x.i - y.i).map(randCorectura));
+        return aplicate.length;
+      };
+      const aplicate = arata();
       await post(`/api/corector/${id}/gata`, {
-        stare: "ok", corecturi: corecturiModel.length, aplicate: aplicate.length, observatii: observatii.length, mesaj: partiale,
+        stare: "ok", corecturi: corecturiModel.length, aplicate, observatii: observatii.length, mesaj: partiale,
       }).catch(() => undefined);
-
-      if (urlDocument) URL.revokeObjectURL(urlDocument);
-      const schimbat = aplicate.length > 0 || pus.mentiune === "adaugata";
-      urlDocument = schimbat ? URL.createObjectURL(new Blob([salveazaDocxParti(docx, pus.xml) as Uint8Array<ArrayBuffer>], { type: TIP_DOCX })) : null;
-      descarca.hidden = !urlDocument;
-      if (urlDocument) {
-        descarca.href = urlDocument;
-        descarca.download = `${fisier.name.replace(/\.docx$/i, "")} (corectat).docx`;
-      }
-      const frazaAplicate = aplicate.length
-        ? `${numara(aplicate.length, "corectură", "corecturi")} ${aplicate.length === 1 ? "pusă" : "puse"} în document ca modificări urmărite.`
-        : deVerificat.length ? "Nicio corectură nu a putut fi pusă automat în document." : "Nu am găsit greșeli în document.";
-      const frazaVerificat = deVerificat.length ? ` ${numara(deVerificat.length, "propunere", "propuneri")} de verificat manual, mai jos.` : "";
-      const frazaObservatii = observatii.length ? ` ${numara(observatii.length, "observație", "observații")} pentru tine, mai jos.` : "";
-      rezumat.textContent = `${frazaAplicate}${frazaVerificat}${FRAZA_MENTIUNE[pus.mentiune]}${frazaObservatii}${partiale ? ` Atenție: ${partiale}.` : ""}`;
-      listaObservatii.replaceChildren(...observatii.map(randObservatie));
-      listaObservatii.hidden = !observatii.length;
-      lista.replaceChildren(...[...aplicate, ...deVerificat].sort((x, y) => x.i - y.i).map(randCorectura));
       rezultat.hidden = false;
       scrie("");
     } catch (e) {

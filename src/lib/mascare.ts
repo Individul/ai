@@ -64,10 +64,12 @@ export interface Harta {
   inapoi: [string, string][];                // fals -> adevarat, cele lungi intai
   radacini: Set<string>;                     // radacinile numelor false, pentru paznicul de reziduu
   falsuri: string[];                         // valorile false intregi (identificatori), pentru acelasi paznic
+  fragmente: Set<string>;                    // grupuri de cifre care exista doar in valorile false
 }
 
 const hartaGoala = (nivel: Nivel): Harta => ({
   nivel, perechi: [], zone: new Map(), mascate: new Map(), inapoi: [], radacini: new Set(), falsuri: [],
+  fragmente: new Set(),
 });
 
 const faraDiacritice = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -97,6 +99,7 @@ const TIPARE: Tipar[] = [
 interface Cuv { text: string; de: number; pana: number; norm: string; caps: boolean }
 
 const CUVANT = /[\p{L}][\p{L}'’-]*/gu;
+const GRUP_CIFRE = /\d{3,}/g;
 const LIPIT = /^[ \u00a0]{1,2}$/; // doar un spatiu intre cuvintele aceluiasi nume
 
 function cuvinteDin(text: string): Cuv[] {
@@ -308,9 +311,17 @@ export function mascheaza<T extends { i: number; text: string }>(
 
   harta.perechi = [...perechi.values()];
   harta.inapoi = harta.perechi.map((x): [string, string] => [x.fals, x.adevarat]).sort((a, b) => b[0].length - a[0].length);
+  // Grupurile de cifre din documentul adevarat: ce nu e printre ele si apare intr-un raspuns vine din datele
+  // false. Asa se prinde si modelul care descrie diferenta dintre doi identificatori falsi („002 față de 003”).
+  const cifreAdevarate = new Set<string>();
+  for (const p of paragrafe) for (const g of p.text.match(GRUP_CIFRE) ?? []) cifreAdevarate.add(g);
   for (const p of harta.perechi) {
-    if (p.fel === "persoana") for (const c of p.fals.match(CUVANT) ?? []) harta.radacini.add(radacina(c));
-    else harta.falsuri.push(p.fals);
+    if (p.fel === "persoana") {
+      for (const c of p.fals.match(CUVANT) ?? []) harta.radacini.add(radacina(c));
+      continue;
+    }
+    harta.falsuri.push(p.fals);
+    for (const g of p.fals.match(GRUP_CIFRE) ?? []) if (!cifreAdevarate.has(g)) harta.fragmente.add(g);
   }
   return { paragrafe: iesire, harta };
 }
@@ -346,6 +357,7 @@ export function desfaceText(s: string, harta: Harta): string {
 // A mai ramas vreo urma de nume fals? „Rusului”, „RUSU”, „Rusu-ului” pornesc de la aceeasi radacina.
 export function reziduu(s: string, harta: Harta): boolean {
   if (harta.falsuri.some((f) => s.includes(f))) return true;
+  if ((s.match(GRUP_CIFRE) ?? []).some((g) => harta.fragmente.has(g))) return true;
   if (!harta.radacini.size) return false;
   return (s.match(CUVANT) ?? []).some((c) => harta.radacini.has(radacina(c)));
 }

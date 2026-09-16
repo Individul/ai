@@ -92,15 +92,11 @@ const descriere = (d: (typeof documente)[number]) => {
       </div>
 
       <p class="lamurire">
-        Textul documentului e trimis modelului {numeModel} ({NUME_MOTOR[motor]}) și nu se păstrează pe server: în jurnal rămân
-        doar numele fișierului, numărul de corecturi și costul. Datele personale sunt înlocuite, înainte de trimitere, cu date
-        false dar plauzibile, iar corecturile se desfac înapoi aici, în browser; lista înlocuirilor și numele fișierului nu pleacă
-        nicăieri. Nu e anonimizare: restul actului (fapta, instituția, articolele) pleacă așa cum e, numele din partea rusă a
-        antetului nu se maschează, iar un nume rar poate scăpa nerecunoscut — după fiecare document vezi exact ce a fost ascuns.
-        La „corectură” se lucrează pe corpul documentului, cu tot cu tabele; la „verificare” intră și antetele, subsolurile
-        și notele de subsol, iar modelul spune în plus ce a găsit și nu poate repara singur: date care se contrazic,
-        rubrici necompletate, formatare ruptă, îndoieli juridice. Fiecare observație vine cu o soluție: unde e o înlocuire de text, o accepți cu un clic și intră în document; unde o completezi tu în Word, o bifezi ca rezolvată, ca să știi pe unde ai rămas. La fiecare document se verifică și mențiunea obligatorie
-        despre datele cu caracter personal: dacă lipsește sau e în altă formă, e pusă în forma aprobată, tot ca modificare urmărită.
+        Textul documentului e trimis modelului {numeModel} ({NUME_MOTOR[motor]}), cu numele și identificatorii înlocuiți
+        mai întâi cu date false — nu e anonimizare, restul actului pleacă așa cum e; pe server rămân doar numele fișierului,
+        mascat și el, numărul de corecturi și costul. La „corectură” se lucrează pe corpul documentului, la „verificare” intră
+        și antetele, subsolurile și notele, iar observațiile care cer om vin fiecare cu soluția ei: o accepți cu un clic sau o
+        bifezi ca rezolvată. La fiecare document se verifică și mențiunea obligatorie despre datele cu caracter personal.
       </p>
       {varf && <p class:list={["lamurire", "varf", { activ: varf.activ }]}>{varf.text.replace("fiecare întrebare", "fiecare document")}</p>}
     </section>

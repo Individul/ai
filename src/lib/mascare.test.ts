@@ -155,6 +155,21 @@ describe("paznicii", () => {
     expect(observatii[1]!.text).toContain("Cazacu Valeriu");
   });
 
+  it("arunca observatia in care modelul descrie diferenta dintre doua date false", () => {
+    // Gemini Pro, pe demersul din 16 sept. 2026: „Se unifică numărul de tel-fax (002 în varianta română,
+    // 003 în rusă)” — cifrele alea sunt din telefoanele false, nu din act.
+    const antet = [{ i: 0, text: "tel: 0 230 23674, fax: 0 230 23674\t\tТел. 0 230 23674; Тел-факс: 0 230 23567" }];
+    const { harta: h } = pregateste(antet, "tot");
+    const { observatii, sarite } = desfaceObservatii([
+      { tip: "altele", text: "Numerele de fax nu se potrivesc.", solutie: "Se unifică numărul (002 în varianta română, 003 în rusă)." },
+      { tip: "lipsa", text: "Rubrica „nr. de înregistrare” e goală.", solutie: "Completează numărul." },
+    ], h);
+    expect(sarite).toBe(1);
+    expect(observatii.map((o) => o.tip)).toEqual(["lipsa"]);
+    // Cifrele care exista si in act nu sunt urme de date false.
+    expect(reziduu("Numerele „0 230 23674” și „0 230 23567” nu se potrivesc.", h)).toBe(false);
+  });
+
   it("opreste documentul daca un nume fals a ajuns totusi in textul de inserat", () => {
     expect(scapatInDocument([{ nou: "transferul condamnatului" }], harta)).toBe(false);
     expect(scapatInDocument([{ nou: `transferul lui ${numeFals}` }], harta)).toBe(true);

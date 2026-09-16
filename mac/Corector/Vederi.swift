@@ -121,7 +121,7 @@ struct Continut: View {
         }
       }
 
-      Text("Folosește \(corector.motor.numeUnealta) logat cu contul tău, deci \(corector.motor.descriere). Textul documentelor ajunge la \(corector.motor.furnizor), cu datele personale înlocuite mai întâi cu date false; se pun la loc aici, la tine. Nu e anonimizare: restul actului pleacă așa cum e, iar numele din partea rusă a antetului nu se maschează. Documentul corectat se salvează lângă original, cu „(corectat)” în nume; originalul rămâne neatins.")
+      Text("Folosește \(corector.motor.numeUnealta) logat cu contul tău, deci \(corector.motor.descriere). Textul ajunge la \(corector.motor.furnizor) cu datele personale înlocuite cu date false, puse la loc aici — nu e anonimizare, restul actului pleacă așa cum e. Documentul corectat se salvează lângă original, cu „(corectat)” în nume.")
         .font(.system(size: 11.5)).foregroundStyle(p.sters).fixedSize()
     }
   }

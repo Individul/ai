@@ -8,14 +8,13 @@ describe("stareVarf + textVarf", () => {
     const s = stareVarf("deepseek-flash", acum)!;
     expect(s.activ).toBe(true);
     expect(s.panaLa?.toISOString()).toBe("2026-09-10T10:00:00.000Z");
-    expect(textVarf(s, acum)).toEqual({ activ: true, text: "Acum e oră de vârf la DeepSeek: fiecare întrebare costă de 2 ori mai mult, până la 13:00." });
+    expect(textVarf(s)).toEqual({ activ: true, text: "Acum e oră de vârf la DeepSeek: fiecare întrebare costă de 2 ori mai mult, până la 13:00." });
   });
 
-  it("in afara varfului: intervalele in ora locala, cu zilele", () => {
+  it("in afara varfului nu se spune nimic: ora libera e starea obisnuita", () => {
     const acum = new Date("2026-09-10T12:00:00Z");
-    const t = textVarf(stareVarf("deepseek-flash", acum), acum)!;
-    expect(t.activ).toBe(false);
-    expect(t.text).toBe("Oră liberă la DeepSeek. Prețul se dublează la orele de vârf: 04:00–07:00 și 09:00–13:00, luni–vineri.");
+    expect(stareVarf("deepseek-flash", acum)?.activ).toBe(false);
+    expect(textVarf(stareVarf("deepseek-flash", acum))).toBeNull();
   });
 
   it("weekend in interval: nu e varf; modelele fara ore de varf dau null", () => {

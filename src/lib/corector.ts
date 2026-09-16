@@ -58,7 +58,7 @@ Primești paragrafele unui document ca JSON: {"paragrafe":[{"i":număr,"text":".
 Corectezi:
 - ortografia și diacriticele (ă, â, î, ș, ț), greșelile de tipar, cuvintele repetate;
 - gramatica: acordurile, formele verbale, cratima („s-a” / „sa”, „va” / „v-a”, „într-un”), articolele;
-- punctuația: virgulele, spațiile greșite în jurul semnelor de punctuație;
+- punctuația: virgulele și celelalte semne;
 - formularea: frazele greoaie, ambigue sau nefirești, pe care le reformulezi în stil administrativ oficial, clar și concis.
 Reguli:
 - Nu schimba sensul, cifrele, datele, numele proprii, numerele actelor și trimiterile la articole, puncte sau alineate.
@@ -67,6 +67,7 @@ Reguli:
 - Verifici acordul predicatului cu subiectul, inclusiv când subiectul e departe de verb („rezultatele ... se vor prezenta”).
 - Nu corecta ce e deja corect și nu reformula un paragraf bun doar din preferință.
 - Nu semnala diferența dintre ş/ţ cu sedilă și ș/ț cu virgulă.
+- Nu semnala spațiile: nici spațiul care lipsește după un punct sau o abreviere („or.Soroca”, „эл.адрес”), nici spațiile duble. Pe acelea le lasă în pace.
 - Mențiunea despre datele cu caracter personal („Atenție: Documentul conține date cu caracter personal…”) se verifică separat, după forma aprobată: nu o corecta.
 Răspunzi doar cu JSON: {"corecturi":[{"i":număr,"vechi":"...","nou":"...","tip":"ortografie|gramatică|punctuație|formulare","motiv":"..."}]}
 - "vechi" e copiat exact, caracter cu caracter, din textul paragrafului "i"; cât mai scurt (cuvântul sau grupul de cuvinte greșit, nu tot paragraful), dar suficient ca să apară o singură dată în paragraf.
@@ -122,6 +123,17 @@ function jsonDinText(text: string): unknown {
   }
 }
 
+// O corectura care schimba doar spatiile („or.Soroca” -> „or. Soroca”, spatiile duble) nu intra nici in
+// document, nici in raport: decizia lui Dumitru din 16 sept. 2026, pentru ca ii ineaca greselile adevarate.
+// Spatiul dintre doua litere ramane o corectura adevarata („desine” -> „de sine”), la fel ca semnele scoase
+// sau puse („№.6” -> „№ 6”): se compara forme din care dispar doar spatiile din jurul semnelor.
+const faraSpatii = (s: string) =>
+  s.replace(/\s+/g, " ").replace(/\s*([^\p{L}\p{N}\s])\s*/gu, "$1").trim();
+
+export function doarSpatii(vechi: string, nou: string): boolean {
+  return vechi !== nou && faraSpatii(vechi) === faraSpatii(nou);
+}
+
 export function extrageCorecturi(text: string, indici: Set<number>): Corectura[] {
   const d = jsonDinText(text);
   const lista = Array.isArray(d) ? d : Array.isArray((d as { corecturi?: unknown })?.corecturi) ? (d as { corecturi: unknown[] }).corecturi : null;
@@ -132,6 +144,7 @@ export function extrageCorecturi(text: string, indici: Set<number>): Corectura[]
     const vechi = typeof x?.vechi === "string" ? x.vechi : "";
     const nou = typeof x?.nou === "string" ? x.nou : null;
     if (!Number.isInteger(i) || !indici.has(i) || !vechi.trim() || nou === null || vechi.length > 5000 || nou.length > 5000) continue;
+    if (doarSpatii(vechi, nou)) continue;
     const tip = TIPURI_CORECTURA.find((t) => faraDiacritice(t) === faraDiacritice(String(x.tip ?? ""))) ?? "formulare";
     corecturi.push({ i, vechi, nou, tip, motiv: String(x.motiv ?? "").trim().slice(0, 300) });
   }
@@ -425,6 +438,9 @@ export function extrageVerificare(text: string, indici: Set<number>): { corectur
   for (const x of (Array.isArray(d?.observatii) ? d.observatii : []) as Record<string, unknown>[]) {
     const continut = String(x?.text ?? "").trim();
     if (!continut || despreMentiune({ text: continut })) continue; // mentiunea obligatorie se verifica in cod
+    // O observatie a carei rezolvare e doar un spatiu e o observatie despre spatii: nu intra in raport.
+    const c = x?.corectura as { vechi?: unknown; nou?: unknown } | undefined;
+    if (typeof c?.vechi === "string" && typeof c?.nou === "string" && doarSpatii(c.vechi, c.nou)) continue;
     const tip = TIPURI_OBSERVATIE.includes(String(x?.tip) as (typeof TIPURI_OBSERVATIE)[number]) ? String(x.tip) : "altele";
     observatii.push({ tip, text: continut.slice(0, 700), solutie: String(x?.solutie ?? "").trim().slice(0, 700), corectura: corecturaObservatie(x?.corectura, indici) });
     if (observatii.length >= 20) break;

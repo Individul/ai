@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bugetCaractere, cerereCorectura, cerereVerificare, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR, TIPURI_OBSERVATIE, type MotorLocal } from "./corector";
+import { bugetCaractere, cerereCorectura, doarSpatii, cerereVerificare, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR, TIPURI_OBSERVATIE, type MotorLocal } from "./corector";
 
 describe("impartePeLoturi", () => {
   it("umple loturile in ordine, fara sa depaseasca plafonul; un paragraf lung sta singur", () => {
@@ -27,13 +27,14 @@ describe("extrageCorecturi", () => {
         { i: 9, vechi: "x", nou: "y", tip: "ortografie" },   // paragraf din alt lot
         { i: 2, vechi: "", nou: "y" },                        // fara fragment
         { i: 2, vechi: "ceva", tip: "punctuație" },           // fara inlocuire
-        { i: 2, vechi: "  a", nou: "a", tip: "altceva" },
+        { i: 2, vechi: "  a", nou: " a", tip: "altceva" },   // doar spatii
+        { i: 2, vechi: "sa", nou: "să", tip: "altceva" },
       ],
     }) + "\n```";
     expect(extrageCorecturi(text, new Set([1, 2]))).toEqual([
       { i: 1, vechi: "insa", nou: "însă", tip: "ortografie", motiv: "Se scrie cu î și ă." },
       { i: 1, vechi: "se v-a", nou: "se va", tip: "gramatică", motiv: "viitorul" },
-      { i: 2, vechi: "  a", nou: "a", tip: "formulare", motiv: "" },
+      { i: 2, vechi: "sa", nou: "să", tip: "formulare", motiv: "" },
     ]);
   });
 
@@ -106,6 +107,42 @@ describe("cerereVerificare", () => {
     const schema = c.schema as { required: string[]; properties: Record<string, { items?: { properties?: { tip?: { enum?: string[] } } } }> };
     expect(schema.required).toEqual(["corecturi", "observatii"]);
     expect(schema.properties.observatii?.items?.properties?.tip?.enum).toEqual([...TIPURI_OBSERVATIE]);
+  });
+});
+
+describe("corecturile doar de spatiu", () => {
+  const lot = new Set([0, 3]);
+
+  it("recunoaste ce e doar spatiu si ce nu", () => {
+    for (const [vechi, nou] of [["or.Soroca", "or. Soroca"], ["эл.адрес", "эл. адрес"], ["două  spații", "două spații"], ["cuvânt ,virgulă", "cuvânt, virgulă"], ["art.473", "art. 473"]]) {
+      expect(doarSpatii(vechi!, nou!)).toBe(true);
+    }
+    // Spatiul dintre doua litere e o corectura adevarata, la fel ca semnul scos sau pus.
+    for (const [vechi, nou] of [["desine stătător", "de sine stătător"], ["№.6", "№ 6"], ["dosar nr.", "dosarul nr."], ["art. 473/4", "art. 473⁴"]]) {
+      expect(doarSpatii(vechi!, nou!)).toBe(false);
+    }
+  });
+
+  it("nu le trece in lista de corecturi", () => {
+    const raspuns = JSON.stringify({ corecturi: [
+      { i: 0, vechi: "or.Soroca", nou: "or. Soroca", tip: "punctuație", motiv: "Spațiu după abreviere." },
+      { i: 3, vechi: "epizoade", nou: "episoade", tip: "ortografie", motiv: "Formă greșită." },
+    ] });
+    expect(extrageCorecturi(raspuns, lot)).toEqual([{ i: 3, vechi: "epizoade", nou: "episoade", tip: "ortografie", motiv: "Formă greșită." }]);
+  });
+
+  it("arunca si observatia a carei rezolvare e doar un spatiu", () => {
+    const raspuns = JSON.stringify({
+      corecturi: [],
+      observatii: [
+        { tip: "formatare", text: "„эл.адрес”: lipsește spațiul după abreviere.", solutie: "Se pune spațiu.", corectura: { i: 0, vechi: "эл.адрес", nou: "эл. адрес" } },
+        { tip: "formatare", text: "„art. 473/4”: exponent pierdut.", solutie: "Se scrie cu exponent.", corectura: { i: 3, vechi: "art. 473/4", nou: "art. 473⁴" } },
+        { tip: "lipsa", text: "Rubrica „Anexă pe: ___ file” e goală.", solutie: "Completează numărul." },
+      ],
+    });
+    const { observatii } = extrageVerificare(raspuns, lot);
+    expect(observatii.map((o) => o.tip)).toEqual(["formatare", "lipsa"]);
+    expect(observatii[0]!.corectura).toEqual({ i: 3, vechi: "art. 473/4", nou: "art. 473⁴" });
   });
 });
 
@@ -190,7 +227,7 @@ describe("verificarea intregului document", () => {
     expect(PROMPT_VERIFICARE).toContain("observatii");
 
     const raspuns = JSON.stringify({
-      corecturi: [{ i: 3, vechi: "nr.6", nou: "nr. 6", tip: "punctuație", motiv: "Spațiu după „nr.”." }],
+      corecturi: [{ i: 3, vechi: "nr.6", nou: "nr. 7", tip: "punctuație", motiv: "Numărul corect." }],
       observatii: [
         { tip: "date", text: "„din 02.01.2018” față de „reținut la 02.10.2018”: datele nu se potrivesc.", solutie: "Pune data din sentință în ambele locuri." },
         { tip: "inventat", text: "tip necunoscut" },
@@ -198,7 +235,7 @@ describe("verificarea intregului document", () => {
       ],
     });
     expect(extrageVerificare(raspuns, new Set([3]))).toEqual({
-      corecturi: [{ i: 3, vechi: "nr.6", nou: "nr. 6", tip: "punctuație", motiv: "Spațiu după „nr.”." }],
+      corecturi: [{ i: 3, vechi: "nr.6", nou: "nr. 7", tip: "punctuație", motiv: "Numărul corect." }],
       observatii: [
         { tip: "date", text: "„din 02.01.2018” față de „reținut la 02.10.2018”: datele nu se potrivesc.", solutie: "Pune data din sentință în ambele locuri.", corectura: undefined },
         { tip: "altele", text: "tip necunoscut", solutie: "", corectura: undefined },

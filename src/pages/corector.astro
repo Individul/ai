@@ -11,7 +11,7 @@ import { cheieMotor } from "../lib/motor";
 import { cursUsd } from "../lib/curs";
 import { aziChisinau, fmtMoment } from "../lib/data";
 import { LIMITA_VERIFICARE, numara } from "../lib/corector";
-import { motorModel, NUME_MOTOR, stareVarf, TARIFE } from "../lib/validare";
+import { motorModel, stareVarf } from "../lib/validare";
 import { textVarf } from "../lib/varf";
 
 const [model, documente, curs] = await Promise.all([
@@ -19,7 +19,6 @@ const [model, documente, curs] = await Promise.all([
 ]);
 const motor = motorModel(model) ?? "gemini";
 const configurat = !!cheieMotor(env, motor);
-const numeModel = TARIFE[model]?.eticheta.split(" · ")[0] ?? model;
 const varf = textVarf(stareVarf(model));
 const descriere = (d: (typeof documente)[number]) => {
   if (d.stare !== "ok") return d.stare === "eroare" ? "eroare" : "neterminat";
@@ -92,9 +91,9 @@ const descriere = (d: (typeof documente)[number]) => {
       </div>
 
       <p class="lamurire">
-        Textul documentului e trimis modelului {numeModel} ({NUME_MOTOR[motor]}), cu numele și identificatorii înlocuiți
-        mai întâi cu date false — nu e anonimizare, restul actului pleacă așa cum e; pe server rămân doar numele fișierului,
-        mascat și el, numărul de corecturi și costul. La „corectură” se lucrează pe corpul documentului, la „verificare” intră
+        Documentul nu pleacă din browser: la modelul de inteligență artificială ajunge doar textul lui, cu numele și
+        identificatorii înlocuiți mai întâi cu date false — nu e anonimizare, restul actului pleacă așa cum e; pe server
+        rămân doar numele fișierului, mascat și el, numărul de corecturi și costul. La „corectură” se lucrează pe corpul documentului, la „verificare” intră
         și antetele, subsolurile și notele, iar observațiile care cer om vin fiecare cu soluția ei: o accepți cu un clic sau o
         bifezi ca rezolvată. La fiecare document se verifică și mențiunea obligatorie despre datele cu caracter personal.
       </p>

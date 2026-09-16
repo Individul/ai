@@ -218,6 +218,10 @@ const LARG: Record<string, string> = {
 const DE_NORMALIZAT = /[şţŞŢ  „“”«»’‘\t\n]/g;
 const normalizeaza = (s: string, tabel: Record<string, string>) => s.replace(DE_NORMALIZAT, (c) => tabel[c] ?? c);
 
+// Textul asa cum il cauta aplicaCorecturi. Il foloseste mascare.ts, ca sa afle unde cade „vechi” inainte de
+// a-l desface: o corectura care atinge o zona mascata nu are voie sa intre in document.
+export const caLaCautare = (s: string) => normalizeaza(s, LARG);
+
 export interface Operatie {
   de: number;   // [de, pana) din textul vechi se sterge
   pana: number;

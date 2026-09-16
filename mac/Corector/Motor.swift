@@ -112,10 +112,28 @@ enum ModLucru: String, CaseIterable, Identifiable {
 
 // Ce nu se poate repara prin inlocuire de text: date care se contrazic, rubrici goale, formatare rupta,
 // indoieli juridice. Vine doar din modul verificare.
+// Inlocuirea propusa de model pentru o observatie, cand rezolvarea se vede din document.
+struct CorecturaObservatie: Codable, Hashable {
+  let i: Int
+  let vechi: String
+  let nou: String
+}
+
+// O corectura cu numarul paragrafului, asa cum o trimite motorul inapoi in `plan`: aplicatia i-o poate da
+// din nou, impreuna cu solutiile acceptate, ca sa rescrie documentul fara sa mai intrebe modelul.
+struct CorecturaPlan: Codable, Hashable {
+  let i: Int
+  let vechi: String
+  let nou: String
+  let tip: String
+  let motiv: String
+}
+
 struct Observatie: Decodable, Hashable {
   let tip: String
   let text: String
   let solutie: String?  // ce propune modelul sa se faca
+  let corectura: CorecturaObservatie?  // lipseste cand rezolvarea cere ceva ce nu scrie in document
 
   var eticheta: String {
     switch tip {
@@ -161,8 +179,18 @@ struct Rezultat: Decodable, Hashable {
   let model: String?
   let jetoane: Int?
   let mentiune: String? // prezenta | corectata | adaugata | de_verificat
+  let plan: [CorecturaPlan]?
 
   var deVerificat: Int { corecturi.filter(\.deVerificat).count }
+
+  // Rezultatul de dupa o rescriere: ce tine de document vine din cel nou, restul (observatii, consum) ramane.
+  func dupaRescriere(_ nou: Rezultat) -> Rezultat {
+    Rezultat(
+      iesire: nou.iesire, aplicate: nou.aplicate, corecturi: nou.corecturi, cost_usd: cost_usd, secunde: secunde,
+      esecuri: esecuri, observatii: observatii, motor: motor, model: model, jetoane: jetoane,
+      mentiune: nou.mentiune, plan: plan
+    )
+  }
 
   // Mentiunea despre datele cu caracter personal, doar cand s-a schimbat ceva; una deja in regula nu apare.
   var textMentiune: String? {
@@ -250,6 +278,41 @@ enum Motor {
       gasite[nume] = obisnuite.map { "\($0)/\(nume)" }.first(where: fm.isExecutableFile(atPath:))
     }
     return (gasite["node"], gasite["claude"], gasite["agy"])
+  }
+
+  // Documentul scris din nou, cu alte solutii acceptate din observatii. Fara cerere la model: motorul
+  // porneste de la documentul original, deci alegerile se pot schimba oricat, in ambele sensuri.
+  static func reaplica(fisier: URL, rezultat: Rezultat, solutii: [CorecturaPlan], unelte: Unelte, script: URL) async -> Rezultat? {
+    struct Plan: Encodable {
+      let fisier: String
+      let iesire: String?
+      let motor: String?
+      let model: String?
+      let corecturi: [CorecturaPlan]
+    }
+    let plan = Plan(
+      fisier: fisier.path, iesire: rezultat.iesire, motor: rezultat.motor, model: rezultat.model,
+      corecturi: (rezultat.plan ?? []) + solutii
+    )
+    guard let corp = try? JSONEncoder().encode(plan) else { return nil }
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: unelte.node)
+    p.arguments = [script.path, "--reaplica"]
+    let intrare = Pipe(), iesire = Pipe()
+    p.standardInput = intrare
+    p.standardOutput = iesire
+    p.standardError = FileHandle.nullDevice
+    guard (try? p.run()) != nil else { return nil }
+    try? intrare.fileHandleForWriting.write(contentsOf: corp)
+    try? intrare.fileHandleForWriting.close()
+    var nou: Rezultat?
+    do {
+      for try await rand in iesire.fileHandleForReading.bytes.lines {
+        if case .rezultat(let r)? = Eveniment.din(Data(rand.utf8)) { nou = r }
+      }
+    } catch {}
+    p.waitUntilExit()
+    return nou
   }
 
   final class Lucrare: @unchecked Sendable {

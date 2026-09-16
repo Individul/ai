@@ -1,7 +1,7 @@
 // Utilitarul de verificare al aplicatiei (nu intra in Corector.app):
 //   instantanee --icon <dir.iconset>                    iconita, la toate marimile
 //   instantanee --ecrane <dir>                          fereastra in stari de exemplu, tema alba si intunecata
-//   instantanee --cap-la-cap <doc.docx> <motor.mjs> <unealta> <dir> [--motor claude|gemini]
+//   instantanee --cap-la-cap <doc.docx> <motor.mjs> <unealta> <dir> [--motor claude|gemini] [--accepta <k>]
 //                                                       corecteaza documentul prin Motor, cu `claude`-ul sau
 //                                                       `agy`-ul dat (in teste, unul fals), si randeaza rezultatul
 // Randarea foloseste ImageRenderer, deci nu cere permisiunea de captura a ecranului.
@@ -55,10 +55,11 @@ func exemplu() -> Rezultat {
     ],
     cost_usd: 0, secunde: 48, esecuri: [],
     observatii: [
-      Observatie(tip: "date", text: "„durata executării pedepsei din 02.01.2018” față de „reținut de facto la 02.10.2018”: aceeași dată apare diferit, iar de ea depinde calculul termenului.", solutie: "Compară cu sentința din dosar și pune peste tot data reală a reținerii."),
-      Observatie(tip: "lipsa", text: "Rubrica de înregistrare „.09.2026 nr. 5/” a rămas fără zi și fără număr.", solutie: "Completează ziua și numărul de ieșire din registrul secției."),
+      Observatie(tip: "date", text: "„durata executării pedepsei din 02.01.2018” față de „reținut de facto la 02.10.2018”: aceeași dată apare diferit, iar de ea depinde calculul termenului.", solutie: "Compară cu sentința din dosar și pune peste tot data reală a reținerii.", corectura: nil),
+      Observatie(tip: "lipsa", text: "Rubrica de înregistrare „.09.2026 nr. 5/” a rămas fără zi și fără număr.", solutie: "Completează ziua și numărul de ieșire din registrul secției.", corectura: nil),
+      Observatie(tip: "formatare", text: "„art. 473/4 alin. (4)” – exponentul e pierdut.", solutie: "Se scrie „art. 473⁴”.", corectura: CorecturaObservatie(i: 12, vechi: "art. 473/4", nou: "art. 473⁴")),
     ],
-    motor: "gemini", model: "pro", jetoane: 128_400, mentiune: "adaugata"
+    motor: "gemini", model: "pro", jetoane: 128_400, mentiune: "adaugata", plan: nil
   )
 }
 
@@ -82,7 +83,7 @@ if let k = argumente.firstIndex(of: "--ecrane"), k + 1 < argumente.count {
     let c = Corector()
     c.pregatit = true
     c.documente = [
-      Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Nota informativa.docx"), stare: .gata(exemplu())),
+      Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Nota informativa.docx"), stare: .gata(exemplu()), alese: [1, 2]),
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Demers art. 84.docx"), stare: .inLucru(gata: 0, total: 1), inceputLa: Date().addingTimeInterval(-64)),
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Raport lunar septembrie.docx"), stare: .inLucru(gata: 3, total: 7), inceputLa: Date().addingTimeInterval(-192), nota: "Claude reîncearcă: rate_limit (încercarea 2 din 10)"),
       Corector.Document(url: URL(fileURLWithPath: "/Users/dumitru/Documents/Demers.docx"), stare: .inAsteptare),
@@ -126,6 +127,7 @@ if let k = argumente.firstIndex(of: "--cap-la-cap"), k + 4 < argumente.count {
     c.pregatit = true
     c.motor = motor
     c.model = motor == .claude ? .sonnet : .pro
+    c.mod = argumente.contains("--accepta") ? .verificare : c.mod  // observatiile vin doar din verificare
     c.problema = nil
     c.adauga([docx])
     var stari: [String] = []
@@ -135,6 +137,14 @@ if let k = argumente.firstIndex(of: "--cap-la-cap"), k + 4 < argumente.count {
       try? await Task.sleep(nanoseconds: 50_000_000)
     }
     print("final:", String(describing: c.documente.first!.stare).prefix(400))
+    // --accepta <k>: apasa „Acceptă soluția” la observatia k si asteapta rescrierea documentului
+    if let a = argumente.firstIndex(of: "--accepta"), a + 1 < argumente.count, let k = Int(argumente[a + 1]) {
+      c.comutaObservatie(c.documente[0].id, k)
+      while c.documente[0].reface { try? await Task.sleep(nanoseconds: 50_000_000) }
+      if case .gata(let r) = c.documente[0].stare {
+        print("dupa acceptare: \(r.aplicate) aplicate, iesire \(r.iesire ?? "—")")
+      }
+    }
     try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     scriePNG(
       Continut(peste: false, alege: {}, desfaCorecturile: true).padding(28).frame(width: 720).background(Paleta(schema: .light).fundal)

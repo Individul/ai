@@ -289,8 +289,10 @@ struct RandDocument: View {
       }
       if case .gata(let r) = document.stare, !r.obs.isEmpty {
         VStack(alignment: .leading, spacing: 0) {
-          ForEach(Array(r.obs.enumerated()), id: \.offset) { _, o in
-            RandObservatie(o: o)
+          ForEach(Array(r.obs.enumerated()), id: \.offset) { k, o in
+            RandObservatie(o: o, aleasa: document.alese.contains(k), reface: document.reface) {
+              corector.comutaObservatie(document.id, k)
+            }
           }
         }
       }
@@ -456,22 +458,40 @@ struct RandCorectura: View {
 }
 
 
+// Observatia, cu alegerea ei: soluțiile care se pot pune in text intra in document cand le accepti (documentul
+// se scrie din nou), iar celelalte se bifeaza dupa ce le rezolvi de mana.
 struct RandObservatie: View {
   @Environment(\.colorScheme) private var schema
   let o: Observatie
+  var aleasa = false
+  var reface = false
+  var comuta: () -> Void = {}
 
   var body: some View {
     let p = Paleta(schema: schema)
+    let aplicabila = o.corectura != nil
     HStack(alignment: .top, spacing: 8) {
-      Image(systemName: "exclamationmark.bubble").font(.system(size: 12)).foregroundStyle(p.galben).padding(.top, 2)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(o.eticheta).font(.system(size: 10.5, weight: .bold)).textCase(.uppercase).foregroundStyle(p.galben)
+      Image(systemName: aleasa ? "checkmark.circle.fill" : "exclamationmark.bubble")
+        .font(.system(size: 12)).foregroundStyle(aleasa ? p.verde : p.galben).padding(.top, 2)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(o.eticheta).font(.system(size: 10.5, weight: .bold)).textCase(.uppercase).foregroundStyle(aleasa ? p.verde : p.galben)
         Text(o.text).font(.system(size: 13)).foregroundStyle(p.text2).fixedSize(horizontal: false, vertical: true)
         if let solutie = o.solutie, !solutie.isEmpty {
           (Text("Soluție: ").foregroundStyle(p.verde) + Text(solutie).foregroundStyle(p.text2))
             .font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
         }
+        if !aplicabila {
+          Text("Nu se poate pune automat: completează tu în document, apoi bifează.")
+            .font(.system(size: 11.5)).foregroundStyle(p.sters).fixedSize(horizontal: false, vertical: true)
+        }
+        HStack(spacing: 8) {
+          Capsula(titlu: aplicabila ? "Acceptă soluția" : "Am rezolvat", descriere: "", ales: aleasa) { if !aleasa { comuta() } }
+          Capsula(titlu: aplicabila ? "Lasă cum e" : "Încă nu", descriere: "", ales: !aleasa) { if aleasa { comuta() } }
+          if reface { Text("se rescrie documentul…").font(.system(size: 11.5)).foregroundStyle(p.estompat) }
+        }
+        .padding(.top, 2)
       }
+      .opacity(aleasa && !aplicabila ? 0.65 : 1)
     }
     .padding(.vertical, 8)
     .frame(maxWidth: .infinity, alignment: .leading)

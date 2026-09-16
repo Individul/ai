@@ -22,6 +22,8 @@ final class Corector: ObservableObject {
     var stare: StareDocument = .inAsteptare
     var inceputLa: Date?
     var nota: String?
+    var alese: Set<Int> = []   // observatiile la care ai ales soluția (sau le-ai bifat ca rezolvate)
+    var reface = false         // documentul se scrie din nou, dupa o alegere
 
     var nume: String { url.lastPathComponent }
 
@@ -57,6 +59,31 @@ final class Corector: ObservableObject {
   @Published var peste = false
   @Published var alegeFisiere = false
   @Published var desfacute: Set<UUID> = []
+
+  // Alegerea de la o observatie. Soluțiile care se pot pune in text rescriu documentul; celelalte sunt doar
+  // o bifa pentru tine, ca sa stii ce ai rezolvat de mana.
+  func comutaObservatie(_ id: UUID, _ k: Int) {
+    guard let index = documente.firstIndex(where: { $0.id == id }), case .gata(let r) = documente[index].stare else { return }
+    if documente[index].alese.contains(k) { documente[index].alese.remove(k) } else { documente[index].alese.insert(k) }
+    if r.obs.indices.contains(k), r.obs[k].corectura != nil { rescrie(id) }
+  }
+
+  private func rescrie(_ id: UUID) {
+    guard let unelte, let script, let k = documente.firstIndex(where: { $0.id == id }), case .gata(let r) = documente[k].stare else { return }
+    let document = documente[k]
+    let solutii = document.alese.sorted().compactMap { j -> CorecturaPlan? in
+      guard r.obs.indices.contains(j), let c = r.obs[j].corectura else { return nil }
+      return CorecturaPlan(i: c.i, vechi: c.vechi, nou: c.nou, tip: "formulare", motiv: r.obs[j].solutie ?? "")
+    }
+    modifica(id) { $0.reface = true }
+    Task {
+      let nou = await Motor.reaplica(fisier: document.url, rezultat: r, solutii: solutii, unelte: unelte, script: script)
+      modifica(id) { d in
+        d.reface = false
+        if let nou { d.stare = .gata(r.dupaRescriere(nou)) }
+      }
+    }
+  }
 
   func comuta(_ id: UUID) {
     if desfacute.contains(id) { desfacute.remove(id) } else { desfacute.insert(id) }

@@ -76,6 +76,8 @@ interface RezultatDocument {
   corecturi: CorecturaAfisata[]; // aplicate si de verificat, in ordinea din document
   observatii: Observatie[];      // doar in modul verificare
   mentiune: RezultatMentiune | null; // null doar cand documentul n-are text
+  plan: Corectura[];             // corecturile modelului, cu numarul paragrafului: aplicatia le poate pune
+                                 // din nou, cu alte solutii acceptate din observatii (modul --reaplica)
   motor: MotorLocal;
   model: string;           // numele scurt, cel din comanda
   cost_usd: number;        // Claude Code; la Antigravity ramane 0
@@ -246,11 +248,11 @@ const afisabile = (aplicari: { stare: StareAplicare; tip: string; vechi: string;
 
 // Corecturile modelului si mentiunea obligatorie (src/lib/mentiune.ts, acelasi cod ca in hub), puse in document.
 // Documentul corectat se scrie doar daca s-a schimbat ceva.
-function puneInDocument(fisier: string, docx: Docx, doc: DocumentIntreg, corecturiModel: Corectura[]) {
+function puneInDocument(fisier: string, docx: Docx, doc: DocumentIntreg, corecturiModel: Corectura[], iesireCeruta?: string | null) {
   const { xml, aplicari, mentiune } = aplicaCuMentiune(docx, doc, corecturiModel, { autor: AUTOR_REVIZII, data: acum() });
   const corecturi = afisabile(aplicari);
   const aplicate = corecturi.filter((a) => a.stare === "aplicata").length;
-  const iesire = aplicate || mentiune === "adaugata" ? numeLibera(fisier) : null;
+  const iesire = aplicate || mentiune === "adaugata" ? iesireCeruta || numeLibera(fisier) : null;
   if (iesire) writeFileSync(iesire, salveazaDocxParti(docx, xml));
   return { iesire, aplicate, corecturi, mentiune };
 }
@@ -265,7 +267,7 @@ async function corecteaza(fisier: string, alegere: Alegere, anunta: (e: Evenimen
   const loturi = impartePeLoturi(paragrafe);
   anunta({ tip: "inceput", fisier, loturi: loturi.length, paragrafe: paragrafe.length, mod: "corectura", motor });
   const t0 = Date.now();
-  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
+  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, plan: [], motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
   if (!paragrafe.length) return gol;
 
   const laStare = (mesaj: string) => anunta({ tip: "stare", fisier, mesaj });
@@ -294,8 +296,9 @@ async function corecteaza(fisier: string, alegere: Alegere, anunta: (e: Evenimen
   }));
   if (esecuri.length === loturi.length) throw new Error(esecuri[0]);
 
-  const pus = puneInDocument(fisier, docx, doc, rezultate.flat());
-  return { ...gol, ...pus, cost_usd: cost, jetoane, secunde: secunde(t0), esecuri };
+  const corecturiModel = rezultate.flat();
+  const pus = puneInDocument(fisier, docx, doc, corecturiModel);
+  return { ...gol, ...pus, plan: corecturiModel, cost_usd: cost, jetoane, secunde: secunde(t0), esecuri };
 }
 
 // ---------------------------------------------------------------- modul verificare (tot documentul, o cerere)
@@ -308,7 +311,7 @@ async function verifica(fisier: string, alegere: Alegere, anunta: (e: Eveniment)
   const caractere = paragrafe.reduce((s, p) => s + p.text.length, 0);
   anunta({ tip: "inceput", fisier, loturi: 1, paragrafe: paragrafe.length, mod: "verificare", motor });
   const t0 = Date.now();
-  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
+  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, plan: [], motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
   if (!paragrafe.length) return gol;
   if (caractere > LIMITA_VERIFICARE) {
     throw new Error(`Documentul are ${caractere.toLocaleString("ro-RO")} de caractere, peste plafonul de ${LIMITA_VERIFICARE.toLocaleString("ro-RO")} al verificării. Folosește modul „corectură”.`);
@@ -320,11 +323,44 @@ async function verifica(fisier: string, alegere: Alegere, anunta: (e: Eveniment)
   anunta({ tip: "progres", fisier, gata: 1, total: 1 });
 
   const pus = puneInDocument(fisier, docx, doc, cerute);
-  return { ...gol, ...pus, observatii, cost_usd: r.cost_usd, jetoane: r.jetoane, secunde: secunde(t0) };
+  return { ...gol, ...pus, observatii, plan: cerute, cost_usd: r.cost_usd, jetoane: r.jetoane, secunde: secunde(t0) };
 }
 
 const acum = () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 const secunde = (t0: number) => Math.round((Date.now() - t0) / 1000);
+
+// ---------------------------------------------------------------- reaplicare (fara model)
+
+// Aplicatia de Mac trimite pe stdin planul — corecturile modelului plus solutiile acceptate din observatii —
+// si primeste acelasi document scris din nou, peste fisierul de iesire de data trecuta. Nicio cerere la model:
+// se porneste tot de la documentul original, deci alegerile se pot schimba oricat, in ambele sensuri.
+interface Plan {
+  fisier: string;
+  iesire?: string | null;
+  motor?: MotorLocal;
+  model?: string;
+  corecturi?: Corectura[];
+}
+
+function reaplica(intrare: string): RezultatDocument {
+  const plan = JSON.parse(intrare) as Plan;
+  if (!plan?.fisier) throw new Error("Planul nu spune ce document se rescrie.");
+  const t0 = Date.now();
+  const corecturi = Array.isArray(plan.corecturi) ? plan.corecturi : [];
+  const docx = deschideDocx(new Uint8Array(readFileSync(plan.fisier)));
+  const doc = analizeazaIntreg(docx);
+  const pus = puneInDocument(plan.fisier, docx, doc, corecturi, plan.iesire);
+  return {
+    fisier: plan.fisier, ...pus, observatii: [], plan: corecturi,
+    motor: plan.motor ?? "claude", model: plan.model ?? "", cost_usd: 0, jetoane: 0, secunde: secunde(t0), esecuri: [],
+  };
+}
+
+async function citesteIntrarea(): Promise<string> {
+  const bucati: Buffer[] = [];
+  for await (const b of process.stdin) bucati.push(b as Buffer);
+  return Buffer.concat(bucati).toString("utf8");
+}
 
 // ---------------------------------------------------------------- iesirea pentru om (Terminal)
 
@@ -375,6 +411,17 @@ interface Alegere {
   motor: MotorLocal;
   model: string; // numele scurt
   cli: string;   // numele cerut CLI-ului
+}
+
+// Reaplicarea nu cere model, deci trece inaintea verificarilor de motor.
+if (argumente.includes("--reaplica")) {
+  try {
+    scrieEveniment({ tip: "rezultat", ...reaplica(await citesteIntrarea()) });
+  } catch (e) {
+    scrieEveniment({ tip: "eroare", fisier: "", mesaj: (e as Error).message });
+    process.exit(1);
+  }
+  process.exit(0);
 }
 
 if (!motor) {

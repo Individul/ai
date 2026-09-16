@@ -223,9 +223,10 @@ function cere(motor: MotorLocal, intrare: string, prompt: string, model: string,
       try {
         rezolva(continutLocal(motor, rezultat));
       } catch (e) {
-        // Un raspuns citit, dar cu eroare inauntru (model ocupat, neautentificat): se reincearca doar
-        // cand e vina furnizorului.
-        const mesaj = (e as Error).message;
+        // Un raspuns citit, dar cu eroare inauntru (model ocupat, neautentificat, unealta refuzata): se
+        // reincearca doar cand e vina furnizorului. Ce a scris unealta pe stderr intra in mesaj, altfel
+        // motivul adevarat ramane doar in jurnalul de diagnostic.
+        const mesaj = mesajEroareLocal(motor, `${(e as Error).message}${erori.trim() ? ` (${erori.trim().slice(0, 200)})` : ""}`);
         respinge(new EroareLot(mesaj, eroareTrecatoare(mesaj)));
       }
     });

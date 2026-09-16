@@ -109,6 +109,23 @@ describe("cerereVerificare", () => {
   });
 });
 
+describe("unealta refuzata la Antigravity", () => {
+  // 16 sept. 2026, pe demersul real: Flash a vrut „read_url” in mijlocul corecturii, headless nu poate cere
+  // permisiunea, iar rularea a iesit fara raspuns dupa 78 s.
+  const stderr = 'jetski: no output produced — a tool required the "read_url" permission that headless mode cannot prompt for, so it was auto-denied.';
+
+  it("spune de ce nu a raspuns si o trateaza ca eroare trecatoare", () => {
+    const mesaj = mesajEroareLocal("gemini", `Gemini a răspuns fără text. Încearcă din nou. (${stderr})`);
+    expect(mesaj).toContain("permisiune pe care modul fără interfață");
+    expect(mesaj).toContain("nu porni „--dangerously-skip-permissions”"); // sfatul contrar, pe acte cu date personale
+    expect(eroareTrecatoare(mesaj)).toBe(true);
+  });
+
+  it("nu reincearca limitele planului",  () => {
+    expect(eroareTrecatoare(mesajEroareLocal("gemini", "quota exceeded"))).toBe(false);
+  });
+});
+
 describe("motoarele locale", () => {
   it("fiecare motor are modelele lui, cu nume scurte in comanda", () => {
     expect(modelLocal("claude", "opus")).toBe("opus");

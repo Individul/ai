@@ -186,6 +186,8 @@ export function mesajEroareLocal(motor: MotorLocal, mesaj: string): string {
 export function eroareTrecatoare(mesaj: string): boolean {
   // Limitele planului si autentificarea nu se rezolva prin reincercare.
   if (/limita planului|usage limit|quota|RESOURCE_EXHAUSTED|nu e logat|authentication|rate[_ ]limit/i.test(mesaj)) return false;
+  // Unealta ceruta si refuzata la Antigravity: a doua incercare, de obicei, nu o mai cere.
+  if (/permisiune pe care modul fără interfață|no output produced|auto-denied/i.test(mesaj)) return true;
   return /No capacity|nu are capacitate|UNAVAILABLE|overloaded|temporarily unavailable|\b(500|502|503|529)\b/i.test(mesaj);
 }
 
@@ -293,6 +295,12 @@ export function mesajEroareAntigravity(mesaj: string): string {
   }
   if (/quota|RESOURCE_EXHAUSTED|rate[_ ]limit|limit reached|429/i.test(mesaj)) {
     return `Ai atins limita planului Google; reîncearcă după resetare. (${mesaj.slice(0, 160)})`;
+  }
+  // 16 sept. 2026: Flash a vrut sa foloseasca unealta „read_url” in mijlocul corecturii, iar modul fara
+  // interfata nu poate cere permisiunea, deci a iesit fara niciun raspuns. Antigravity nu are optiune de
+  // scoatere a uneltelor, deci singurul lucru de facut e sa reincerci.
+  if (/permission that headless mode cannot prompt for|permissions\.allow|auto-denied|no output produced/i.test(mesaj)) {
+    return "Antigravity a cerut o permisiune pe care modul fără interfață nu o poate da (de pildă „read_url”), așa că nu a răspuns. Se reîncearcă; nu porni „--dangerously-skip-permissions” pe acte cu date personale.";
   }
   return mesaj;
 }

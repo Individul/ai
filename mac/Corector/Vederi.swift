@@ -80,6 +80,7 @@ struct Continut: View {
       AlegereMod()
       AlegereMotor()
       AlegereModel()
+      AlegereMascare()
 
       if let problema = corector.problema {
         HStack(alignment: .top, spacing: 10) {
@@ -120,7 +121,7 @@ struct Continut: View {
         }
       }
 
-      Text("Folosește \(corector.motor.numeUnealta) logat cu contul tău, deci \(corector.motor.descriere). Textul documentelor ajunge la \(corector.motor.furnizor); nu încărca date cu caracter personal sau cu acces limitat. Documentul corectat se salvează lângă original, cu „(corectat)” în nume; originalul rămâne neatins.")
+      Text("Folosește \(corector.motor.numeUnealta) logat cu contul tău, deci \(corector.motor.descriere). Textul documentelor ajunge la \(corector.motor.furnizor), cu datele personale înlocuite mai întâi cu date false; se pun la loc aici, la tine. Nu e anonimizare: restul actului pleacă așa cum e, iar numele din partea rusă a antetului nu se maschează. Documentul corectat se salvează lângă original, cu „(corectat)” în nume; originalul rămâne neatins.")
         .font(.system(size: 11.5)).foregroundStyle(p.sters).fixedSize()
     }
   }
@@ -197,6 +198,22 @@ struct AlegereModel: View {
       Text("Model").font(.system(size: 12, weight: .bold)).textCase(.uppercase).foregroundStyle(p.sters).frame(width: 46, alignment: .leading)
       ForEach(corector.motor.modele) { m in
         Capsula(titlu: m.nume, descriere: m.descriere, ales: m == corector.model) { corector.model = m }
+      }
+    }
+  }
+}
+
+// Ce se ascunde inainte ca textul sa plece la model. Implicit, tot: si numele, si identificatorii.
+struct AlegereMascare: View {
+  @EnvironmentObject private var corector: Corector
+  @Environment(\.colorScheme) private var schema
+
+  var body: some View {
+    let p = Paleta(schema: schema)
+    HStack(spacing: 8) {
+      Text("Date").font(.system(size: 12, weight: .bold)).textCase(.uppercase).foregroundStyle(p.sters).frame(width: 46, alignment: .leading)
+      ForEach(NivelMascare.allCases) { m in
+        Capsula(titlu: m.nume, descriere: m.descriere, ales: m == corector.mascare) { corector.mascare = m }
       }
     }
   }
@@ -386,6 +403,7 @@ struct RandDocument: View {
       if r.deVerificat > 0 { parti.append("\(r.deVerificat) de verificat") }
       if !r.obs.isEmpty { parti.append(numara(r.obs.count, "observație", "observații")) }
       if let mentiune = r.textMentiune { parti.append(mentiune) }
+      if let mascare = r.textMascare { parti.append(mascare) }
       if !r.esecuri.isEmpty { parti.append("\(numara(r.esecuri.count, "parte nereușită", "părți nereușite"))") }
       parti.append(durata(r.secunde))
       if let eticheta = r.eticheta { parti.append(eticheta) }

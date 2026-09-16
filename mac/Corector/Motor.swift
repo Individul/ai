@@ -110,6 +110,36 @@ enum ModLucru: String, CaseIterable, Identifiable {
   }
 }
 
+// Ce se ascunde inainte ca textul sa plece la model (src/lib/mascare.ts). Harta ramane in procesul node:
+// aplicatia nu vede nici datele adevarate, nici cele false, doar cate au fost si cate corecturi s-au sarit.
+enum NivelMascare: String, CaseIterable, Identifiable {
+  case tot, identificatori, fara
+
+  var id: String { rawValue }
+
+  var nume: String {
+    switch self {
+    case .tot: return "Tot"
+    case .identificatori: return "Identificatori"
+    case .fara: return "Fără"
+    }
+  }
+
+  var descriere: String {
+    switch self {
+    case .tot: return "nume și identificatori"
+    case .identificatori: return "numele rămân"
+    case .fara: return "pleacă așa cum e"
+    }
+  }
+}
+
+struct Mascare: Decodable, Hashable {
+  let nivel: String
+  let rezumat: String  // „3 nume, 1 IDNP și 1 telefon”; gol cand nu s-a ascuns nimic
+  let sarite: Int      // corecturi aruncate de paznici: atingeau datele mascate
+}
+
 // Ce nu se poate repara prin inlocuire de text: date care se contrazic, rubrici goale, formatare rupta,
 // indoieli juridice. Vine doar din modul verificare.
 // Inlocuirea propusa de model pentru o observatie, cand rezolvarea se vede din document.
@@ -180,6 +210,7 @@ struct Rezultat: Decodable, Hashable {
   let jetoane: Int?
   let mentiune: String? // prezenta | corectata | adaugata | de_verificat
   let plan: [CorecturaPlan]?
+  let mascare: Mascare?
 
   var deVerificat: Int { corecturi.filter(\.deVerificat).count }
 
@@ -188,7 +219,7 @@ struct Rezultat: Decodable, Hashable {
     Rezultat(
       iesire: nou.iesire, aplicate: nou.aplicate, corecturi: nou.corecturi, cost_usd: cost_usd, secunde: secunde,
       esecuri: esecuri, observatii: observatii, motor: motor, model: model, jetoane: jetoane,
-      mentiune: nou.mentiune, plan: plan
+      mentiune: nou.mentiune, plan: plan, mascare: mascare
     )
   }
 
@@ -202,6 +233,13 @@ struct Rezultat: Decodable, Hashable {
     }
   }
   var obs: [Observatie] { observatii ?? [] }
+
+  // Ce a fost ascuns inainte de trimitere, si cate corecturi au cazut din cauza asta.
+  var textMascare: String? {
+    guard let m = mascare, !m.rezumat.isEmpty else { return nil }
+    let sarite = m.sarite > 0 ? ", \(numara(m.sarite, "corectură sărită", "corecturi sărite"))" : ""
+    return "ascunse: \(m.rezumat)\(sarite)"
+  }
 
   // „Opus”, „Gemini Pro”: cu ce a fost facut, ca sa se compare doua treceri prin acelasi document.
   var eticheta: String? {
@@ -328,13 +366,16 @@ enum Motor {
   // Corecteaza un document; evenimentele ajung pe firul principal. Intoarce mesajul de eroare daca
   // scriptul s-a oprit fara rezultat (altfel nil).
   static func corecteaza(
-    fisier: URL, motor: MotorLocal, model: ModelLocal, mod: ModLucru, unelte: Unelte, script: URL, lucrare: Lucrare,
-    laEveniment: @escaping @MainActor (Eveniment) -> Void
+    fisier: URL, motor: MotorLocal, model: ModelLocal, mod: ModLucru, mascare: NivelMascare, unelte: Unelte,
+    script: URL, lucrare: Lucrare, laEveniment: @escaping @MainActor (Eveniment) -> Void
   ) async -> String? {
     guard let unealta = unelte.cale(motor) else { return motor.lipseste }
     let p = lucrare.proces
     p.executableURL = URL(fileURLWithPath: unelte.node)
-    p.arguments = [script.path, "--json", "--motor", motor.rawValue, "--mod", mod.rawValue, "--model", model.rawValue, fisier.path]
+    p.arguments = [
+      script.path, "--json", "--motor", motor.rawValue, "--mod", mod.rawValue, "--model", model.rawValue,
+      "--mascare", mascare.rawValue, fisier.path,
+    ]
     var mediu = ProcessInfo.processInfo.environment
     mediu[motor == .claude ? "CORECTOR_CLAUDE" : "CORECTOR_AGY"] = unealta
     let directoare = [unelte.node, unealta].map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }

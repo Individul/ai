@@ -51,6 +51,10 @@ final class Corector: ObservableObject {
   @Published var mod: ModLucru = ModLucru(rawValue: UserDefaults.standard.string(forKey: "mod") ?? "") ?? .corectura {
     didSet { UserDefaults.standard.set(mod.rawValue, forKey: "mod") }
   }
+  // Datele personale se ascund implicit; alegerea se tine minte, ca motorul si modelul.
+  @Published var mascare: NivelMascare = NivelMascare(rawValue: UserDefaults.standard.string(forKey: "mascare") ?? "") ?? .tot {
+    didSet { UserDefaults.standard.set(mascare.rawValue, forKey: "mascare") }
+  }
   @Published var unelte: Unelte?
   @Published var problema: String?
   @Published var pregatit = false
@@ -164,7 +168,10 @@ final class Corector: ObservableObject {
         $0.inceputLa = Date()
         $0.nota = nil
       }
-      let eroare = await Motor.corecteaza(fisier: document.url, motor: motor, model: model, mod: mod, unelte: unelte, script: script, lucrare: lucrare) { [weak self] e in
+      let eroare = await Motor.corecteaza(
+        fisier: document.url, motor: motor, model: model, mod: mod, mascare: mascare, unelte: unelte,
+        script: script, lucrare: lucrare
+      ) { [weak self] e in
         guard let self else { return }
         switch e {
         case .inceput(let loturi): self.actualizeaza(id, .inLucru(gata: 0, total: loturi))

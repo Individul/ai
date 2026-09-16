@@ -59,7 +59,8 @@ func exemplu() -> Rezultat {
       Observatie(tip: "lipsa", text: "Rubrica de înregistrare „.09.2026 nr. 5/” a rămas fără zi și fără număr.", solutie: "Completează ziua și numărul de ieșire din registrul secției.", corectura: nil),
       Observatie(tip: "formatare", text: "„art. 473/4 alin. (4)” – exponentul e pierdut.", solutie: "Se scrie „art. 473⁴”.", corectura: CorecturaObservatie(i: 12, vechi: "art. 473/4", nou: "art. 473⁴")),
     ],
-    motor: "gemini", model: "pro", jetoane: 128_400, mentiune: "adaugata", plan: nil
+    motor: "gemini", model: "pro", jetoane: 128_400, mentiune: "adaugata", plan: nil,
+    mascare: Mascare(nivel: "tot", rezumat: "3 nume, 1 IDNP și 1 telefon", sarite: 1)
   )
 }
 

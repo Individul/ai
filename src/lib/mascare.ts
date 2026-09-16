@@ -326,6 +326,15 @@ export function pregateste<T extends { i: number; text: string }>(
 
 // ---------------------------------------------------------------- desfacerea si paznicii
 
+// Drumul invers, pentru textul care nu trece prin paragrafe: numele fisierului, care ajunge in jurnal.
+export function mascheazaText(s: string, harta: Harta): string {
+  let text = s;
+  for (const { adevarat, fals } of [...harta.perechi].sort((a, b) => b.adevarat.length - a.adevarat.length)) {
+    if (text.includes(adevarat)) text = text.split(adevarat).join(fals);
+  }
+  return text;
+}
+
 export function desfaceText(s: string, harta: Harta): string {
   let text = s;
   for (const [fals, adevarat] of harta.inapoi) {

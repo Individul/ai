@@ -444,7 +444,8 @@ function afiseazaRezultat(r: RezultatDocument) {
   };
   if (r.mentiune && r.mentiune !== "prezenta") console.log(`  mențiunea despre datele cu caracter personal: ${mentiuni[r.mentiune]}`);
   if (r.mascare.rezumat) {
-    const sarite = r.mascare.sarite ? `; ${numara(r.mascare.sarite, "corectură sărită", "corecturi sărite")}, atingeau datele mascate` : "";
+    const n = r.mascare.sarite;
+    const sarite = n ? `; ${numara(n, "corectură sărită", "corecturi sărite")}, ${n === 1 ? "atingea" : "atingeau"} datele mascate` : "";
     console.log(`  ascunse înainte de trimitere: ${r.mascare.rezumat}${sarite}`);
   }
   if (r.esecuri.length) console.log(`  Atenție: ${numara(r.esecuri.length, "parte", "părți")} nu s-au putut corecta: ${r.esecuri[0]}`);

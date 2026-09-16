@@ -24,7 +24,8 @@ const varf = textVarf(stareVarf(model));
 const descriere = (d: (typeof documente)[number]) => {
   if (d.stare !== "ok") return d.stare === "eroare" ? "eroare" : "neterminat";
   const parti = [numara(d.aplicate, "corectură", "corecturi")];
-  if (d.mod === "verificare") parti.push(numara(d.observatii, "observație", "observații"));
+  // Si la „corectură” pot fi observatii: cele gasite in cod, pe datele personale.
+  if (d.observatii) parti.push(numara(d.observatii, "observație", "observații"));
   return parti.join(" · ");
 };
 ---
@@ -51,6 +52,24 @@ const descriere = (d: (typeof documente)[number]) => {
           <span class="sub">Tot documentul odată, cu antet și subsol, plus observațiile care cer om. Până la {(LIMITA_VERIFICARE / 1000)} mii de caractere.</span>
         </label>
       </fieldset>
+      <fieldset class="moduri trei">
+        <legend>Datele personale</legend>
+        <label>
+          <input type="radio" name="mascare" value="tot" data-mascare checked />
+          <span class="nume">Nume și identificatori</span>
+          <span class="sub">Numele, IDNP-ul, telefonul, adresa și data nașterii pleacă înlocuite cu date false. Se pun la loc aici, în browser.</span>
+        </label>
+        <label>
+          <input type="radio" name="mascare" value="identificatori" data-mascare />
+          <span class="nume">Doar identificatorii</span>
+          <span class="sub">Numele rămân, ca modelul să le poată verifica scrierea.</span>
+        </label>
+        <label>
+          <input type="radio" name="mascare" value="fara" data-mascare />
+          <span class="nume">Fără mascare</span>
+          <span class="sub">Documentul pleacă așa cum e.</span>
+        </label>
+      </fieldset>
       <label class="zona" data-zona>
         <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" data-fisier />
         <span class="zona-titlu">Alege un document .docx</span>
@@ -64,13 +83,20 @@ const descriere = (d: (typeof documente)[number]) => {
           <p data-rezumat></p>
           <a class="buton principal" data-descarca href="#" download>Descarcă documentul corectat</a>
         </div>
+        <details class="ascunse" data-ascunse hidden>
+          <summary></summary>
+          <ul></ul>
+        </details>
         <ul class="observatii" data-observatii hidden></ul>
         <ol class="corecturi" data-lista></ol>
       </div>
 
       <p class="lamurire">
         Textul documentului e trimis modelului {numeModel} ({NUME_MOTOR[motor]}) și nu se păstrează pe server: în jurnal rămân
-        doar numele fișierului, numărul de corecturi și costul. Nu încărca documente cu date cu caracter personal sau cu acces limitat.
+        doar numele fișierului, numărul de corecturi și costul. Datele personale sunt înlocuite, înainte de trimitere, cu date
+        false dar plauzibile, iar corecturile se desfac înapoi aici, în browser; lista înlocuirilor și numele fișierului nu pleacă
+        nicăieri. Nu e anonimizare: restul actului (fapta, instituția, articolele) pleacă așa cum e, numele din partea rusă a
+        antetului nu se maschează, iar un nume rar poate scăpa nerecunoscut — după fiecare document vezi exact ce a fost ascuns.
         La „corectură” se lucrează pe corpul documentului, cu tot cu tabele; la „verificare” intră și antetele, subsolurile
         și notele de subsol, iar modelul spune în plus ce a găsit și nu poate repara singur: date care se contrazic,
         rubrici necompletate, formatare ruptă, îndoieli juridice. Fiecare observație vine cu o soluție: unde e o înlocuire de text, o accepți cu un clic și intră în document; unde o completezi tu în Word, o bifezi ca rezolvată, ca să știi pe unde ai rămas. La fiecare document se verifică și mențiunea obligatorie
@@ -110,6 +136,7 @@ const descriere = (d: (typeof documente)[number]) => {
     flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: 14px;
     border: 1px solid var(--line); cursor: pointer; transition: background 0.15s, border-color 0.15s;
   }
+  .moduri.trei label { flex-basis: 190px; }
   .moduri label:hover { border-color: rgba(var(--violet-rgb), 0.5); }
   .moduri label:has(input:checked) { border-color: var(--violet); background: rgba(var(--violet-rgb), 0.07); }
   .moduri label:focus-within { outline: 2px solid var(--coral); outline-offset: 2px; }
@@ -117,6 +144,15 @@ const descriere = (d: (typeof documente)[number]) => {
   .moduri .nume { font-weight: 700; font-size: 15px; }
   .moduri label:has(input:checked) .nume { color: var(--violet); }
   .moduri .sub { color: var(--faint); font-size: 12.5px; }
+  .ascunse { border-bottom: 1px solid var(--line); padding: 10px 0; }
+  .ascunse summary { cursor: pointer; font-size: 13.5px; color: var(--faint); }
+  .ascunse summary:hover { color: var(--text-2); }
+  .ascunse ul { list-style: none; margin: 8px 0 2px; padding: 0; display: grid; gap: 4px; }
+  .ascunse :global(li) { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13.5px; color: var(--text-2); }
+  .ascunse :global(.adevarat) { min-width: 200px; }
+  .ascunse :global(.adevarat)::after { content: " →"; color: var(--faint); }
+  .ascunse :global(.fals) { color: var(--faint); }
+
   .observatii { list-style: none; margin: 0; padding: 0; }
   .observatii :global(li) { display: flex; flex-direction: column; gap: 3px; padding: 12px 0 12px 14px; border-bottom: 1px solid var(--line); border-left: 2px solid rgba(var(--galben-rgb), 0.55); }
   .observatii :global(.tip) { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--wip); }

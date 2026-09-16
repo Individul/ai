@@ -9,6 +9,10 @@
 //
 // In ambele moduri se verifica si mentiunea obligatorie despre datele cu caracter personal (src/lib/mentiune.ts,
 // acelasi cod ca in aplicatia de Mac): lipsa se adauga, cea in alta forma se aduce la forma aprobata, ca revizii.
+//
+// Tot in ambele moduri, datele personale se mascheaza inainte de plecare (src/lib/mascare.ts): numele si
+// identificatorii se inlocuiesc cu date false dar plauzibile, iar corecturile se desfac inapoi aici, in
+// browser. Harta nu pleaca nicaieri; nici numele fisierului, care intra mascat in jurnal.
 
 import {
   analizeazaIntreg, deschideDocx, EroareDocx, paragrafeDeCorectat, paragrafeIntreg, salveazaDocxParti,
@@ -19,6 +23,10 @@ import {
   LOTURI_PARALELE, numara, type Observatie,
 } from "../lib/corector";
 import { aplicaCuMentiune, type RezultatMentiune } from "../lib/mentiune";
+import {
+  desfaceCorecturi, desfaceObservatii, gasesteDate, mascheaza, mascheazaText, NIVEL_IMPLICIT, NIVELURI,
+  rezumatMascare, scapatInDocument, verificaDate, type Harta, type Nivel,
+} from "../lib/mascare";
 
 const TIP_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const MAX_OCTETI = 30 * 1024 * 1024;
@@ -143,6 +151,7 @@ function porneste(radacina: HTMLElement) {
   const descarca = radacina.querySelector<HTMLAnchorElement>("[data-descarca]")!;
   const lista = radacina.querySelector<HTMLOListElement>("[data-lista]")!;
   const listaObservatii = radacina.querySelector<HTMLUListElement>("[data-observatii]")!;
+  const ascunse = radacina.querySelector<HTMLDetailsElement>("[data-ascunse]")!;
   let ocupat = false;
   let urlDocument: string | null = null;
 
@@ -155,6 +164,23 @@ function porneste(radacina: HTMLElement) {
     progres.querySelector("span")!.style.width = `${Math.round((fractie ?? 0) * 100)}%`;
   };
   const modAles = () => (radacina.querySelector<HTMLInputElement>("[data-mod]:checked")?.value === "verificare" ? "verificare" : "corectura");
+  const nivelAles = (): Nivel => {
+    const ales = radacina.querySelector<HTMLInputElement>("[data-mascare]:checked")?.value;
+    return NIVELURI.find((n) => n === ales) ?? NIVEL_IMPLICIT;
+  };
+
+  // Ce a fost ascuns, aratat doar aici: perechile nu pleaca nicaieri.
+  const arataAscunse = (harta: Harta) => {
+    ascunse.hidden = !harta.perechi.length;
+    if (!harta.perechi.length) return;
+    ascunse.querySelector("summary")!.textContent = `Am ascuns ${rezumatMascare(harta)} înainte de trimitere`;
+    ascunse.querySelector("ul")!.replaceChildren(...harta.perechi.map((x) => {
+      const li = document.createElement("li");
+      li.appendChild(element("span", "adevarat", x.adevarat));
+      li.appendChild(element("span", "fals", x.fals));
+      return li;
+    }));
+  };
 
   // O singura cerere lunga, fara progres pe parti: aratam secundele, ca sa se vada ca merge.
   const cronometru = (text: string) => {
@@ -184,12 +210,17 @@ function porneste(radacina: HTMLElement) {
       // Tot documentul, in ambele moduri: mentiunea obligatorie poate sta si in subsol. Corpul e prima parte,
       // deci numerele paragrafelor din modul corectura raman valabile.
       const doc = analizeazaIntreg(docx);
+      const nivel = nivelAles();
+      const toate = paragrafeIntreg(doc);
+      const entitati = gasesteDate(toate);
       let corecturiModel: Corectura[];
       let observatii: Observatie[] = [];
       let partiale: string | null = null;
+      let harta: Harta;
+      let sarite = 0;
 
       if (mod === "verificare") {
-        const paragrafe = paragrafeIntreg(doc).filter((p) => p.text.length <= LIMITA_PARAGRAF);
+        const paragrafe = toate.filter((p) => p.text.length <= LIMITA_PARAGRAF);
         const caractere = paragrafe.reduce((s, p) => s + p.text.length, 0);
         if (!paragrafe.length) throw new EroareDocx("Documentul nu are text de verificat.");
         if (caractere > LIMITA_VERIFICARE) {
@@ -198,17 +229,22 @@ function porneste(radacina: HTMLElement) {
             "Alege „corectură”: merge și pe documente mari, dar doar pe corp."
           );
         }
-        id = (await post<{ id: string }>("/api/corector", { fisier: fisier.name, caractere, mod })).id;
+        const mascat = mascheaza(paragrafe, nivel, entitati);
+        harta = mascat.harta;
+        id = (await post<{ id: string }>("/api/corector", { fisier: mascheazaText(fisier.name, harta), caractere, mod })).id;
         // O singura cerere, deci nu se reincearca: ar fi inca un document intreg platit.
         const opreste = cronometru("Se verifică tot documentul: corp, antet, subsol");
         let r: { corecturi: Corectura[]; observatii: Observatie[] };
         try {
-          r = await post(`/api/corector/${id}/verificare`, { paragrafe });
+          r = await post(`/api/corector/${id}/verificare`, { paragrafe: mascat.paragrafe });
         } finally {
           opreste();
         }
-        corecturiModel = r.corecturi;
-        observatii = r.observatii;
+        const desfacute = desfaceCorecturi(r.corecturi, harta);
+        const aleModelului = desfaceObservatii(r.observatii, harta);
+        corecturiModel = desfacute.corecturi;
+        observatii = [...verificaDate(entitati, toate), ...aleModelului.observatii];
+        sarite = desfacute.sarite + aleModelului.sarite;
       } else {
         const paragrafe = paragrafeDeCorectat(doc.parti[0]!.analiza).filter((p) => p.text.length <= LIMITA_PARAGRAF);
         const caractere = paragrafe.reduce((s, p) => s + p.text.length, 0);
@@ -217,8 +253,10 @@ function porneste(radacina: HTMLElement) {
           throw new EroareDocx(`Documentul are ${caractere.toLocaleString("ro-RO")} de caractere de text, peste plafonul de 400.000. Împarte-l în părți mai mici.`);
         }
 
-        id = (await post<{ id: string }>("/api/corector", { fisier: fisier.name, caractere, mod })).id;
-        const loturi = impartePeLoturi(paragrafe);
+        const mascat = mascheaza(paragrafe, nivel, entitati);
+        harta = mascat.harta;
+        id = (await post<{ id: string }>("/api/corector", { fisier: mascheazaText(fisier.name, harta), caractere, mod })).id;
+        const loturi = impartePeLoturi(mascat.paragrafe);
         const corecturi: Corectura[][] = loturi.map(() => []);
         let picate = 0;
         let ultimaEroare = "";
@@ -245,7 +283,10 @@ function porneste(radacina: HTMLElement) {
         await Promise.all(Array.from({ length: Math.min(LOTURI_PARALELE, loturi.length) }, lucrator));
         if (picate === loturi.length) throw new Error(ultimaEroare || "Modelul nu a răspuns.");
 
-        corecturiModel = corecturi.flat();
+        const desfacute = desfaceCorecturi(corecturi.flat(), harta);
+        corecturiModel = desfacute.corecturi;
+        sarite = desfacute.sarite;
+        observatii = verificaDate(entitati, toate);
         partiale = picate ? `${numara(picate, "parte", "părți")} din ${loturi.length} nu s-au putut corecta (${ultimaEroare})` : null;
       }
 
@@ -257,6 +298,10 @@ function porneste(radacina: HTMLElement) {
       const arata = () => {
         const solutii = observatii.flatMap((o, k) => (alese.has(k) && o.corectura ? [corecturaDinSolutie(o)] : []));
         const pus = aplicaCuMentiune(docx, doc, [...corecturiModel, ...solutii], rev);
+        // Ultimul paznic: un nume inventat n-are voie sa ajunga in actul real.
+        if (scapatInDocument(pus.aplicari, harta)) {
+          throw new Error("O corectură aducea înapoi un nume mascat, așa că nu am pus documentul la descărcare.");
+        }
         if (Object.values(pus.xml).some(xmlStricat)) {
           throw new Error("Documentul corectat nu a ieșit valid, așa că nu l-am pus la descărcare.");
         }
@@ -279,7 +324,10 @@ function porneste(radacina: HTMLElement) {
         const bifate = alese.size - solutiiPuse;
         const frazaSolutii = solutiiPuse ? ` ${numara(solutiiPuse, "soluție acceptată", "soluții acceptate")} din observații.` : "";
         const frazaBifate = bifate ? ` ${numara(bifate, "observație bifată", "observații bifate")} de tine.` : "";
-        rezumat.textContent = `${frazaAplicate}${frazaVerificat}${FRAZA_MENTIUNE[pus.mentiune]}${frazaObservatii}${frazaSolutii}${frazaBifate}${partiale ? ` Atenție: ${partiale}.` : ""}`;
+        const frazaSarite = sarite
+          ? ` ${numara(sarite, "corectură a fost sărită", "corecturi au fost sărite")}: ${sarite === 1 ? "atingea" : "atingeau"} datele ascunse.`
+          : "";
+        rezumat.textContent = `${frazaAplicate}${frazaVerificat}${FRAZA_MENTIUNE[pus.mentiune]}${frazaObservatii}${frazaSolutii}${frazaBifate}${frazaSarite}${partiale ? ` Atenție: ${partiale}.` : ""}`;
         listaObservatii.replaceChildren(...observatii.map((o, k) => randObservatie(o, alese.has(k), nuSAPutut(pus.aplicari, o), () => {
           if (alese.has(k)) alese.delete(k); else alese.add(k);
           try {
@@ -293,6 +341,7 @@ function porneste(radacina: HTMLElement) {
         lista.replaceChildren(...[...aplicate, ...deVerificat].sort((x, y) => x.i - y.i).map(randCorectura));
         return aplicate.length;
       };
+      arataAscunse(harta);
       const aplicate = arata();
       await post(`/api/corector/${id}/gata`, {
         stare: "ok", corecturi: corecturiModel.length, aplicate, observatii: observatii.length, mesaj: partiale,

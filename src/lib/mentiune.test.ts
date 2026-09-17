@@ -76,6 +76,9 @@ describe("aplicaCuMentiune (acelasi cod in hub si in aplicatie)", () => {
     const r = aplicaCuMentiune(d, analizeazaIntreg(d), [], REV);
     expect(r.mentiune).toBe("adaugata");
     expect(acceptat(r.xml["word/document.xml"]!)).toEqual(["Nota informativă.", "Șef secție", APROBAT]);
+    // 8 pt (16 jumatati de punct), ca in actele care o au deja
+    expect(r.xml["word/document.xml"]).toContain('<w:sz w:val="16"/><w:szCs w:val="16"/>');
+    expect(r.xml["word/document.xml"]).not.toContain('<w:sz w:val="20"/>');
   });
 
   it("recunoaste observatiile modelului despre mentiune", () => {

@@ -13,14 +13,14 @@ import {
 } from "./docx";
 
 // Bucatile textului aprobat, cu formatarea din actele care il au deja (demersul Cazacu, 15 sept. 2026):
-// 10 pt, aliniat stanga-dreapta, numele legii in bold.
+// 8 pt, aliniat stanga-dreapta, numele legii in bold.
 export const BUCATI_MENTIUNE: { text: string; bold?: boolean }[] = [
   { text: "Atenție: Documentul conține date cu caracter personal prelucrate în conformitate cu principiile de confidențialitate și securitate. Orice utilizare, stocare sau transfer ulterior al acestor date este permis strict în condițiile și limitele stabilite de " },
   { text: "Legea Republicii Moldova nr. 160 din 30.07.2026", bold: true },
   { text: " privind protecția datelor cu caracter personal prelucrate în scopul prevenirii și combaterii infracțiunilor." },
 ];
 export const MENTIUNE_DATE_PERSONALE = BUCATI_MENTIUNE.map((b) => b.text).join("");
-export const MARIME_MENTIUNE = 20; // jumatati de punct: 10 pt
+export const MARIME_MENTIUNE = 16; // jumatati de punct: 8 pt (decizia lui Dumitru, 17 sept. 2026)
 
 export type StareMentiune = "prezenta" | "diferita" | "lipsa";
 

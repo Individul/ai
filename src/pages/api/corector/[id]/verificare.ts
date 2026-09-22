@@ -33,7 +33,8 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     paragrafe.push({ i, text, fel: fel as FelParte });
   }
   if (!paragrafe.length) return eroare(400, "Documentul e gol.");
-  if (paragrafe.length > 5000 || caractere > LIMITA_VERIFICARE) return eroare(413, "Documentul e prea mare pentru verificare.");
+  // 12.000 de paragrafe: un act de 100.000 de caractere plin de tabele are randuri scurte si multe.
+  if (paragrafe.length > 12_000 || caractere > LIMITA_VERIFICARE) return eroare(413, "Documentul e prea mare pentru verificare.");
   if (corectare.caractere_trimise + caractere > bugetCaractere(corectare.caractere)) {
     return eroare(413, "Documentul a depășit textul declarat la pornire. Încarcă-l din nou.");
   }

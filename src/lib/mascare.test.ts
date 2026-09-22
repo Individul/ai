@@ -195,6 +195,7 @@ describe("verificarile care raman in cod", () => {
     expect(observatii[0]!.text).toContain("Simion");
     expect(observatii[0]!.text).toContain("Simeon");
     expect(observatii[0]!.tip).toBe("date");
+    expect(observatii[0]!.text).toMatch(/^Același nume apare scris în mai multe feluri/);
   });
 
   it("vede IDNP-urile care nu se potrivesc si pe cel cu alte cifre decat 13", () => {
@@ -215,6 +216,18 @@ describe("verificarile care raman in cod", () => {
     const texte = verificaDate(e).map((o) => o.text);
     expect(texte.some((t) => t.includes("nu 8"))).toBe(true);
     expect(texte.some((t) => t.includes("nu poate exista"))).toBe(true);
+  });
+
+  it("stringe valorile apropiate intr-o singura observatie si nu trece de plafon", () => {
+    // Un act mare cu zeci de numere asemanatoare dadea o observatie pe fiecare pereche: 98.000 de caractere
+    // scoteau 2.451 de randuri (22 sept. 2026). Acum un grup = o observatie, cel mult cinci pe verificare.
+    const paragrafe = Array.from({ length: 40 }, (_, k) => ({
+      i: k, text: `Condamnatul are IDNP 20040051234${String(k).padStart(2, "0")} la dosar.`,
+    }));
+    const observatii = verificaDate(gasesteDate(paragrafe), paragrafe);
+    expect(observatii.length).toBeLessThanOrEqual(5);
+    expect(observatii[0]!.text).toMatch(/^IDNP-uri aproape la fel/);
+    expect(observatii[0]!.text).toMatch(/și încă \d+/); // se arata cinci valori, restul se numara
   });
 
   it("vede contactele care difera intre varianta romana si cea rusa, pe acelasi rand", () => {

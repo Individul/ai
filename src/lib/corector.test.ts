@@ -248,6 +248,13 @@ describe("verificarea intregului document", () => {
     expect(() => extrageVerificare('{"corecturi":[{"i":1,', new Set([1]))).toThrow(/nu a întors verificarea/);
   });
 
+  it("un raspuns taiat la plafonul de jetoane se spune pe nume", () => {
+    const taiat = '{"corecturi":[' + '{"i":1,"vechi":"a","nou":"b","tip":"ortografie","motiv":"m"},'.repeat(60);
+    expect(() => extrageVerificare(taiat, new Set([1]))).toThrow(/s-a oprit la jumătate/);
+    // Un text scurt care nu e JSON ramane eroarea obisnuita.
+    expect(() => extrageVerificare("Nu am observații.", new Set([1]))).toThrow(/nu a întors verificarea/);
+  });
+
   it("citeste solutia si inlocuirea propusa; o inlocuire invalida se arunca, observatia ramane", () => {
     const raspuns = JSON.stringify({
       corecturi: [],

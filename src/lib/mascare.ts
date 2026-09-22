@@ -439,6 +439,35 @@ const subMultime = (a: Set<string>, b: Set<string>) => [...a].every((c) => b.has
 
 const ZILE = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
+// Cate observatii scoate fiecare verificare. Fara plafon, un act mare cu zeci de numere asemanatoare da mii de
+// randuri (verificat pe 22 sept. 2026: un document de 98.000 de caractere scotea 2.451 de observatii).
+const LIMITA_PE_VERIFICARE = 5;
+const VALORI_ARATATE = 5;
+
+// Valorile apropiate intre ele, strânse in grupuri: un grup = o observatie, nu o observatie pe fiecare pereche.
+function grupeaza<T>(valori: T[], aproape: (a: T, b: T) => boolean): T[][] {
+  const grupuri: T[][] = [];
+  for (const v of valori) {
+    const gasit = grupuri.find((g) => aproape(g[0]!, v));
+    if (gasit) gasit.push(v); else grupuri.push([v]);
+  }
+  return grupuri.filter((g) => g.length > 1);
+}
+
+const insirate = (valori: string[]) => {
+  const primele = valori.slice(0, VALORI_ARATATE);
+  const rest = valori.length - primele.length;
+  return `„${primele.join("”, „")}”${rest ? ` și încă ${numara(rest, "unul", "altele")}` : ""}`;
+};
+
+// Cate cifre difera intre doua siruri de aceeasi lungime; -1 cand lungimile nu se potrivesc.
+function diferenteCifre(a: string, b: string): number {
+  if (a.length !== b.length) return -1;
+  let n = 0;
+  for (let k = 0; k < a.length; k++) if (a[k] !== b[k]) n++;
+  return n;
+}
+
 export function verificaDate(entitati: Entitate[], paragrafe: { i: number; text: string }[] = []): Observatie[] {
   const observatii: Observatie[] = [];
   const valori = (fel: Fel) => [...new Set(entitati.filter((e) => e.fel === fel).map((e) => e.text.trim()))];
@@ -449,50 +478,53 @@ export function verificaDate(entitati: Entitate[], paragrafe: { i: number; text:
   // Acelasi om scris in doua feluri. Forma scurta („Cazacu Valeriu” fata de „Cazacu Valeriu Simion”) e
   // fireasca, deci se semnaleaza doar cand niciuna nu e cuprinsa in cealalta.
   const nume = valori("persoana").filter((n) => (n.match(CUVANT) ?? []).length >= 2);
-  for (let a = 0; a < nume.length; a++) {
-    for (let b = a + 1; b < nume.length; b++) {
-      const x = cuvinteNume(nume[a]!), y = cuvinteNume(nume[b]!);
-      if (subMultime(x, y) || subMultime(y, x) || asemanare(x, y) < 0.5) continue;
-      observatii.push({
-        tip: "date",
-        text: `Numele apare scris în două feluri: „${nume[a]}” și „${nume[b]}”.`,
-        solutie: "Compară cu actul de identitate și scrie-l la fel peste tot în document.",
-      });
-    }
+  const acelasiOm = (a: string, b: string) => {
+    const x = cuvinteNume(a), y = cuvinteNume(b);
+    return !subMultime(x, y) && !subMultime(y, x) && asemanare(x, y) >= 0.5;
+  };
+  for (const grup of grupeaza(nume, acelasiOm).slice(0, LIMITA_PE_VERIFICARE)) {
+    observatii.push({
+      tip: "date",
+      text: `Același nume apare scris în mai multe feluri: ${insirate(grup)}.`,
+      solutie: "Compară cu actul de identitate și scrie-l la fel peste tot în document.",
+    });
   }
 
   const idnpuri = valori("idnp");
-  for (const x of idnpuri) {
+  for (const x of idnpuri.filter((v) => cifre(v).length !== 13).slice(0, LIMITA_PE_VERIFICARE)) {
     const n = cifre(x);
-    if (n.length === 13) continue;
     observatii.push({
       tip: "date",
       text: `IDNP-ul „${x}” are ${numara(n.length, "cifră", "cifre")}, nu 13.`,
       solutie: "Verifică IDNP-ul în actul de identitate și scrie-l cu 13 cifre.",
     });
   }
-  for (let a = 0; a < idnpuri.length; a++) {
-    for (let b = a + 1; b < idnpuri.length; b++) {
-      const x = cifre(idnpuri[a]!), y = cifre(idnpuri[b]!);
-      if (x.length !== y.length) continue;
-      let diferite = 0;
-      for (let k = 0; k < x.length; k++) if (x[k] !== y[k]) diferite++;
-      if (diferite === 0 || diferite > 2) continue;
-      observatii.push({
-        tip: "date",
-        text: `Două IDNP-uri aproape la fel, în locuri diferite: „${idnpuri[a]}” și „${idnpuri[b]}”.`,
-        solutie: "Vezi care e cel din actul de identitate și corectează-l pe celălalt.",
-      });
-    }
+  const aproape = (a: string, b: string) => {
+    const n = diferenteCifre(cifre(a), cifre(b));
+    return n > 0 && n <= 2;
+  };
+  for (const grup of grupeaza(idnpuri, aproape).slice(0, LIMITA_PE_VERIFICARE)) {
+    observatii.push({
+      tip: "date",
+      text: `IDNP-uri aproape la fel, în locuri diferite: ${insirate(grup)}.`,
+      solutie: "Vezi care e cel din actul de identitate și corectează-le pe celelalte.",
+    });
   }
 
-  for (const t of valori("telefon")) {
+  const scurte = valori("telefon").filter((t) => cifre(t).replace(/^373/, "").replace(/^0/, "").length !== 8);
+  for (const t of scurte.slice(0, LIMITA_PE_VERIFICARE)) {
     const n = cifre(t).replace(/^373/, "").replace(/^0/, "");
-    if (n.length === 8) continue;
     observatii.push({
       tip: "date",
       text: `Numărul de telefon „${t}” are ${numara(n.length, "cifră", "cifre")} după prefixul de țară, nu 8.`,
       solutie: "Verifică numărul și scrie-l întreg.",
+    });
+  }
+  for (const grup of grupeaza(valori("telefon"), aproape).slice(0, LIMITA_PE_VERIFICARE)) {
+    observatii.push({
+      tip: "date",
+      text: `Numere de telefon aproape la fel, în locuri diferite: ${insirate(grup)}.`,
+      solutie: "Vezi care e cel bun și scrie-l la fel peste tot.",
     });
   }
 
@@ -518,26 +550,12 @@ export function verificaDate(entitati: Entitate[], paragrafe: { i: number; text:
     }
   }
 
-  const telefoane = valori("telefon");
-  for (let a = 0; a < telefoane.length; a++) {
-    for (let b = a + 1; b < telefoane.length; b++) {
-      const x = cifre(telefoane[a]!).replace(/^373/, "").replace(/^0/, "");
-      const y = cifre(telefoane[b]!).replace(/^373/, "").replace(/^0/, "");
-      if (x.length !== y.length || x === y) continue;
-      let diferite = 0;
-      for (let k = 0; k < x.length; k++) if (x[k] !== y[k]) diferite++;
-      if (diferite > 2) continue;
-      observatii.push({
-        tip: "date",
-        text: `Două numere de telefon aproape la fel, în locuri diferite: „${telefoane[a]}” și „${telefoane[b]}”.`,
-        solutie: "Vezi care e cel bun și scrie-l la fel peste tot, inclusiv în varianta rusă.",
-      });
-    }
-  }
-
-  for (const d of valori("nastere")) {
+  // Datele de nastere imposibile; numerele apropiate intre ele sunt strânse mai sus, pe grupuri.
+  const imposibila = (d: string) => {
     const [zi, luna] = d.split(/[.\/-]/).map(Number);
-    if (zi && luna && luna <= 12 && zi <= (ZILE[luna - 1] ?? 31)) continue;
+    return !zi || !luna || luna > 12 || zi > (ZILE[luna - 1] ?? 31);
+  };
+  for (const d of valori("nastere").filter(imposibila).slice(0, LIMITA_PE_VERIFICARE)) {
     observatii.push({
       tip: "date",
       text: `Data nașterii „${d}” nu poate exista.`,

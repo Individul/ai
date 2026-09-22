@@ -18,7 +18,10 @@ export const LOTURI_PARALELE = 4;
 export const AUTOR_REVIZII = "Corector AI";
 export const TIPURI_CORECTURA = ["ortografie", "gramatică", "punctuație", "formulare"] as const;
 
-export const LIMITA_VERIFICARE = 40_000; // caractere pe document, in modul verificare (o singura cerere)
+// Caractere pe document, in modul verificare (o singura cerere). 100.000 de la 22 sept. 2026, la cererea lui
+// Dumitru (era 40.000): incape un act de ~40 de pagini. Intrarea nu e problema (~30.000 de jetoane), iesirea e:
+// gandirea intra in plafonul de mai jos, iar un raspuns taiat nu se poate citi.
+export const LIMITA_VERIFICARE = 100_000;
 
 export interface CerereText {
   model: string;
@@ -412,7 +415,10 @@ export function cerereVerificare(model: string, paragrafe: { i: number; text: st
     model,
     sistem: PROMPT_VERIFICARE,
     utilizator: mesajVerificare(paragrafe),
-    maxTokens: 32_768,
+    // Gandirea intra in plafon: pe un demers de 6.700 de caractere, DeepSeek a scos 26.557 de jetoane, deci la
+    // 100.000 de caractere 32.768 nu ajung. 64.000 e acceptat de toate motoarele corectorului (DeepSeek si
+    // Gemini verificate pe viu pe 22 sept. 2026; Anthropic da 64.000 la Haiku 4.5, Sonnet 5 si Opus 5).
+    maxTokens: 64_000,
     schema: SCHEMA_VERIFICARE,
   };
 }
@@ -431,7 +437,11 @@ export function extrageVerificare(text: string, indici: Set<number>): { corectur
   const d = jsonDinText(text) as { corecturi?: unknown; observatii?: unknown } | null;
   // Un raspuns care nu e JSON nu inseamna „document curat”: mai bine o eroare decat o lista goala mincinoasa.
   if (!Array.isArray(d?.corecturi) && !Array.isArray(d?.observatii)) {
-    throw new Error("Modelul nu a întors verificarea (nici corecturi, nici observații). Încearcă din nou sau alege alt model.");
+    // Raspuns lung, care incepe ca JSON dar nu se inchide: modelul a fost taiat la plafonul de jetoane.
+    const taiat = text.trim().length > 2_000 && /^[`\s]*(?:json)?\s*\{/.test(text.trim()) && !text.trimEnd().endsWith("}");
+    throw new Error(taiat
+      ? "Răspunsul modelului s-a oprit la jumătate: documentul e prea mare pentru o singură verificare. Împarte-l sau folosește modul „corectură”."
+      : "Modelul nu a întors verificarea (nici corecturi, nici observații). Încearcă din nou sau alege alt model.");
   }
   const corecturi = extrageCorecturi(JSON.stringify({ corecturi: Array.isArray(d?.corecturi) ? d.corecturi : [] }), indici);
   const observatii: Observatie[] = [];

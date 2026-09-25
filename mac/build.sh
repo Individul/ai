@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Construieste aplicatia Corector pentru Mac, fara Xcode (doar Command Line Tools):
 #   npm run mac                  -> mac/build/Corector.app
-#   npm run mac -- --instaleaza  -> si o copiaza in ~/Applications
+#   npm run mac -- --instaleaza  -> o muta in ~/Applications (copia din mac/build se sterge)
 # Motorul (scripts/corecteaza-local.mts, cu docx.ts si corector.ts) se impacheteaza cu esbuild in
 # Resources/motor.mjs, deci aplicatia nu depinde de folderul proiectului; are nevoie doar
 # de node si de CLI-ul motorului ales (Claude Code sau Antigravity) instalate si logate.
@@ -36,5 +36,8 @@ if [[ "${1:-}" == "--instaleaza" ]]; then
   mkdir -p ~/Applications
   rm -rf ~/Applications/Corector.app
   cp -R "$APP" ~/Applications/
-  echo "instalata: ~/Applications/Corector.app"
+  # Copia din mac/build se sterge dupa instalare: altfel raman doua aplicatii cu acelasi nume pe Mac, iar
+  # cea din proiect ajunge in Dock si in „Recente” (cerinta lui Dumitru, 25 sept. 2026).
+  rm -rf "$APP"
+  echo "instalata: ~/Applications/Corector.app (copia din $IESIRE s-a sters)"
 fi

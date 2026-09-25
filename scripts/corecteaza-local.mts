@@ -56,8 +56,14 @@ import {
 } from "../src/lib/corector.ts";
 
 const PARALELE = 3;
+// Cat asteptam raspunsul. Un lot de corectura are 4.000 de caractere, deci 8 minute ajung; verificarea
+// trimite tot documentul, pana la 100.000 de caractere, iar pe planurile personale modelele gandesc mult:
+// pe 24 sept. 2026, un proces-verbal de 83.056 de caractere a fost omorat de propriul nostru plafon de 8
+// minute, dupa ce prima trecere raspunsese in 4 minute si jumatate.
 const TIMP_LOT_MS = 8 * 60_000;
-const TIMP_AGY = "7m"; // propriul lui plafon, sub al nostru, ca sa raspunda cu o eroare, nu sa fie omorat
+const TIMP_VERIFICARE_MS = 25 * 60_000;
+// Plafonul lui Antigravity, tinut sub al nostru, ca sa raspunda cu o eroare, nu sa fie omorat.
+const timpAgy = (ms: number) => `${Math.max(1, Math.round(ms / 60_000) - 1)}m`;
 const ESEC_RAPID_MS = 60_000; // doar un esec rapid (pornire, raspuns stricat) se reincearca; o asteptare lunga, nu
 const PAUZA_REINCERCARE_MS = 20_000; // cand furnizorul zice ca modelul e ocupat
 const UNELTE: Record<MotorLocal, string> = {
@@ -145,7 +151,7 @@ const NUME_MOTOR: Record<MotorLocal, string> = { claude: "Claude Code", gemini: 
 
 // O cerere catre CLI-ul motorului, cu raspunsul deja citit (continutLocal), ca si erorile raportate de el
 // sa intre in reincercare.
-function cere(motor: MotorLocal, intrare: string, prompt: string, model: string, eticheta: Eticheta, laStare: (mesaj: string) => void): Promise<ContinutLocal> {
+function cere(motor: MotorLocal, intrare: string, prompt: string, model: string, eticheta: Eticheta, laStare: (mesaj: string) => void, timpMs = TIMP_LOT_MS): Promise<ContinutLocal> {
   return new Promise((rezolva, respinge) => {
     const t0 = Date.now();
     const unealta = UNELTE[motor];
@@ -157,11 +163,14 @@ function cere(motor: MotorLocal, intrare: string, prompt: string, model: string,
     // dintre optiuni, deci promptul se lipeste in fata mesajului, iar raspunsul vine ca un singur JSON.
     const p = motor === "gemini"
       ? spawn(unealta, [
-        "--output-format=json", "--disable-slash-commands", `--print-timeout=${TIMP_AGY}`, `--model=${model}`,
+        "--output-format=json", "--disable-slash-commands", `--print-timeout=${timpAgy(timpMs)}`, `--model=${model}`,
         `-p=${prompt}\n\n${intrare}`,
       ], { cwd: tmpdir(), stdio: ["ignore", "pipe", "pipe"] })
       : spawn(unealta, [
-        "-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "", "--model", model,
+        "-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
+        // `--tools ""` scoate doar uneltele din setul de baza; fara `--strict-mcp-config`, serverele MCP din
+        // setarile utilizatorului isi aduc uneltele lor (24 sept. 2026: 19 unelte la a doua trecere).
+        "--tools", "", "--strict-mcp-config", "--model", model,
         "--system-prompt", prompt,
       ], { cwd: tmpdir(), stdio: ["pipe", "pipe", "pipe"] });
     copii.add(p);
@@ -194,7 +203,7 @@ function cere(motor: MotorLocal, intrare: string, prompt: string, model: string,
     const ceas = setTimeout(() => {
       expirat = true;
       p.kill("SIGTERM");
-    }, TIMP_LOT_MS);
+    }, timpMs);
     p.on("error", (e) => {
       copii.delete(p);
       clearTimeout(ceas);
@@ -212,7 +221,7 @@ function cere(motor: MotorLocal, intrare: string, prompt: string, model: string,
         jurnal({ eveniment: "inchis", cod, expirat, stderr: erori.trim().slice(0, 300) || undefined });
       }
       if (expirat) {
-        respinge(new EroareLot(`${nume} nu a răspuns în ${TIMP_LOT_MS / 60_000} minute. Detalii în ~/Library/Logs/Corector.`, false));
+        respinge(new EroareLot(`${nume} nu a răspuns în ${Math.round(timpMs / 60_000)} minute și l-am oprit. Încearcă modul „corectură” sau un model mai rapid. Detalii în ~/Library/Logs/Corector.`, false));
         return;
       }
       if (!rezultat) {
@@ -236,16 +245,19 @@ function cere(motor: MotorLocal, intrare: string, prompt: string, model: string,
 
 // `cere`, cu o singura reincercare daca a picat repede (pornire, raspuns stricat) sau daca furnizorul a
 // raspuns ca e ocupat. La al doilea caz asteapta putin, altfel da tot peste modelul ocupat.
-async function cereCuReincercare(motor: MotorLocal, intrare: string, prompt: string, model: string, eticheta: Eticheta, laStare: (mesaj: string) => void): Promise<ContinutLocal> {
+async function cereCuReincercare(motor: MotorLocal, intrare: string, prompt: string, model: string, eticheta: Eticheta, laStare: (mesaj: string) => void, timpMs = TIMP_LOT_MS): Promise<ContinutLocal> {
   try {
-    return await cere(motor, intrare, prompt, model, eticheta, laStare);
+    return await cere(motor, intrare, prompt, model, eticheta, laStare, timpMs);
   } catch (e) {
+    // Motivul esecului intra in jurnalul de diagnostic (doar mesajul, fara textul documentului): altfel
+    // ramane doar in fereastra si nu se mai poate afla de ce n-a mers (24 sept. 2026).
+    jurnalizeaza({ fisier: basename(eticheta.fisier), parte: eticheta.parte, motor, model, eveniment: "esec", mesaj: (e as Error).message.slice(0, 300) });
     if (!(e instanceof EroareLot) || !e.rapid) throw e;
     if (eroareTrecatoare(e.message)) {
       laStare(`${e.message} Reîncerc…`);
       await new Promise((r) => setTimeout(r, PAUZA_REINCERCARE_MS));
     }
-    return cere(motor, intrare, prompt, model, eticheta, laStare);
+    return cere(motor, intrare, prompt, model, eticheta, laStare, timpMs);
   }
 }
 
@@ -367,7 +379,7 @@ async function verifica(fisier: string, alegere: Alegere, anunta: (e: Eveniment)
   const laStare = (mesaj: string) => anunta({ tip: "stare", fisier, mesaj });
   const mesaj = mesajVerificare(deTrimis);
   arataCePleaca(alegere, fisier, mesaj, laStare);
-  const r = await cereCuReincercare(motor, mesaj, PROMPT_VERIFICARE, cli, { fisier, parte: 1, caractere }, laStare);
+  const r = await cereCuReincercare(motor, mesaj, PROMPT_VERIFICARE, cli, { fisier, parte: 1, caractere }, laStare, TIMP_VERIFICARE_MS);
   const raspuns = extrageVerificare(r.brut, new Set(paragrafe.map((p) => p.i)));
   anunta({ tip: "progres", fisier, gata: 1, total: 1 });
 

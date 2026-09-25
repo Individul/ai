@@ -173,7 +173,9 @@ export type MotorLocal = (typeof MOTOARE_LOCALE)[number];
 
 // Numele scurte din comanda -> modelul cerut CLI-ului. La Antigravity adancimea gandirii face parte din nume.
 export const MODELE_LOCALE: Record<MotorLocal, Record<string, string>> = {
-  claude: { opus: "opus", sonnet: "sonnet", haiku: "haiku" },
+  // Opus se cere pe nume, nu prin aliasul „opus”: pe 24 sept. 2026 aliasul ducea la claude-opus-5, iar
+  // Dumitru vrea 5.5 (lansat intre timp). Sonnet si Haiku raman pe alias, ca sa urce singure la ce e nou.
+  claude: { opus: "claude-opus-5-5", sonnet: "sonnet", haiku: "haiku" },
   gemini: { pro: "gemini-3.1-pro-high", flash: "gemini-3.8-flash-high" },
 };
 
@@ -297,6 +299,10 @@ export function mesajEroareClaudeCode(mesaj: string): string {
   }
   if (/usage limit|rate[_ ]limit|limit reached/i.test(mesaj)) {
     return `Ai atins limita planului Claude; reîncearcă după resetare. (${mesaj.slice(0, 160)})`;
+  }
+  // Modelul cerut pe nume (claude-opus-5-5) poate lipsi de pe un plan sau dintr-o versiune mai veche de CLI.
+  if (/model[^.]{0,40}(not found|not available|unknown|unsupported|invalid)|no such model/i.test(mesaj)) {
+    return `Modelul cerut nu e disponibil pe planul tău sau în versiunea ta de Claude Code. Alege alt model din fereastră sau actualizează Claude Code. (${mesaj.slice(0, 160)})`;
   }
   return mesaj;
 }

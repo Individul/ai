@@ -165,7 +165,8 @@ describe("unealta refuzata la Antigravity", () => {
 
 describe("motoarele locale", () => {
   it("fiecare motor are modelele lui, cu nume scurte in comanda", () => {
-    expect(modelLocal("claude", "opus")).toBe("opus");
+    expect(modelLocal("claude", "opus")).toBe("claude-opus-5-5"); // pe nume, ca sa nu cada aliasul pe Opus 5
+    expect(modelLocal("claude", "sonnet")).toBe("sonnet");
     expect(modelLocal("gemini", "pro")).toBe("gemini-3.1-pro-high");
     expect(modelLocal("gemini", "opus")).toBeNull();
     expect(Object.keys(MODELE_LOCALE.gemini)).toEqual(["pro", "flash"]);

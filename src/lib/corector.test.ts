@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bugetCaractere, cerereCorectura, doarSpatii, cerereVerificare, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR, TIPURI_OBSERVATIE, type MotorLocal } from "./corector";
+import { ALIAS_LOCAL, modelNecunoscut, bugetCaractere, cerereCorectura, doarSpatii, cerereVerificare, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR, TIPURI_OBSERVATIE, type MotorLocal } from "./corector";
 
 describe("impartePeLoturi", () => {
   it("umple loturile in ordine, fara sa depaseasca plafonul; un paragraf lung sta singur", () => {
@@ -107,6 +107,30 @@ describe("cerereVerificare", () => {
     const schema = c.schema as { required: string[]; properties: Record<string, { items?: { properties?: { tip?: { enum?: string[] } } } }> };
     expect(schema.required).toEqual(["corecturi", "observatii"]);
     expect(schema.properties.observatii?.items?.properties?.tip?.enum).toEqual([...TIPURI_OBSERVATIE]);
+  });
+});
+
+describe("model necunoscut de CLI", () => {
+  // Pe viu, 25 sept. 2026: Claude Code 2.1.267 cu „--model claude-opus-5-5”.
+  const eroare = "Claude Code: API Error: 400 Claude Code 2.1.267 does not support this model; version 2.1.280 or newer is required. Run 'claude update', or update the Claude desktop app, then try again. ([claude-code:unrecognized_model] {\"model\":\"claude-opus-5-5\",\"query_source\":\"sdk\"})";
+
+  it("il recunoaste si spune ce versiune trebuie", () => {
+    expect(modelNecunoscut(eroare)).toBe(true);
+    const mesaj = mesajEroareLocal("claude", eroare);
+    expect(mesaj).toContain("prea vechi");
+    expect(mesaj).toContain("2.1.280");
+    expect(mesaj).toContain("claude update");
+  });
+
+  it("mesajul tradus nu se mai imbraca inca o data si ramane recunoscut", () => {
+    const mesaj = mesajEroareLocal("claude", eroare);
+    expect(mesajEroareLocal("claude", mesaj)).toBe(mesaj);
+    expect(modelNecunoscut(mesaj)).toBe(true); // ca sa se poata cadea pe alias
+  });
+
+  it("stie cu ce se inlocuieste modelul cerut pe nume", () => {
+    expect(ALIAS_LOCAL["claude-opus-5-5"]).toBe("opus");
+    expect(ALIAS_LOCAL["sonnet"]).toBeUndefined();
   });
 });
 

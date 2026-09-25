@@ -179,6 +179,10 @@ export const MODELE_LOCALE: Record<MotorLocal, Record<string, string>> = {
   gemini: { pro: "gemini-3.1-pro-high", flash: "gemini-3.8-flash-high" },
 };
 
+// Ce se cere in locul modelului pe nume, cand CLI-ul nu-l cunoaste (e prea vechi): aliasul, care duce la
+// ultimul model pe care il stie el. 25 sept. 2026: Claude Code 2.1.267 cere 2.1.280 pentru Opus 5.5.
+export const ALIAS_LOCAL: Record<string, string> = { "claude-opus-5-5": "opus" };
+
 export function modelLocal(motor: MotorLocal, nume: string): string | null {
   return MODELE_LOCALE[motor][nume] ?? null;
 }
@@ -195,7 +199,13 @@ export function continutLocal(motor: MotorLocal, iesire: string): ContinutLocal 
   return motor === "gemini" ? continutAntigravity(iesire) : continutClaudeCode(iesire);
 }
 
+// Mesajele noastre nu se mai imbraca inca o data: continutLocal le trece deja prin mapper, iar cere() le trece
+// din nou cand adauga stderr-ul — pe 25 sept. 2026 mesajul despre Opus 5.5 aparea de doua ori, unul in altul,
+// iar textul original al CLI-ului se pierdea (si cu el si recunoasterea modelului necunoscut).
+const DEJA_TRADUS = /nu e logat|Ai atins limita planului|prea vechi pentru modelul cerut|nu are capacitate acum|a cerut o permisiune|nu a răspuns în/i;
+
 export function mesajEroareLocal(motor: MotorLocal, mesaj: string): string {
+  if (DEJA_TRADUS.test(mesaj)) return mesaj;
   return motor === "gemini" ? mesajEroareAntigravity(mesaj) : mesajEroareClaudeCode(mesaj);
 }
 
@@ -293,22 +303,31 @@ export function evenimentClaudeCode(rand: string): EvenimentClaudeCode | null {
 
 // Erorile lui Claude Code pe care omul le rezolva singur, spuse pe romaneste; restul raman cum sunt.
 // Vazut pe viu la 15 sept. 2026: "Failed to authenticate. API Error: 401 ... OAuth access token is invalid."
+// Raspunsul CLI-ului cand nu cunoaste modelul cerut pe nume (25 sept. 2026, pe viu: „Claude Code 2.1.267 does
+// not support this model; version 2.1.280 or newer is required … [claude-code:unrecognized_model]”).
+export function modelNecunoscut(mesaj: string): boolean {
+  return /unrecognized_model|does not support this model|prea vechi pentru modelul cerut|model[^.]{0,40}(not found|not available|unknown|unsupported|invalid)|no such model/i.test(mesaj);
+}
+
 export function mesajEroareClaudeCode(mesaj: string): string {
+  if (DEJA_TRADUS.test(mesaj)) return mesaj;
   if (/OAuth|authentication_error|Failed to authenticate|Invalid API key|\/login|not logged in/i.test(mesaj)) {
     return "Claude Code nu e logat sau autentificarea a expirat. În Terminal rulează „claude”, scrie „/login” și loghează-te cu contul tău, apoi apasă „reîncearcă”.";
   }
   if (/usage limit|rate[_ ]limit|limit reached/i.test(mesaj)) {
     return `Ai atins limita planului Claude; reîncearcă după resetare. (${mesaj.slice(0, 160)})`;
   }
-  // Modelul cerut pe nume (claude-opus-5-5) poate lipsi de pe un plan sau dintr-o versiune mai veche de CLI.
-  if (/model[^.]{0,40}(not found|not available|unknown|unsupported|invalid)|no such model/i.test(mesaj)) {
-    return `Modelul cerut nu e disponibil pe planul tău sau în versiunea ta de Claude Code. Alege alt model din fereastră sau actualizează Claude Code. (${mesaj.slice(0, 160)})`;
+  // Modelul cerut pe nume (claude-opus-5-5) poate lipsi dintr-o versiune mai veche de CLI sau de pe plan.
+  if (modelNecunoscut(mesaj)) {
+    const versiune = /version ([\d.]+) or newer/i.exec(mesaj)?.[1];
+    return `Claude Code e prea vechi pentru modelul cerut${versiune ? ` (are nevoie de ${versiune} sau mai nou)` : ""}. În Terminal rulează „claude update”, apoi apasă „reîncearcă”. (${mesaj.slice(0, 160)})`;
   }
   return mesaj;
 }
 
 // Acelasi lucru pentru Antigravity (planul Google).
 export function mesajEroareAntigravity(mesaj: string): string {
+  if (DEJA_TRADUS.test(mesaj)) return mesaj;
   if (/UNAUTHENTICATED|unauthenticated|not (logged|signed) in|sign in|log in|401|credentials|token (is )?(expired|invalid)/i.test(mesaj)) {
     return "Antigravity nu e logat sau autentificarea a expirat. În Terminal rulează „agy”, loghează-te cu contul tău Google, apoi apasă „reîncearcă”.";
   }

@@ -50,8 +50,9 @@ import {
   scapatInDocument, verificaDate, type Harta, type Nivel,
 } from "../src/lib/mascare.ts";
 import {
-  AUTOR_REVIZII, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageCorecturi, extrageVerificare,
+  ALIAS_LOCAL, AUTOR_REVIZII, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageCorecturi, extrageVerificare,
   impartePeLoturi, LIMITA_PARAGRAF, LIMITA_VERIFICARE, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal,
+  modelNecunoscut,
   MOTOARE_LOCALE, numara, PROMPT_CORECTOR, PROMPT_VERIFICARE, type ContinutLocal, type MotorLocal, type Observatie,
 } from "../src/lib/corector.ts";
 
@@ -252,6 +253,13 @@ async function cereCuReincercare(motor: MotorLocal, intrare: string, prompt: str
     // Motivul esecului intra in jurnalul de diagnostic (doar mesajul, fara textul documentului): altfel
     // ramane doar in fereastra si nu se mai poate afla de ce n-a mers (24 sept. 2026).
     jurnalizeaza({ fisier: basename(eticheta.fisier), parte: eticheta.parte, motor, model, eveniment: "esec", mesaj: (e as Error).message.slice(0, 300) });
+    // CLI prea vechi pentru modelul cerut pe nume: se reia cu aliasul, ca documentul sa nu ramana necorectat.
+    // Se spune in fereastra, ca sa se vada ca n-a mers cu modelul ales.
+    const alias = ALIAS_LOCAL[model];
+    if (alias && modelNecunoscut((e as Error).message)) {
+      laStare(`Claude Code e prea vechi pentru „${model}”. Rulează „claude update”. Continui cu „${alias}”…`);
+      return cere(motor, intrare, prompt, alias, eticheta, laStare, timpMs);
+    }
     if (!(e instanceof EroareLot) || !e.rapid) throw e;
     if (eroareTrecatoare(e.message)) {
       laStare(`${e.message} Reîncerc…`);

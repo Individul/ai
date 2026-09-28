@@ -211,6 +211,7 @@ struct Rezultat: Decodable, Hashable {
   let mentiune: String? // prezenta | corectata | adaugata | de_verificat
   let plan: [CorecturaPlan]?
   let mascare: Mascare?
+  let treceri: Int?  // cate treceri a facut verificarea peste document
 
   var deVerificat: Int { corecturi.filter(\.deVerificat).count }
 
@@ -219,7 +220,7 @@ struct Rezultat: Decodable, Hashable {
     Rezultat(
       iesire: nou.iesire, aplicate: nou.aplicate, corecturi: nou.corecturi, cost_usd: cost_usd, secunde: secunde,
       esecuri: esecuri, observatii: observatii, motor: motor, model: model, jetoane: jetoane,
-      mentiune: nou.mentiune, plan: plan, mascare: mascare
+      mentiune: nou.mentiune, plan: plan, mascare: mascare, treceri: treceri
     )
   }
 
@@ -233,6 +234,12 @@ struct Rezultat: Decodable, Hashable {
     }
   }
   var obs: [Observatie] { observatii ?? [] }
+
+  // Cate treceri a facut verificarea; una singura nu se pomeneste.
+  var textTreceri: String? {
+    guard let n = treceri, n > 1 else { return nil }
+    return numara(n, "trecere", "treceri")
+  }
 
   // Ce a fost ascuns inainte de trimitere, si cate corecturi au cazut din cauza asta.
   var textMascare: String? {

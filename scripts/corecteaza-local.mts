@@ -2,7 +2,7 @@
 //
 //   - aplicatia Corector (mac/, `npm run mac`), care include acest script impachetat si il ruleaza cu --json;
 //   - din Terminal: npm run corecteaza -- "/cale/Document.docx" [--motor claude|gemini] [--model …] [--mod verificare]
-//     [--mascare tot|identificatori|fara] [--arata-ce-pleaca]
+//     [--mascare tot|identificatori|fara] [--treceri 1..5] [--arata-ce-pleaca]
 //
 // Doua motoare, fiecare prin CLI-ul lui oficial, logat cu contul tau:
 //   - claude (implicit): Claude Code (`claude -p`), planul tau Claude. Modele: opus, sonnet, haiku.
@@ -63,6 +63,11 @@ const PARALELE = 3;
 // minute, dupa ce prima trecere raspunsese in 4 minute si jumatate.
 const TIMP_LOT_MS = 8 * 60_000;
 const TIMP_VERIFICARE_MS = 25 * 60_000;
+// Cate treceri face verificarea peste acelasi document. Modelul nu gaseste tot dintr-o data: pe acelasi act,
+// a doua trecere mai scoate greseli (observatia lui Dumitru, 28 sept. 2026). Se opreste singura cand o trecere
+// nu mai aduce nimic nou, deci a treia se face doar daca a doua a gasit ceva.
+const TRECERI_IMPLICIT = 3;
+const TRECERI_MAX = 5;
 // Plafonul lui Antigravity, tinut sub al nostru, ca sa raspunda cu o eroare, nu sa fie omorat.
 const timpAgy = (ms: number) => `${Math.max(1, Math.round(ms / 60_000) - 1)}m`;
 const ESEC_RAPID_MS = 60_000; // doar un esec rapid (pornire, raspuns stricat) se reincearca; o asteptare lunga, nu
@@ -101,6 +106,7 @@ interface RezultatDocument {
   plan: Corectura[];             // corecturile modelului, cu numarul paragrafului: aplicatia le poate pune
                                  // din nou, cu alte solutii acceptate din observatii (modul --reaplica)
   mascare: Mascare;              // ce s-a ascuns inainte de plecare si cate corecturi au fost sarite din cauza asta
+  treceri: number;               // cate treceri a facut verificarea (1 la modul corectura)
   motor: MotorLocal;
   model: string;           // numele scurt, cel din comanda
   cost_usd: number;        // Claude Code; la Antigravity ramane 0
@@ -326,7 +332,7 @@ async function corecteaza(fisier: string, alegere: Alegere, anunta: (e: Evenimen
   anunta({ tip: "inceput", fisier, loturi: loturi.length, paragrafe: paragrafe.length, mod: "corectura", motor });
   const t0 = Date.now();
   const mascare: Mascare = { nivel: alegere.mascare, rezumat: rezumatMascare(harta), sarite: 0 };
-  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, plan: [], mascare, motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
+  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, plan: [], mascare, treceri: 1, motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
   if (!paragrafe.length) return gol;
 
   const laStare = (mesaj: string) => anunta({ tip: "stare", fisier, mesaj });
@@ -378,8 +384,8 @@ async function verifica(fisier: string, alegere: Alegere, anunta: (e: Eveniment)
   anunta({ tip: "inceput", fisier, loturi: 1, paragrafe: paragrafe.length, mod: "verificare", motor });
   const t0 = Date.now();
   const mascare: Mascare = { nivel: alegere.mascare, rezumat: rezumatMascare(harta), sarite: 0 };
-  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, plan: [], mascare, motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
-  if (!paragrafe.length) return gol;
+  const gol = { fisier, iesire: null, aplicate: 0, corecturi: [], observatii: [], mentiune: null, plan: [], mascare, treceri: 0, motor, model, cost_usd: 0, jetoane: 0, secunde: 0, esecuri: [] };
+  if (!paragrafe.length) return { ...gol, treceri: 1 };
   if (caractere > LIMITA_VERIFICARE) {
     throw new Error(`Documentul are ${caractere.toLocaleString("ro-RO")} de caractere, peste plafonul de ${LIMITA_VERIFICARE.toLocaleString("ro-RO")} al verificării. Folosește modul „corectură”.`);
   }
@@ -387,17 +393,63 @@ async function verifica(fisier: string, alegere: Alegere, anunta: (e: Eveniment)
   const laStare = (mesaj: string) => anunta({ tip: "stare", fisier, mesaj });
   const mesaj = mesajVerificare(deTrimis);
   arataCePleaca(alegere, fisier, mesaj, laStare);
-  const r = await cereCuReincercare(motor, mesaj, PROMPT_VERIFICARE, cli, { fisier, parte: 1, caractere }, laStare, TIMP_VERIFICARE_MS);
-  const raspuns = extrageVerificare(r.brut, new Set(paragrafe.map((p) => p.i)));
-  anunta({ tip: "progres", fisier, gata: 1, total: 1 });
+  const indici = new Set(paragrafe.map((p) => p.i));
 
-  const { corecturi: cerute, sarite } = desfaceCorecturi(raspuns.corecturi, harta);
-  const { observatii: aleModelului, sarite: sariteObservatii } = desfaceObservatii(raspuns.observatii, harta);
+  // Mai multe treceri peste acelasi document: modelul nu vede tot dintr-o data. Fiecare trecere primeste
+  // acelasi text (cel original, mascat la fel), deci va repeta o parte din ce a spus — ce s-a mai auzit se
+  // arunca aici, dupa locul din document. Cand o trecere nu mai aduce nimic nou, ne oprim.
+  const cerute: Corectura[] = [];
+  const aleModelului: Observatie[] = [];
+  const stiute = new Set<string>();
+  const stiuteObservatii = new Set<string>();
+  const laFel = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  let cost = 0;
+  let jetoane = 0;
+  let sarite = 0;
+  let treceri = 0;
+  const esecuri: string[] = [];
+
+  for (let trecere = 1; trecere <= alegere.treceri; trecere++) {
+    if (trecere > 1) laStare(`Trecerea ${trecere} din ${alegere.treceri}: mai caut o dată prin document…`);
+    let raspuns;
+    try {
+      const r = await cereCuReincercare(motor, mesaj, PROMPT_VERIFICARE, cli, { fisier, parte: trecere, caractere }, laStare, TIMP_VERIFICARE_MS);
+      cost += r.cost_usd;
+      jetoane += r.jetoane;
+      raspuns = extrageVerificare(r.brut, indici);
+    } catch (e) {
+      // O trecere picata nu arunca ce s-a strans pana acum; doar prima e de neinlocuit.
+      if (trecere === 1) throw e;
+      esecuri.push(`trecerea ${trecere}: ${(e as Error).message}`);
+      break;
+    }
+    treceri = trecere;
+    anunta({ tip: "progres", fisier, gata: trecere, total: alegere.treceri });
+
+    const desfacute = desfaceCorecturi(raspuns.corecturi, harta);
+    const observatii = desfaceObservatii(raspuns.observatii, harta);
+    sarite += desfacute.sarite + observatii.sarite;
+    // Cheile se adauga dupa ce s-a filtrat toata trecerea: acelasi fragment poate aparea de doua ori in
+    // acelasi paragraf, iar in aceeasi trecere amandoua sunt bune.
+    const noi = desfacute.corecturi.filter((c) => !stiute.has(`${c.i}|${laFel(c.vechi)}`));
+    const noiObservatii = observatii.observatii.filter((o) => !stiuteObservatii.has(laFel(o.text).slice(0, 120)));
+    for (const c of noi) stiute.add(`${c.i}|${laFel(c.vechi)}`);
+    for (const o of noiObservatii) stiuteObservatii.add(laFel(o.text).slice(0, 120));
+    cerute.push(...noi);
+    aleModelului.push(...noiObservatii);
+    if (!noi.length && !noiObservatii.length) break;
+    if (trecere < alegere.treceri) {
+      laStare(`Trecerea ${trecere}: ${numara(noi.length, "corectură nouă", "corecturi noi")}, ${numara(noiObservatii.length, "observație nouă", "observații noi")}.`);
+    }
+  }
+  // Oprirea devreme (o trecere fara nimic nou) umple totusi bara: lucrarea s-a terminat.
+  if (treceri < alegere.treceri) anunta({ tip: "progres", fisier, gata: alegere.treceri, total: alegere.treceri });
+
   const pus = puneInDocument(fisier, docx, doc, cerute, null, harta);
   return {
     ...gol, ...pus, observatii: [...verificaDate(entitati, paragrafe), ...aleModelului], plan: cerute,
-    mascare: { ...mascare, sarite: sarite + sariteObservatii },
-    cost_usd: r.cost_usd, jetoane: r.jetoane, secunde: secunde(t0),
+    mascare: { ...mascare, sarite }, treceri, esecuri,
+    cost_usd: cost, jetoane, secunde: secunde(t0),
   };
 }
 
@@ -427,7 +479,7 @@ function reaplica(intrare: string): RezultatDocument {
   const pus = puneInDocument(plan.fisier, docx, doc, corecturi, plan.iesire);
   return {
     fisier: plan.fisier, ...pus, observatii: [], plan: corecturi,
-    mascare: { nivel: "fara" as Nivel, rezumat: "", sarite: 0 },
+    mascare: { nivel: "fara" as Nivel, rezumat: "", sarite: 0 }, treceri: 1,
     motor: plan.motor ?? "claude", model: plan.model ?? "", cost_usd: 0, jetoane: 0, secunde: secunde(t0), esecuri: [],
   };
 }
@@ -440,9 +492,17 @@ async function citesteIntrarea(): Promise<string> {
 
 // ---------------------------------------------------------------- iesirea pentru om (Terminal)
 
+let modCurent: Mod = "corectura"; // pentru textul progresului: loturi la corectura, treceri la verificare
+
 function afiseazaProgres(e: Eveniment) {
-  if (e.tip === "inceput") console.log(`\n${basename(e.fisier)} (${e.mod}, ${NUME_MOTOR[e.motor]})`);
-  if (e.tip === "progres") process.stdout.write(`\r  ${e.gata} din ${numara(e.total, "parte", "părți")}…${e.gata === e.total ? "\n" : ""}`);
+  if (e.tip === "inceput") {
+    modCurent = e.mod;
+    console.log(`\n${basename(e.fisier)} (${e.mod}, ${NUME_MOTOR[e.motor]})`);
+  }
+  if (e.tip === "progres") {
+    const ce = modCurent === "verificare" ? numara(e.total, "trecere", "treceri") : numara(e.total, "parte", "părți");
+    process.stdout.write(`\r  ${e.gata} din ${ce}…${e.gata === e.total ? "\n" : ""}`);
+  }
   if (e.tip === "stare") console.log(`\n  ${e.mesaj}`);
 }
 
@@ -453,7 +513,8 @@ function afiseazaRezultat(r: RezultatDocument) {
   const consum = r.motor === "gemini"
     ? `${r.jetoane.toLocaleString("ro-RO")} de jetoane pe planul tău Google`
     : `cost echivalent raportat de Claude Code: ${r.cost_usd.toFixed(4)} $ (pe planul Max intră în limitele planului)`;
-  console.log(`  ${r.secunde} s, ${NUME_MOTOR[r.motor]} ${r.model}; ${consum}`);
+  const treceri = r.treceri > 1 ? `, ${numara(r.treceri, "trecere", "treceri")}` : "";
+  console.log(`  ${r.secunde} s${treceri}, ${NUME_MOTOR[r.motor]} ${r.model}; ${consum}`);
   for (const c of deVerificat) console.log(`  de verificat (${c.stare}): „${c.vechi}” → „${c.nou}” · ${c.motiv}`);
   for (const o of r.observatii) {
     console.log(`  observație (${o.tip}): ${o.text}`);
@@ -476,24 +537,26 @@ function afiseazaRezultat(r: RezultatDocument) {
 
 const argumente = process.argv.slice(2);
 const json = argumente.includes("--json");
-const OPTIUNI = ["--motor", "--model", "--mod", "--mascare"] as const;
+const OPTIUNI = ["--motor", "--model", "--mod", "--mascare", "--treceri"] as const;
 const valoare = (nume: string, implicit: string) => {
   const k = argumente.indexOf(nume);
   return k >= 0 ? argumente[k + 1] ?? implicit : implicit;
 };
-const folosire = 'Folosire: npm run corecteaza -- "/cale/Document.docx" [--motor claude|gemini] [--model opus|sonnet|haiku|pro|flash] [--mod verificare] [--mascare tot|identificatori|fara]';
+const folosire = 'Folosire: npm run corecteaza -- "/cale/Document.docx" [--motor claude|gemini] [--model opus|sonnet|haiku|pro|flash] [--mod verificare] [--mascare tot|identificatori|fara] [--treceri 1..5]';
 const motor = MOTOARE_LOCALE.find((m) => m === valoare("--motor", "claude"));
 const mod: Mod = valoare("--mod", "corectura") === "verificare" ? "verificare" : "corectura";
 const mascare = NIVELURI.find((n) => n === valoare("--mascare", NIVEL_IMPLICIT));
+const treceri = Math.min(TRECERI_MAX, Math.max(1, Math.round(Number(valoare("--treceri", String(TRECERI_IMPLICIT)))) || TRECERI_IMPLICIT));
 const dupaOptiune = new Set(OPTIUNI.map((o) => argumente.indexOf(o) + 1).filter((k) => k > 0));
 const fisiere = argumente.filter((a, k) => !a.startsWith("--") && !dupaOptiune.has(k));
 const scrieEveniment = (e: Eveniment) => process.stdout.write(`${JSON.stringify(e)}\n`);
 
 interface Alegere {
   motor: MotorLocal;
-  model: string;    // numele scurt
-  cli: string;      // numele cerut CLI-ului
-  mascare: Nivel;   // ce se ascunde inainte de plecare
+  model: string;     // numele scurt
+  cli: string;       // numele cerut CLI-ului
+  mascare: Nivel;    // ce se ascunde inainte de plecare
+  treceri: number;   // cate treceri face verificarea peste document (se opreste singura mai devreme)
   cePleaca: boolean; // scrie in directorul temporar exact textul trimis
 }
 
@@ -522,7 +585,7 @@ if (!cli) {
   console.error(`Modelul „${model}” nu există la motorul ${motor}. Alege: ${Object.keys(MODELE_LOCALE[motor]).join(", ")}.`);
   process.exit(1);
 }
-const alegere: Alegere = { motor, model, cli, mascare, cePleaca: argumente.includes("--arata-ce-pleaca") };
+const alegere: Alegere = { motor, model, cli, mascare, treceri, cePleaca: argumente.includes("--arata-ce-pleaca") };
 
 if (motor === "claude" && process.env.CLAUDECODE && !process.env.CORECTOR_CLAUDE) {
   console.error("Rulează comanda într-un Terminal obișnuit, nu dintr-o sesiune Claude Code.");

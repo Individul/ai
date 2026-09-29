@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALIAS_LOCAL, modelNecunoscut, bugetCaractere, cerereCorectura, doarSpatii, cerereVerificare, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR, TIPURI_OBSERVATIE, type MotorLocal } from "./corector";
+import { aceeasiObservatie, ALIAS_LOCAL, modelNecunoscut, bugetCaractere, cerereCorectura, doarSpatii, cerereVerificare, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageVerificare, mesajEroareClaudeCode, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal, PROMPT_VERIFICARE, extrageCorecturi, impartePeLoturi, LIMITA_DOCUMENT, LIMITA_LOT, LIMITA_LOTURI, numara, PROMPT_CORECTOR, TIPURI_OBSERVATIE, type MotorLocal } from "./corector";
 
 describe("impartePeLoturi", () => {
   it("umple loturile in ordine, fara sa depaseasca plafonul; un paragraf lung sta singur", () => {
@@ -107,6 +107,42 @@ describe("cerereVerificare", () => {
     const schema = c.schema as { required: string[]; properties: Record<string, { items?: { properties?: { tip?: { enum?: string[] } } } }> };
     expect(schema.required).toEqual(["corecturi", "observatii"]);
     expect(schema.properties.observatii?.items?.properties?.tip?.enum).toEqual([...TIPURI_OBSERVATIE]);
+  });
+});
+
+describe("aceeasi observatie, spusa altfel", () => {
+  const obs = (text: string, corectura?: { i: number; vechi: string; nou: string }) =>
+    ({ tip: "lipsa", text, solutie: "", corectura });
+
+  it("recunoaste aceeasi rubrica goala in trei formulari (trecerile verificarii)", () => {
+    const a = obs("„.09.2026 nr. 5/”: lipsesc ziua emiterii documentului și numărul complet de înregistrare al ieșirii.");
+    const b = obs("Data și numărul de înregistrare sunt incomplete: „.09.2026 nr. 5/”.");
+    const c = obs("Rubrica de înregistrare a rămas necompletată: „.09.2026 nr. 5/”.");
+    expect(aceeasiObservatie(a, b)).toBe(true);
+    expect(aceeasiObservatie(a, c)).toBe(true);
+    expect(aceeasiObservatie(b, c)).toBe(true);
+  });
+
+  it("nu leaga doua locuri diferite care se citeaza la fel", () => {
+    // Cele cinci „art. 473/4” din demersul real: acelasi citat, dar paragrafe diferite.
+    const a = obs("„art. 473/4”: exponent pierdut, în încheierea din 30.05.2023.", { i: 12, vechi: "art. 473/4", nou: "art. 473⁴" });
+    const b = obs("„art. 473/4”: exponent pierdut, în încheierea din 12.02.2024.", { i: 13, vechi: "art. 473/4", nou: "art. 473⁴" });
+    expect(aceeasiObservatie(a, b)).toBe(false);
+    // Acelasi loc, alta formulare: aceeasi observatie.
+    const c = obs("Trimiterea „art. 473/4 alin. (4)” se scrie cu exponent.", { i: 12, vechi: "art. 473/4", nou: "art. 473⁴" });
+    expect(aceeasiObservatie(a, c)).toBe(true);
+  });
+
+  it("leaga observatia codului cu cea a modelului despre acelasi fax", () => {
+    const cod = obs("Numărul de telefon din varianta română nu se potrivește cu cel din varianta rusă: „0 230 23674” față de „0 230 23567”.");
+    const model = obs("„Tel-fax: 0 230 23674” / „Тел-факс: 0 230 23567”: numărul diferă între cele două antete.");
+    expect(aceeasiObservatie(cod, model)).toBe(true);
+  });
+
+  it("lasa in pace doua observatii diferite", () => {
+    const a = obs("La „Anexă pe: ___ file” nu e trecut numărul de file.");
+    const b = obs("Lipsește formula de solicitare înainte de punctele din dispozitiv.");
+    expect(aceeasiObservatie(a, b)).toBe(false);
   });
 });
 

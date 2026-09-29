@@ -448,6 +448,33 @@ export function cerereVerificare(model: string, paragrafe: { i: number; text: st
   };
 }
 
+// Doua observatii spun acelasi lucru? Intrebarea apare cand verificarea face mai multe treceri: modelul nu
+// repeta cuvant cu cuvant, asa ca aceeasi rubrica goala venea de trei ori, spusa altfel (29 sept. 2026).
+//   - amandoua propun o inlocuire -> decide locul: acelasi paragraf si acelasi fragment inseamna aceeasi
+//     observatie; paragrafe diferite inseamna locuri diferite, chiar daca se citeaza la fel („art. 473/4”);
+//   - altfel, un citat comun din document (ghilimele) e semn sigur ca e vorba de acelasi loc;
+//   - la urma, asemanarea cuvintelor (Dice), pentru observatiile fara citat.
+const CITAT = /[„"«]([^„”"«»]{6,})[”"»]/g;
+const citateleObservatiei = (s: string) =>
+  [...s.matchAll(CITAT)].map((m) => faraDiacritice(m[1]!).replace(/\s+/g, " ").trim()).filter((c) => c.length >= 6);
+const cuvinteleObservatiei = (s: string) => new Set(faraDiacritice(s).match(/[a-z0-9]{3,}/g) ?? []);
+const PRAG_OBSERVATIE = 0.6;
+
+export function aceeasiObservatie(a: Observatie, b: Observatie): boolean {
+  if (a.corectura && b.corectura) {
+    return a.corectura.i === b.corectura.i && faraDiacritice(a.corectura.vechi) === faraDiacritice(b.corectura.vechi);
+  }
+  const citateA = citateleObservatiei(a.text);
+  const citateB = citateleObservatiei(b.text);
+  if (citateA.some((x) => citateB.some((y) => x.includes(y) || y.includes(x)))) return true;
+  const x = cuvinteleObservatiei(a.text);
+  const y = cuvinteleObservatiei(b.text);
+  if (!x.size || !y.size) return false;
+  let comune = 0;
+  for (const c of x) if (y.has(c)) comune++;
+  return (2 * comune) / (x.size + y.size) >= PRAG_OBSERVATIE;
+}
+
 // Inlocuirea propusa de model pentru o observatie, daca e valida pentru paragrafele trimise.
 function corecturaObservatie(x: unknown, indici: Set<number>): CorecturaObservatie | undefined {
   const c = x as { i?: unknown; vechi?: unknown; nou?: unknown } | null | undefined;

@@ -50,7 +50,8 @@ import {
   scapatInDocument, verificaDate, type Harta, type Nivel,
 } from "../src/lib/mascare.ts";
 import {
-  ALIAS_LOCAL, AUTOR_REVIZII, continutLocal, eroareTrecatoare, evenimentClaudeCode, extrageCorecturi, extrageVerificare,
+  aceeasiObservatie, ALIAS_LOCAL, AUTOR_REVIZII, continutLocal, eroareTrecatoare, evenimentClaudeCode,
+  extrageCorecturi, extrageVerificare,
   impartePeLoturi, LIMITA_PARAGRAF, LIMITA_VERIFICARE, mesajEroareLocal, mesajVerificare, MODELE_LOCALE, modelLocal,
   modelNecunoscut,
   MOTOARE_LOCALE, numara, PROMPT_CORECTOR, PROMPT_VERIFICARE, type ContinutLocal, type MotorLocal, type Observatie,
@@ -399,9 +400,11 @@ async function verifica(fisier: string, alegere: Alegere, anunta: (e: Eveniment)
   // acelasi text (cel original, mascat la fel), deci va repeta o parte din ce a spus — ce s-a mai auzit se
   // arunca aici, dupa locul din document. Cand o trecere nu mai aduce nimic nou, ne oprim.
   const cerute: Corectura[] = [];
+  // Observatiile gasite in cod intra de la inceput in lista celor stiute: modelul le spune si el, altfel
+  // aceeasi nepotrivire de fax aparea de doua ori.
+  const aleCodului = verificaDate(entitati, paragrafe);
   const aleModelului: Observatie[] = [];
   const stiute = new Set<string>();
-  const stiuteObservatii = new Set<string>();
   const laFel = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
   let cost = 0;
   let jetoane = 0;
@@ -432,9 +435,9 @@ async function verifica(fisier: string, alegere: Alegere, anunta: (e: Eveniment)
     // Cheile se adauga dupa ce s-a filtrat toata trecerea: acelasi fragment poate aparea de doua ori in
     // acelasi paragraf, iar in aceeasi trecere amandoua sunt bune.
     const noi = desfacute.corecturi.filter((c) => !stiute.has(`${c.i}|${laFel(c.vechi)}`));
-    const noiObservatii = observatii.observatii.filter((o) => !stiuteObservatii.has(laFel(o.text).slice(0, 120)));
+    const pana_acum = [...aleCodului, ...aleModelului];
+    const noiObservatii = observatii.observatii.filter((o) => !pana_acum.some((v) => aceeasiObservatie(v, o)));
     for (const c of noi) stiute.add(`${c.i}|${laFel(c.vechi)}`);
-    for (const o of noiObservatii) stiuteObservatii.add(laFel(o.text).slice(0, 120));
     cerute.push(...noi);
     aleModelului.push(...noiObservatii);
     if (!noi.length && !noiObservatii.length) break;
@@ -447,7 +450,7 @@ async function verifica(fisier: string, alegere: Alegere, anunta: (e: Eveniment)
 
   const pus = puneInDocument(fisier, docx, doc, cerute, null, harta);
   return {
-    ...gol, ...pus, observatii: [...verificaDate(entitati, paragrafe), ...aleModelului], plan: cerute,
+    ...gol, ...pus, observatii: [...aleCodului, ...aleModelului], plan: cerute,
     mascare: { ...mascare, sarite }, treceri, esecuri,
     cost_usd: cost, jetoane, secunde: secunde(t0),
   };

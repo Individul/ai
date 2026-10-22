@@ -9,11 +9,11 @@ import type { Citare } from "./consum";
 import { costMicrodolari, genereaza, intreaba, EroareGemini, type Schimb } from "./gemini";
 import { BAZA_DEEPSEEK, BAZA_ZAI, completeaza, construiesteCerereText, crediteZai, EroareZai, intreabaZai, type RaspunsZai } from "./zai";
 import { cerereCorectura, cerereVerificare, extrageCorecturi, extrageVerificare, type CerereText, type Observatie } from "./corector";
-import { BAZA_CLAUDE, construiesteCerereClaude, intreabaClaude } from "./claude";
+import { BAZA_CLAUDE, construiesteCerereClaude, intreabaClaude, intreabaClaudeChat } from "./claude";
 import type { Corectura, ParagrafIntreg, ParagrafText } from "./docx";
 import { construiesteContext, extrageCitariText, type SursaText } from "./context";
 import { citesteText } from "./text";
-import { motorModel, NUME_MOTOR, type Motor } from "./validare";
+import { motorModel, NUME_MOTOR, TARIFE, type Motor } from "./validare";
 
 export interface Mediu {
   DB: D1Database;
@@ -69,11 +69,12 @@ export function disponibilePentruChat(
   return surse.filter((s) => s.indexare === "gata").length;
 }
 
-// `apel` se injecteaza doar in teste (fara retea).
-export async function raspunde(env: Mediu, i: Intrebare, apel: ApelZai = intreabaZai): Promise<Rezultat> {
+// `apel` (Z.AI / DeepSeek) si `apelClaude` se injecteaza doar in teste (fara retea). Bugetul de context si
+// plafonul lunar al lui Claude le alege ruta (consum.ts); aici Claude e doar un motor cu text, ca DeepSeek.
+export async function raspunde(env: Mediu, i: Intrebare, apel: ApelZai = intreabaZai, apelClaude: ApelZai = intreabaClaudeChat): Promise<Rezultat> {
   const motor = motorModel(i.model) ?? "gemini";
-  if (motor === "claude") throw new EroareZai(409, "Modelele Claude sunt doar pentru corector; alege alt model pentru chat în Admin.");
-  if (motor !== "gemini") return raspundeText(env, motor, i, apel);
+  if (TARIFE[i.model]?.doar_corector) throw new EroareZai(409, "Modelul ales e doar pentru corector; alege alt model pentru chat în Admin.");
+  if (motor !== "gemini") return raspundeText(env, motor, i, motor === "claude" ? apelClaude : apel);
   if (!env.GEMINI_API_KEY) throw new EroareGemini(503, "Cheia Gemini nu este configurată pe server.");
   if (!i.catalog.magazin) throw new EroareGemini(409, "Culegerea nu are încă documente indexate.");
   const r = await intreaba(env.GEMINI_API_KEY, { model: i.model, magazin: i.catalog.magazin, istoric: i.istoric, intrebare: i.intrebare });
@@ -83,11 +84,11 @@ export async function raspunde(env: Mediu, i: Intrebare, apel: ApelZai = intreab
   };
 }
 
-// Textele surselor din R2 -> context (integral sau filtrat) -> model OpenAI-compatibil.
+// Textele surselor din R2 -> context (integral sau filtrat) -> model OpenAI-compatibil sau Claude.
 // La context prea lung (3 M caractere pot depasi 1 M tokeni) reincearca o singura data cu bugetul injumatatit.
 async function raspundeText(env: Mediu, motor: Motor, i: Intrebare, apel: ApelZai): Promise<Rezultat> {
   const cheie = cheieMotor(env, motor);
-  if (!cheie) throw new EroareZai(503, `Cheia ${motor === "zai" ? "Z.AI" : "DeepSeek"} nu este configurată pe server.`);
+  if (!cheie) throw new EroareZai(503, `Cheia ${NUME_MOTOR[motor]} nu este configurată pe server.`);
   const surse = (await listeazaSurse(env.DB, i.catalog.id)).filter((s) => (s.text_caractere ?? 0) > 0);
   const texte: SursaText[] = await Promise.all(
     surse.map(async (s) => ({ id: s.id, titlu: s.titlu, pagini: (await citesteText(env.FISIERE, s.id)) ?? [] }))

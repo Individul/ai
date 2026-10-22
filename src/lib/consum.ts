@@ -3,7 +3,9 @@
 
 import { acum } from "./db";
 import { ziMinus } from "./data";
-import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, esteModel } from "./validare";
+import {
+  BUGET_CLAUDE_IMPLICIT, LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, PLAFON_CLAUDE_IMPLICIT, PLAFON_CLAUDE_MAX, TARIFE, esteModel, motorModel,
+} from "./validare";
 import { MODEL_CORECTOR_IMPLICIT } from "./corector";
 
 export interface Utilizator {
@@ -58,11 +60,17 @@ export interface RandRaport {
   ultima_vizita: string | null;
 }
 
+// Modelul de chat cand plafonul lunar Claude e atins: ieftin, cu text, fara File Search.
+export const MODEL_REZERVA_IMPLICIT = "deepseek-flash";
+
 export const SETARI_IMPLICITE: Record<string, string> = {
   limita_zi_implicita: "15",
   model: "gemini-3.5-flash-lite",
   buget_context: String(LIMITA_BUGET_MAX),
   model_corector: MODEL_CORECTOR_IMPLICIT,
+  buget_context_claude: String(BUGET_CLAUDE_IMPLICIT),
+  plafon_claude: String(PLAFON_CLAUDE_IMPLICIT),
+  model_rezerva: MODEL_REZERVA_IMPLICIT,
 };
 
 // ---------------------------------------------------------------- setari
@@ -88,6 +96,58 @@ export async function limitaImplicita(db: D1Database): Promise<number> {
 export async function citesteBuget(db: D1Database): Promise<number> {
   const n = Number(await citesteSetare(db, "buget_context"));
   return Number.isInteger(n) && n >= LIMITA_BUGET_MIN && n <= LIMITA_BUGET_MAX ? n : LIMITA_BUGET_MAX;
+}
+
+// Caracterele trimise lui Claude la o intrebare (separat de buget_context, ca sa ramana ieftin).
+export async function citesteBugetClaude(db: D1Database): Promise<number> {
+  const n = Number(await citesteSetare(db, "buget_context_claude"));
+  return Number.isInteger(n) && n >= LIMITA_BUGET_MIN && n <= LIMITA_BUGET_MAX ? n : BUGET_CLAUDE_IMPLICIT;
+}
+
+// Plafonul lunar Claude, in dolari (intreg). 0 = Claude oprit la chat.
+export async function citestePlafonClaude(db: D1Database): Promise<number> {
+  const n = Number(await citesteSetare(db, "plafon_claude"));
+  return Number.isInteger(n) && n >= 0 && n <= PLAFON_CLAUDE_MAX ? n : PLAFON_CLAUDE_IMPLICIT;
+}
+
+// Modelul de rezerva: orice model de chat care nu e Claude; altfel implicitul.
+export async function modelRezerva(db: D1Database): Promise<string> {
+  const m = await citesteSetare(db, "model_rezerva");
+  return esteModel(m) && motorModel(m) !== "claude" && !TARIFE[m]!.doar_corector && !TARIFE[m]!.retras ? m : MODEL_REZERVA_IMPLICIT;
+}
+
+// Cat s-a cheltuit pe Claude in luna calendaristica data ("2026-10", in fusul Chisinau), la chat si la
+// corector la un loc: creditele API ale abonamentului sunt aceleasi. Microdolari, la tariful public.
+export async function cheltuitClaudeLuna(db: D1Database, luna: string): Promise<number> {
+  const r = await db.prepare(
+    `SELECT coalesce(sum(cost_microdolari), 0) AS total FROM (
+       SELECT model, zi, cost_microdolari FROM intrebari UNION ALL SELECT model, zi, cost_microdolari FROM corectari
+     ) WHERE model LIKE 'claude-%' AND zi LIKE ?`
+  ).bind(`${luna}-%`).first<{ total: number }>();
+  return Number(r?.total ?? 0);
+}
+
+export interface AlegereChat {
+  model: string;
+  rezerva: boolean;     // plafonul Claude e atins: se raspunde cu modelul de rezerva
+  buget: number;        // caractere de context pentru modelul ales
+}
+
+// Modelul si bugetul de context pentru o intrebare. Claude ramane cat timp cheltuiala lunii e sub plafon;
+// o intrebare inceputa sub plafon se termina chiar daca il depaseste putin.
+export async function alegeModelChat(db: D1Database, luna: string): Promise<AlegereChat> {
+  let model = await citesteSetare(db, "model");
+  if (!esteModel(model) || TARIFE[model]!.doar_corector) model = SETARI_IMPLICITE.model!;
+  let rezerva = false;
+  if (motorModel(model) === "claude") {
+    const [cheltuit, plafon] = await Promise.all([cheltuitClaudeLuna(db, luna), citestePlafonClaude(db)]);
+    if (cheltuit >= plafon * 1_000_000) {
+      model = await modelRezerva(db);
+      rezerva = true;
+    }
+  }
+  const buget = motorModel(model) === "claude" ? await citesteBugetClaude(db) : await citesteBuget(db);
+  return { model, rezerva, buget };
 }
 
 // Modelul corectorului de documente; un nume necunoscut revine la implicit.

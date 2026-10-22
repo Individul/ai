@@ -1,19 +1,20 @@
 // POST /api/chat { catalog, intrebare, istoric: [{intrebare, raspuns}] }
 // Intrebarea unui coleg catre catalogul dat: verifica limita zilnica, intreaba motorul ales in Admin
-// (Gemini File Search, sau Z.AI / DeepSeek cu textul extras), scrie in jurnal si intoarce raspunsul
+// (Gemini File Search, sau Z.AI / DeepSeek / Claude cu textul extras; Claude doar sub plafonul lunar, altfel
+// modelul de rezerva), scrie in jurnal si intoarce raspunsul
 // cu citari si cate intrebari mai are azi.
 //
 // Blocarea si identitatea sunt in middleware. Istoricul vine de la client (stateless).
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { citesteCatalog, listeazaSurse } from "../../../lib/db";
-import { citesteBuget, citesteSetare, inregistreazaIntrebare, intrebariAzi, limitaPentru } from "../../../lib/consum";
+import { alegeModelChat, inregistreazaIntrebare, intrebariAzi, limitaPentru } from "../../../lib/consum";
 import { EroareGemini, type Schimb } from "../../../lib/gemini";
 import { EroareZai } from "../../../lib/zai";
 import { cheieMotor, disponibilePentruChat, raspunde } from "../../../lib/motor";
 import { citesteJson, eroare, json } from "../../../lib/api";
 import { aziChisinau } from "../../../lib/data";
-import { LIMITA_INTREBARE, esteModel, motorModel } from "../../../lib/validare";
+import { LIMITA_INTREBARE, motorModel } from "../../../lib/validare";
 
 interface Corp {
   catalog?: string;
@@ -34,8 +35,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const catalog = await citesteCatalog(env.DB, c.date.catalog ?? "");
   if (!catalog || (catalog.stare === "arhivat" && !locals.admin)) return eroare(404, "Culegerea nu există.");
 
-  let model = await citesteSetare(env.DB, "model");
-  if (!esteModel(model)) model = "gemini-3.5-flash-lite";
+  const zi = aziChisinau();
+  const { model, rezerva, buget } = await alegeModelChat(env.DB, zi.slice(0, 7));
   const motor = motorModel(model) ?? "gemini";
   const surse = await listeazaSurse(env.DB, catalog.id);
   if (disponibilePentruChat(motor, catalog.magazin, surse) === 0) {
@@ -43,7 +44,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
   if (!cheieMotor(env, motor)) return eroare(503, "Chatul nu este configurat încă pe server.");
 
-  const zi = aziChisinau();
   const email = locals.email;
   const [folosite, limita] = await Promise.all([intrebariAzi(env.DB, email, zi), limitaPentru(env.DB, email)]);
   if (folosite >= limita) {
@@ -54,7 +54,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ eroare: `Ai atins limita de ${limita} întrebări pe zi. Revino mâine.`, ramase: 0, limita }, 429);
   }
 
-  const buget = await citesteBuget(env.DB);
   const start = Date.now();
   try {
     const r = await raspunde(env, { model, catalog, istoric, intrebare, buget });
@@ -64,7 +63,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       tokens_intrare: r.tokens_intrare, tokens_iesire: r.tokens_iesire,
       cost_microdolari: r.cost_microdolari, credite: r.credite, stare: "ok", durata_ms,
     });
-    return json({ raspuns: r.text, citari: r.citari, ramase: Math.max(0, limita - folosite - 1), limita, model, mod: r.mod });
+    return json({ raspuns: r.text, citari: r.citari, ramase: Math.max(0, limita - folosite - 1), limita, model, mod: r.mod, rezerva });
   } catch (e) {
     const mesaj = (e as Error).message;
     await inregistreazaIntrebare(env.DB, {

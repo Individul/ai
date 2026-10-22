@@ -76,10 +76,10 @@ describe("intreabaClaude", () => {
 });
 
 describe("modelele Claude", () => {
-  it("sunt la corector, nu si la chat", () => {
+  it("toate sunt la corector; la chat doar Sonnet 5.5", () => {
     const claude = MODELE.filter((m) => TARIFE[m]!.motor === "claude");
-    expect(claude).toEqual(["claude-haiku-4-5-20251001", "claude-sonnet-5", "claude-opus-5"]);
-    expect(MODELE_CHAT.some((m) => TARIFE[m]!.motor === "claude")).toBe(false);
+    expect(claude).toEqual(["claude-haiku-4-5-20251001", "claude-sonnet-5", "claude-opus-5", "claude-sonnet-5-5", "claude-opus-5-5"]);
+    expect(MODELE_CHAT.filter((m) => TARIFE[m]!.motor === "claude")).toEqual(["claude-sonnet-5-5"]);
     expect(MODELE_CHAT).toContain("deepseek-flash");
   });
 });

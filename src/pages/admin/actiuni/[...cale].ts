@@ -16,7 +16,8 @@
 //   audio/:id/sterge
 //   audio/:id/muta?dir=sus|jos
 //   utilizator/:email          limita_zi, blocat, nota (pagina /admin/consum)
-//   setari                     limita_zi_implicita, model, model_corector, buget_context, incalzire
+//   setari                     limita_zi_implicita, model, model_corector, buget_context, buget_context_claude,
+//                              plafon_claude, model_rezerva, incalzire
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import {
@@ -27,7 +28,7 @@ import { cheieR2 } from "../../../lib/fisiere";
 import { scoateDinIndex } from "../../../lib/indexare";
 import { stergeText } from "../../../lib/text";
 import {
-  LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, TARIFE, esteModel, esteStare, slug, valideazaAudio, valideazaCatalog, valideazaSursa,
+  LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, PLAFON_CLAUDE_MAX, TARIFE, esteModel, motorModel, esteStare, slug, valideazaAudio, valideazaCatalog, valideazaSursa,
 } from "../../../lib/validare";
 import { seteazaSetare, seteazaUtilizator } from "../../../lib/consum";
 
@@ -176,17 +177,32 @@ export const POST: APIRoute = async ({ params, request, url, redirect }) => {
     if (!Number.isInteger(limita) || limita < 0 || limita > 10_000) return laConsum({ eroare: "Limita implicită trebuie să fie un număr întreg." });
     const model = (f.model ?? "").trim();
     if (!esteModel(model)) return laConsum({ eroare: "Model necunoscut." });
-    if (TARIFE[model]!.doar_corector) return laConsum({ eroare: "Modelele Claude sunt doar pentru corector; alege alt model pentru chat." });
+    if (TARIFE[model]!.doar_corector) return laConsum({ eroare: "Modelul ales e doar pentru corector; alege alt model pentru chat." });
     const modelCorector = (f.model_corector ?? "").trim();
     if (!esteModel(modelCorector)) return laConsum({ eroare: "Modelul corectorului e necunoscut." });
     const buget = Number((f.buget_context ?? "").replace(/[.\s]/g, ""));
     if (!Number.isInteger(buget) || buget < LIMITA_BUGET_MIN || buget > LIMITA_BUGET_MAX) {
       return laConsum({ eroare: `Bugetul de context trebuie să fie între ${LIMITA_BUGET_MIN} și ${LIMITA_BUGET_MAX} de caractere.` });
     }
+    const bugetClaude = Number((f.buget_context_claude ?? "").replace(/[.\s]/g, ""));
+    if (!Number.isInteger(bugetClaude) || bugetClaude < LIMITA_BUGET_MIN || bugetClaude > LIMITA_BUGET_MAX) {
+      return laConsum({ eroare: `Bugetul de context Claude trebuie să fie între ${LIMITA_BUGET_MIN} și ${LIMITA_BUGET_MAX} de caractere.` });
+    }
+    const plafon = Number((f.plafon_claude ?? "").trim());
+    if (!Number.isInteger(plafon) || plafon < 0 || plafon > PLAFON_CLAUDE_MAX) {
+      return laConsum({ eroare: `Plafonul Claude trebuie să fie un număr întreg de dolari, între 0 și ${PLAFON_CLAUDE_MAX}.` });
+    }
+    const rezerva = (f.model_rezerva ?? "").trim();
+    if (!esteModel(rezerva) || motorModel(rezerva) === "claude" || TARIFE[rezerva]!.doar_corector) {
+      return laConsum({ eroare: "Modelul de rezervă trebuie să fie un model de chat care nu e Claude." });
+    }
     await seteazaSetare(env.DB, "limita_zi_implicita", String(limita));
     await seteazaSetare(env.DB, "model", model);
     await seteazaSetare(env.DB, "model_corector", modelCorector);
     await seteazaSetare(env.DB, "buget_context", String(buget));
+    await seteazaSetare(env.DB, "buget_context_claude", String(bugetClaude));
+    await seteazaSetare(env.DB, "plafon_claude", String(plafon));
+    await seteazaSetare(env.DB, "model_rezerva", rezerva);
     // Culegerile incalzite dimineata: doar id-uri de culegeri existente.
     const ceruta = (f.incalzire ?? "").split(",").map((s) => s.trim()).filter(Boolean);
     const existente = new Set((await listeazaCataloage(env.DB, { cuArhivate: true })).map((c) => c.id));

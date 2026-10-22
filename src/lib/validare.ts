@@ -41,7 +41,8 @@ export interface Tarif {
   // Orele de varf (UTC), cu factorul de pret; `doar_lucratoare` = luni-vineri.
   varf?: { factor: number; ore_utc: [number, number][]; doar_lucratoare: boolean };
   retras?: boolean;
-  // Doar pentru corector (Claude): pe chat, contextul culegerilor ar costa cativa dolari pe intrebare.
+  // Doar pentru corector: pe chat, contextul culegerilor ar costa cativa dolari pe intrebare. Claude Sonnet 5.5
+  // e singurul Claude de chat (22 oct. 2026): context filtrat (`buget_context_claude`) si plafon lunar in $.
   doar_corector?: boolean;
   // Claude: output_config.effort (adancimea gandirii adaptive); lipsa = modelul nu il accepta.
   efort?: "low" | "medium" | "high";
@@ -63,6 +64,10 @@ export const TARIFE: Record<string, Tarif> = {
   "claude-haiku-4-5-20251001": { motor: "claude", intrare: 1.00, intrare_cache: 0.10, iesire: 5.00, eticheta: "Claude Haiku 4.5 · Anthropic, rapid, fără gândire (doar corector)", doar_corector: true },
   "claude-sonnet-5": { motor: "claude", intrare: 2.00, intrare_cache: 0.20, iesire: 10.00, eticheta: "Claude Sonnet 5 · Anthropic, cu gândire (doar corector)", doar_corector: true, efort: "medium" },
   "claude-opus-5": { motor: "claude", intrare: 5.00, intrare_cache: 0.50, iesire: 25.00, eticheta: "Claude Opus 5 · Anthropic, cel mai atent, cu gândire (doar corector)", doar_corector: true, efort: "medium" },
+  // Seria 5.5 (oct. 2026): Sonnet 5.5 la acelasi pret ca Sonnet 5, Opus 5.5 mai ieftin decat Opus 5. Se platesc
+  // din creditele API lunare ale abonamentului Max (22 oct. 2026, decizia lui Dumitru: Sonnet 5.5 la chat).
+  "claude-sonnet-5-5": { motor: "claude", intrare: 2.00, intrare_cache: 0.20, iesire: 10.00, eticheta: "Claude Sonnet 5.5 · Anthropic, cu gândire; la chat context filtrat și plafon lunar", efort: "medium" },
+  "claude-opus-5-5": { motor: "claude", intrare: 4.00, intrare_cache: 0.20, iesire: 20.00, eticheta: "Claude Opus 5.5 · Anthropic, cel mai atent, cu gândire (doar corector)", doar_corector: true, efort: "medium" },
 };
 // Modelele selectabile in Admin (fara cele retrase): toate la corector, la chat fara cele `doar_corector`.
 export const MODELE = Object.keys(TARIFE).filter((m) => !TARIFE[m]!.retras);
@@ -103,6 +108,13 @@ export const NUME_MOTOR: Record<Motor, string> = { gemini: "Gemini", zai: "Z.AI"
 // 3 M caractere ~ 1 M tokeni, plafonul GLM-5.3 / 5.3-Flash.
 export const LIMITA_BUGET_MIN = 10_000;
 export const LIMITA_BUGET_MAX = 3_000_000;
+
+// Claude la chat: bugetul de context e separat (~300.000 de caractere = ~100 k tokeni = ~0,22 $ pe Sonnet 5.5),
+// iar cheltuiala lunara pe toate modelele Claude (chat + corector) are un plafon in dolari. Peste plafon,
+// chatul trece pe modelul de rezerva pana la luna urmatoare.
+export const BUGET_CLAUDE_IMPLICIT = 300_000;
+export const PLAFON_CLAUDE_IMPLICIT = 65;   // $ pe luna
+export const PLAFON_CLAUDE_MAX = 10_000;
 
 export const LIMITA_INTREBARE = 2000;
 export const LIMITA_TITLU = 200;

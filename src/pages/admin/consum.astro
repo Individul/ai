@@ -4,11 +4,12 @@ import { env } from "cloudflare:workers";
 import Base from "../../layouts/Base.astro";
 import Suma from "../../components/Suma.astro";
 import {
-  citesteBuget, citesteSetare, costUltimele30Zile, crediteUltimele7Zile, fmtCredite, limitaImplicita, modelCorector, raportUtilizatori,
+  cheltuitClaudeLuna, citesteBuget, citesteBugetClaude, citestePlafonClaude, citesteSetare, costUltimele30Zile, crediteUltimele7Zile, fmtCost,
+  fmtCredite, limitaImplicita, modelCorector, modelRezerva, raportUtilizatori,
 } from "../../lib/consum";
 import { aziChisinau, fmtMoment, fmtZi } from "../../lib/data";
 import { cursUsd } from "../../lib/curs";
-import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, MODELE, MODELE_CHAT, TARIFE, motorModel, stareVarf } from "../../lib/validare";
+import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, MODELE, MODELE_CHAT, PLAFON_CLAUDE_MAX, TARIFE, motorModel, stareVarf } from "../../lib/validare";
 import { textVarf } from "../../lib/varf";
 import { listeazaCataloage } from "../../lib/db";
 import { listaIncalzire } from "../../lib/incalzire";
@@ -19,6 +20,11 @@ const [raport, limita, model, cost30, credite7, buget, curs, modelCor] = await P
   raportUtilizatori(env.DB, azi), limitaImplicita(env.DB), citesteSetare(env.DB, "model"), costUltimele30Zile(env.DB, azi),
   crediteUltimele7Zile(env.DB, azi), citesteBuget(env.DB), cursUsd(env.DB, azi), modelCorector(env.DB),
 ]);
+const [bugetClaude, plafonClaude, cheltuitClaude, rezerva] = await Promise.all([
+  citesteBugetClaude(env.DB), citestePlafonClaude(env.DB), cheltuitClaudeLuna(env.DB, azi.slice(0, 7)), modelRezerva(env.DB),
+]);
+const MODELE_REZERVA = MODELE_CHAT.filter((m) => motorModel(m) !== "claude");
+const plafonAtins = cheltuitClaude >= plafonClaude * 1_000_000;
 const motor = motorModel(model) ?? "gemini";
 // Cota reala a planului (include si Claude Code), de la Z.AI; null daca nu raspunde sau motorul nu e Z.AI.
 const cota = motor === "zai" && env.ZAI_API_KEY ? await cotaZai(env.ZAI_API_KEY) : null;
@@ -47,6 +53,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
       <span><strong>{total30}</strong> în 30 de zile</span>
       <span><strong><Suma microdolari={cost30} curs={curs} /></strong> cost în 30 de zile</span>
       <span><strong>{fmtCredite(credite7)}</strong> credite Z.AI în 7 zile, din {fmtCredite(COTA_SAPTAMANA)}</span>
+      <span title="chat și corector, în luna calendaristică (fusul Chișinăului), la tarifele publice Anthropic"><strong>{fmtCost(cheltuitClaude)}</strong> pe Claude luna aceasta, din {plafonClaude} ${plafonAtins ? " · plafon atins" : ""}</span>
       {cota && cota.ferestre.map((f) => (
         <span title={`se resetează ${fmtMoment(f.reset)}`}><strong>{f.procent} %</strong> din cota pe {f.eticheta} ({fmtCredite(f.folosit)} din {fmtCredite(f.total)}, planul {cota.nivel})</span>
       ))}
@@ -77,6 +84,20 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
       <span>Buget context (caractere) · Z.AI, DeepSeek</span>
       <input name="buget_context" type="number" min={LIMITA_BUGET_MIN} max={LIMITA_BUGET_MAX} step="10000" value={buget} required />
     </label>
+    <label>
+      <span>Buget context Claude (caractere)</span>
+      <input name="buget_context_claude" type="number" min={LIMITA_BUGET_MIN} max={LIMITA_BUGET_MAX} step="10000" value={bugetClaude} required />
+    </label>
+    <label>
+      <span>Plafon Claude pe lună ($)</span>
+      <input name="plafon_claude" type="number" min="0" max={PLAFON_CLAUDE_MAX} step="1" value={plafonClaude} required />
+    </label>
+    <label>
+      <span>Model de rezervă (peste plafon)</span>
+      <select name="model_rezerva">
+        {MODELE_REZERVA.map((m) => <option value={m} selected={m === rezerva}>{descriereModel(m)}</option>)}
+      </select>
+    </label>
     {motorModel(model) === "deepseek" && (
       <fieldset class="incalzire">
         <legend>Încălzire dimineața (DeepSeek)</legend>
@@ -89,8 +110,10 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
     <button class="buton" type="submit">Salvează setările</button>
   </form>
   <p class="lamurire sus">
-    Motorul activ: <strong>{motor === "zai" ? "Z.AI (GLM)" : motor === "deepseek" ? "DeepSeek" : "Gemini File Search"}</strong>.{" "}
-    {motor === "zai"
+    Motorul activ: <strong>{motor === "zai" ? "Z.AI (GLM)" : motor === "deepseek" ? "DeepSeek" : motor === "claude" ? "Claude" : "Gemini File Search"}</strong>.{" "}
+    {motor === "claude"
+      ? `Claude primește doar paginile care se potrivesc cu întrebarea, până la bugetul de context Claude (300.000 de caractere ≈ 100 k tokeni ≈ 0,22 $ pe întrebare la Sonnet 5.5). Se plătește din creditele API lunare ale abonamentului. Când cheltuiala Claude a lunii (chat și corector) ajunge la plafon, chatul răspunde cu modelul de rezervă până la 1 ale lunii următoare.${plafonAtins ? " Plafonul e atins acum: răspunde modelul de rezervă." : ""}`
+      : motor === "zai"
       ? "GLM primește textul întregii culegeri dacă încape în buget, altfel paginile care se potrivesc cu întrebarea. La 3.000.000 de caractere (≈ 1 M tokeni) o întrebare pe GLM-5.3-Flash costă ≈ 230 de credite din cota planului Lite (2.000 la 5 ore, 10.000 pe săptămână, pentru toți)."
       : motor === "deepseek"
         ? "DeepSeek primește textul întregii culegeri dacă încape în buget, altfel paginile care se potrivesc cu întrebarea. Plata e per token, fără cotă; cache-ul e automat pe prefix, deci de la a doua întrebare pe aceeași culegere documentele se plătesc la prețul de cache (0,0028 $ per M în loc de 0,14 $). Jurnalul arată costul real, cu tokenii din cache."
@@ -153,7 +176,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
     padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font-size: 14px; text-transform: none; letter-spacing: 0;
   }
   .setari input { width: 120px; }
-  .setari input[name=buget_context] { width: 150px; }
+  .setari input[name=buget_context], .setari input[name=buget_context_claude] { width: 150px; }
   .incalzire { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 18px; border: 0; padding: 4px 0 0; margin: 0; }
   .incalzire legend { font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; padding: 0; margin-bottom: 4px; }
   .incalzire small { flex-basis: 100%; color: var(--faint); font-size: 12.5px; }

@@ -1,5 +1,6 @@
-// Claude (Anthropic) prin REST, fara SDK. Singurul fisier care vorbeste cu Anthropic. Folosit doar de
-// corector: pe chat, contextul culegerilor (~740 k tokeni) ar costa cativa dolari pe intrebare.
+// Claude (Anthropic) prin REST, fara SDK. Singurul fisier care vorbeste cu Anthropic. Folosit de corector si,
+// din 22 oct. 2026, de chat (doar Sonnet 5.5): acolo nu trimitem toata culegerea (~740 k tokeni ar costa
+// ~1,50 $ pe intrebare), ci paginile filtrate din `buget_context_claude`, cu plafon lunar in $ (motor.ts, consum.ts).
 //
 // Din documentatia oficiala (platform.claude.com, citita la 15 sept. 2026):
 // - POST https://api.anthropic.com/v1/messages, cu antetele x-api-key si anthropic-version: 2023-06-01.
@@ -15,10 +16,14 @@
 
 import type { CerereText } from "./corector";
 import { TARIFE } from "./validare";
-import type { RaspunsZai } from "./zai";
+import { PROMPT_SISTEM_ZAI, type CerereZai, type RaspunsZai } from "./zai";
 
 export const BAZA_CLAUDE = "https://api.anthropic.com";
 export const VERSIUNE_API_CLAUDE = "2023-06-01";
+// Refuzurile clasificatoarelor de siguranta: cu `fallbacks: "default"` Anthropic reia cererea refuzata pe
+// modelul recomandat pentru categoria refuzului, in aceeasi cerere (raspunsul poate avea blocuri "fallback",
+// pe care le ignoram, si `model` alt decat cel cerut). Forma "default" cere exact acest antet beta.
+export const BETA_FALLBACK = "server-side-fallback-2026-07-01";
 
 export class EroareClaude extends Error {
   status: number;
@@ -41,6 +46,32 @@ export function construiesteCerereClaude(c: CerereText): Record<string, unknown>
     messages: [{ role: "user", content: c.utilizator }],
   };
   if (Object.keys(output_config).length) cerere.output_config = output_config;
+  return cerere;
+}
+
+// Chatul: acelasi prompt si aceleasi citari [Titlu, pag. N] ca la Z.AI / DeepSeek, deci extrageCitariText
+// leaga trimiterile la fel. Documentele stau in system; istoricul (ultimele 8 schimburi) e text simplu.
+// Gandirea e adaptiva (Sonnet 5.5 nu o poate opri), cu efortul din TARIFE; ea intra in max_tokens.
+export function construiesteCerereChatClaude(c: CerereZai): Record<string, unknown> {
+  const messages: { role: "user" | "assistant"; content: string }[] = [];
+  for (const s of c.istoric.slice(-8)) {
+    if (!s.intrebare || !s.raspuns) continue;
+    messages.push({ role: "user", content: s.intrebare.slice(0, 2000) });
+    messages.push({ role: "assistant", content: s.raspuns.slice(0, 4000) });
+  }
+  messages.push({ role: "user", content: c.intrebare });
+  const cerere: Record<string, unknown> = {
+    model: c.model,
+    max_tokens: 16_000,
+    system: `${PROMPT_SISTEM_ZAI}
+
+DOCUMENTE:
+${c.context}`,
+    messages,
+    fallbacks: "default",
+  };
+  const efort = TARIFE[c.model]?.efort;
+  if (efort) cerere.output_config = { effort: efort };
   return cerere;
 }
 
@@ -67,7 +98,10 @@ export function extrageRaspunsClaude(d: any): RaspunsClaude {
 export async function intreabaClaude(cheie: string, baza: string, corp: Record<string, unknown>): Promise<RaspunsClaude> {
   const r = await fetch(`${baza.replace(/\/+$/, "")}/v1/messages`, {
     method: "POST",
-    headers: { "x-api-key": cheie, "anthropic-version": VERSIUNE_API_CLAUDE, "content-type": "application/json" },
+    headers: {
+      "x-api-key": cheie, "anthropic-version": VERSIUNE_API_CLAUDE, "content-type": "application/json",
+      ...(corp.fallbacks ? { "anthropic-beta": BETA_FALLBACK } : {}),
+    },
     body: JSON.stringify(corp),
     signal: AbortSignal.timeout(10 * 60_000),
   });
@@ -76,4 +110,15 @@ export async function intreabaClaude(cheie: string, baza: string, corp: Record<s
   try { d = text ? JSON.parse(text) : null; } catch { d = null; }
   if (!r.ok) throw new EroareClaude(r.status, d?.error?.message ?? `Anthropic a răspuns ${r.status}.`);
   return extrageRaspunsClaude(d);
+}
+
+// Chatul: un raspuns fara text (refuz, sau taiat la max_tokens inainte de text) e o eroare pentru om.
+export async function intreabaClaudeChat(cheie: string, baza: string, c: CerereZai): Promise<RaspunsZai> {
+  const r = await intreabaClaude(cheie, baza, construiesteCerereChatClaude(c));
+  if (!r.text) {
+    throw new EroareClaude(502, r.oprire === "refusal"
+      ? "Claude a refuzat să răspundă la această întrebare."
+      : `Claude nu a dat un răspuns (${r.oprire || "fără text"}).`);
+  }
+  return { text: r.text, tokens_intrare: r.tokens_intrare, tokens_cache: r.tokens_cache, tokens_iesire: r.tokens_iesire };
 }

@@ -127,6 +127,36 @@ export async function cheltuitClaudeLuna(db: D1Database, luna: string): Promise<
   return Number(r?.total ?? 0);
 }
 
+// Plafonul Claude al lunii, pentru pagini (admin): cheltuit, plafon si ce a mai ramas, toate in microdolari.
+export interface StareClaude { cheltuit: number; plafon: number; ramas: number }
+export async function stareClaudeLuna(db: D1Database, luna: string): Promise<StareClaude> {
+  const [cheltuit, plafonDolari] = await Promise.all([cheltuitClaudeLuna(db, luna), citestePlafonClaude(db)]);
+  const plafon = plafonDolari * 1_000_000;
+  return { cheltuit, plafon, ramas: Math.max(0, plafon - cheltuit) };
+}
+
+// Cererile Claude ale lunii (intrebari si corectari), cele mai noi primele, pentru tabelul din Admin.
+export interface CerereClaude {
+  fel: "intrebare" | "corectura";
+  creat_la: string;
+  email: string;
+  model: string;
+  tokens_intrare: number;
+  tokens_iesire: number;
+  cost_microdolari: number;
+  stare: string;
+}
+export async function cereriClaudeLuna(db: D1Database, luna: string, n = 100): Promise<CerereClaude[]> {
+  const col = "creat_la, email, model, tokens_intrare, tokens_iesire, cost_microdolari, stare";
+  const r = await db.prepare(
+    `SELECT 'intrebare' AS fel, ${col} FROM intrebari WHERE model LIKE 'claude-%' AND zi LIKE ?1
+     UNION ALL
+     SELECT 'corectura' AS fel, ${col} FROM corectari WHERE model LIKE 'claude-%' AND zi LIKE ?1
+     ORDER BY creat_la DESC LIMIT ?2`
+  ).bind(`${luna}-%`, n).all<CerereClaude>();
+  return r.results;
+}
+
 export interface AlegereChat {
   model: string;
   rezerva: boolean;     // plafonul Claude e atins: se raspunde cu modelul de rezerva

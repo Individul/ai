@@ -8,7 +8,7 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { citesteCatalog, listeazaSurse } from "../../../lib/db";
-import { alegeModelChat, inregistreazaIntrebare, intrebariAzi, limitaPentru } from "../../../lib/consum";
+import { alegeModelChat, inregistreazaIntrebare, intrebariAzi, limitaPentru, stareClaudeLuna } from "../../../lib/consum";
 import { EroareGemini, type Schimb } from "../../../lib/gemini";
 import { EroareZai } from "../../../lib/zai";
 import { cheieMotor, disponibilePentruChat, raspunde } from "../../../lib/motor";
@@ -63,7 +63,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
       tokens_intrare: r.tokens_intrare, tokens_iesire: r.tokens_iesire,
       cost_microdolari: r.cost_microdolari, credite: r.credite, stare: "ok", durata_ms,
     });
-    return json({ raspuns: r.text, citari: r.citari, ramase: Math.max(0, limita - folosite - 1), limita, model, mod: r.mod, rezerva });
+    // Doar adminul vede costul raspunsului si, la Claude, cat a mai ramas din plafonul lunii (in $).
+    const pentruAdmin = !locals.admin ? {} : {
+      cost_microdolari: r.cost_microdolari,
+      ...(motor === "claude" ? { claude: await stareClaudeLuna(env.DB, zi.slice(0, 7)) } : {}),
+    };
+    return json({ raspuns: r.text, citari: r.citari, ramase: Math.max(0, limita - folosite - 1), limita, model, mod: r.mod, rezerva, ...pentruAdmin });
   } catch (e) {
     const mesaj = (e as Error).message;
     await inregistreazaIntrebare(env.DB, {

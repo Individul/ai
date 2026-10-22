@@ -108,6 +108,12 @@ function pornesteChat(el: HTMLElement) {
     randeaza();
   });
 
+  // Microdolari -> "0,1114 $" (sub un dolar, patru zecimale) sau "64,89 $".
+  function dolari(m: number): string {
+    const d = m / 1_000_000;
+    return `${(d > 0 && d < 1 ? d.toFixed(4) : d.toFixed(2)).replace(".", ",")} $`;
+  }
+
   function stare(text: string, fel: "" | "eroare" = "") {
     contor.textContent = text;
     contor.className = `ramase ${fel}`.trim();
@@ -140,7 +146,10 @@ function pornesteChat(el: HTMLElement) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ catalog, intrebare, istoric: vizibile().slice(-8).map((s) => ({ intrebare: s.intrebare, raspuns: s.raspuns })) }),
       });
-      const d = (await r.json()) as { raspuns?: string; citari?: Citare[]; ramase?: number; limita?: number; eroare?: string };
+      const d = (await r.json()) as {
+        raspuns?: string; citari?: Citare[]; ramase?: number; limita?: number; eroare?: string;
+        cost_microdolari?: number; claude?: { ramas: number; plafon: number };   // doar pentru admin
+      };
       clearInterval(cronometru);
       if (!r.ok || !d.raspuns) {
         stare(d.eroare ?? `Eroare ${r.status}.`, "eroare");
@@ -152,7 +161,9 @@ function pornesteChat(el: HTMLElement) {
       randeaza(true);
       camp.value = "";
       lista.firstElementChild?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      stare(`${d.ramase ?? "?"} din ${d.limita ?? "?"} întrebări rămase azi · răspuns în ${scurs()}`);
+      const cost = d.cost_microdolari !== undefined ? ` · a costat ${dolari(d.cost_microdolari)}` : "";
+      const plafon = d.claude ? ` · rămas ${dolari(d.claude.ramas)} din ${dolari(d.claude.plafon)} pe Claude luna aceasta` : "";
+      stare(`${d.ramase ?? "?"} din ${d.limita ?? "?"} întrebări rămase azi · răspuns în ${scurs()}${cost}${plafon}`);
       buton.disabled = d.ramase === 0;
     } catch (e) {
       stare((e as Error).message || "Conexiunea a picat.", "eroare");

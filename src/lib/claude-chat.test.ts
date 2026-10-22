@@ -7,7 +7,8 @@ import { scrieText } from "./text";
 import { PROMPT_SISTEM_ZAI, type CerereZai, type RaspunsZai } from "./zai";
 import { raspunde } from "./motor";
 import {
-  alegeModelChat, cheltuitClaudeLuna, creeazaCorectare, inregistreazaIntrebare, MODEL_REZERVA_IMPLICIT, seteazaSetare,
+  alegeModelChat, cereriClaudeLuna, cheltuitClaudeLuna, creeazaCorectare, inregistreazaIntrebare, MODEL_REZERVA_IMPLICIT, seteazaSetare,
+  stareClaudeLuna,
 } from "./consum";
 import { BUGET_CLAUDE_IMPLICIT, LIMITA_BUGET_MAX } from "./validare";
 
@@ -136,6 +137,24 @@ describe("plafonul lunar Claude", () => {
     expect(await alegeModelChat(env.DB, "2026-10")).toMatchObject({ model: MODEL_REZERVA_IMPLICIT, rezerva: true });
     await seteazaSetare(env.DB, "model_rezerva", "glm-5.3-flash");
     expect((await alegeModelChat(env.DB, "2026-10")).model).toBe("glm-5.3-flash");
+  });
+
+  it("stareClaudeLuna arata cat a ramas din plafon, fara sa coboare sub zero", async () => {
+    await seteazaSetare(env.DB, "plafon_claude", "65");
+    await intrebareCu("claude-sonnet-5-5", "2026-10-03", 111_402);
+    expect(await stareClaudeLuna(env.DB, "2026-10")).toEqual({ cheltuit: 111_402, plafon: 65_000_000, ramas: 64_888_598 });
+    await seteazaSetare(env.DB, "plafon_claude", "0");
+    expect((await stareClaudeLuna(env.DB, "2026-10")).ramas).toBe(0);
+  });
+
+  it("cereriClaudeLuna aduce intrebarile si corectarile Claude ale lunii, cele mai noi primele", async () => {
+    await intrebareCu("claude-sonnet-5-5", "2026-10-03", 100);
+    await intrebareCu("deepseek-flash", "2026-10-03", 200);
+    await intrebareCu("claude-sonnet-5-5", "2026-09-30", 300);
+    await creeazaCorectare(env.DB, { email: "b@exemplu.md", zi: "2026-10-05", fisier: "x.docx", mod: "corectura", caractere: 10, model: "claude-opus-5-5" });
+    const r = await cereriClaudeLuna(env.DB, "2026-10");
+    expect(r.map((c) => [c.fel, c.model])).toEqual([["corectura", "claude-opus-5-5"], ["intrebare", "claude-sonnet-5-5"]]);
+    expect(r[1]).toMatchObject({ email: "a@exemplu.md", cost_microdolari: 100, stare: "ok" });
   });
 
   it("alt model decat Claude nu e atins de plafon", async () => {

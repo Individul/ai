@@ -4,7 +4,7 @@ import { env } from "cloudflare:workers";
 import Base from "../../layouts/Base.astro";
 import Suma from "../../components/Suma.astro";
 import {
-  cheltuitClaudeLuna, citesteBuget, citesteBugetClaude, citestePlafonClaude, citesteSetare, costUltimele30Zile, crediteUltimele7Zile, fmtCost,
+  cereriClaudeLuna, cheltuitClaudeLuna, citesteBuget, citesteBugetClaude, citestePlafonClaude, citesteSetare, costUltimele30Zile, crediteUltimele7Zile, fmtCost,
   fmtCredite, limitaImplicita, modelCorector, modelRezerva, raportUtilizatori,
 } from "../../lib/consum";
 import { aziChisinau, fmtMoment, fmtZi } from "../../lib/data";
@@ -20,9 +20,12 @@ const [raport, limita, model, cost30, credite7, buget, curs, modelCor] = await P
   raportUtilizatori(env.DB, azi), limitaImplicita(env.DB), citesteSetare(env.DB, "model"), costUltimele30Zile(env.DB, azi),
   crediteUltimele7Zile(env.DB, azi), citesteBuget(env.DB), cursUsd(env.DB, azi), modelCorector(env.DB),
 ]);
-const [bugetClaude, plafonClaude, cheltuitClaude, rezerva] = await Promise.all([
+const [bugetClaude, plafonClaude, cheltuitClaude, rezerva, cereriClaude] = await Promise.all([
   citesteBugetClaude(env.DB), citestePlafonClaude(env.DB), cheltuitClaudeLuna(env.DB, azi.slice(0, 7)), modelRezerva(env.DB),
+  cereriClaudeLuna(env.DB, azi.slice(0, 7)),
 ]);
+const ramasClaude = Math.max(0, plafonClaude * 1_000_000 - cheltuitClaude);
+const numeModel = (m: string) => TARIFE[m]?.eticheta.split(" · ")[0] ?? m;
 const MODELE_REZERVA = MODELE_CHAT.filter((m) => motorModel(m) !== "claude");
 const plafonAtins = cheltuitClaude >= plafonClaude * 1_000_000;
 const motor = motorModel(model) ?? "gemini";
@@ -53,7 +56,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
       <span><strong>{total30}</strong> în 30 de zile</span>
       <span><strong><Suma microdolari={cost30} curs={curs} /></strong> cost în 30 de zile</span>
       <span><strong>{fmtCredite(credite7)}</strong> credite Z.AI în 7 zile, din {fmtCredite(COTA_SAPTAMANA)}</span>
-      <span title="chat și corector, în luna calendaristică (fusul Chișinăului), la tarifele publice Anthropic"><strong>{fmtCost(cheltuitClaude)}</strong> pe Claude luna aceasta, din {plafonClaude} ${plafonAtins ? " · plafon atins" : ""}</span>
+      <span title="chat și corector, în luna calendaristică (fusul Chișinăului), la tarifele publice Anthropic"><strong>{fmtCost(cheltuitClaude)}</strong> pe Claude luna aceasta, din {plafonClaude} $ · {plafonAtins ? "plafon atins" : <>rămas <strong>{fmtCost(ramasClaude)}</strong></>}</span>
       {cota && cota.ferestre.map((f) => (
         <span title={`se resetează ${fmtMoment(f.reset)}`}><strong>{f.procent} %</strong> din cota pe {f.eticheta} ({fmtCredite(f.folosit)} din {fmtCredite(f.total)}, planul {cota.nivel})</span>
       ))}
@@ -120,6 +123,32 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
         : "Modelele GLM și DeepSeek cer textul extras din PDF-uri (se face la upload sau din „Extrage textul” în pagina culegerii)."}
   </p>
   {(() => { const v = textVarf(stareVarf(model)); return v && <p class:list={["lamurire", "varf", { activ: v.activ }]}>{v.text}</p>; })()}
+
+  <h2>Claude luna aceasta <span class="numar">{cereriClaude.length}</span></h2>
+  {cereriClaude.length === 0 ? (
+    <p class="gol">Nicio cerere Claude luna aceasta.</p>
+  ) : (
+    <div class="tabel-invelis claude">
+      <table>
+        <thead>
+          <tr><th>Când</th><th>Cine</th><th>Ce</th><th>Model</th><th class="nr">Tokeni intrare</th><th class="nr">Ieșire</th><th class="nr">Cost</th></tr>
+        </thead>
+        <tbody>
+          {cereriClaude.map((c) => (
+            <tr class:list={[{ esuat: c.stare !== "ok" }]}>
+              <td>{fmtMoment(c.creat_la)}</td>
+              <td>{c.email}</td>
+              <td>{c.fel === "intrebare" ? "întrebare" : "corectură"}{c.stare !== "ok" && ` · ${c.stare === "eroare" ? "eroare" : c.stare}`}</td>
+              <td>{numeModel(c.model)}</td>
+              <td class="nr">{fmtTokeni(c.tokens_intrare)}</td>
+              <td class="nr">{fmtTokeni(c.tokens_iesire)}</td>
+              <td class="nr">{fmtCost(c.cost_microdolari)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
 
   <h2>Utilizatori <span class="numar">{raport.length}</span></h2>
   {raport.length === 0 ? (
@@ -191,6 +220,8 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
   td:first-child, th:first-child { padding-left: 0; }
   td:last-child, th:last-child { padding-right: 0; }
   th.nr, td.nr { text-align: right; font-variant-numeric: tabular-nums; }
+  .claude { margin-bottom: 32px; }
+  tr.esuat td { color: var(--faint); }
   tr.blocat td { opacity: 0.75; }
   tr.blocat td.email { color: var(--coral); }
   td.email { font-weight: 600; }

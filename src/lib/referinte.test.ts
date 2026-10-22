@@ -53,6 +53,21 @@ describe("termeni compusi si pe citare", () => {
     expect(termenCautare("doar alin. (3) ")).toBe("alin:3");
   });
 
+  it("punctul pus in paranteza imediat dupa trimitere are prioritate (22 oct. 2026: pct. 150 nu se evidentia)", () => {
+    const html = legaReferinte(
+      "<li>Directorul aprobă (pct. 149).</li><li>Accesul e permis numai personalului SED [Instrucțiune, p. 26] (pct. 150).</li>",
+      CITARI,
+    );
+    expect(html).toContain('data-pagina="26" data-titlu="Instrucțiune" data-cauta="pct:150"');
+    expect(termeniPeCitare("Accesul [Instrucțiune, p. 26] (pct. 150). Alt rând (pct. 30) [Instrucțiune, p. 5].", CITARI))
+      .toEqual({ "s1|26": "pct:150", "s1|5": "pct:30" });
+  });
+
+  it("textul de dupa trimitere care nu e o paranteza cu punct nu conteaza", () => {
+    const html = legaReferinte("<p>Se comunică (pct. 30) [Instrucțiune, p. 5]. Dacă e condamnat (pct. 41) …</p>", CITARI);
+    expect(html).toContain('data-pagina="5" data-titlu="Instrucțiune" data-cauta="pct:30"');
+  });
+
   it("aduna termenii pe (sursa, pagina) pentru lista Surse", () => {
     const text = "Se face (pct. 218) [Instrucțiune, pag. 35]. Colțul (pct. 219) [Instrucțiune, pag. 36]. Indică (pct. 221) [Instrucțiune, pag. 36]. Alt act [Necunoscut, pag. 3].";
     expect(termeniPeCitare(text, CITARI)).toEqual({ "s1|35": "pct:218", "s1|36": "pct:219;pct:221" });

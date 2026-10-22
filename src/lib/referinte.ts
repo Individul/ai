@@ -32,6 +32,17 @@ export function termenCautare(htmlInainte: string): string | null {
   return parinte ?? alineat;
 }
 
+// Modelul scrie trimiterea si inainte, si dupa punct: "… (pct. 30) [Act, p. 5]" sau
+// "… [Act, p. 26] (pct. 150)." O paranteza cu articol / punct / alineat lipita de trimitere (doar
+// spatii intre ele) ii apartine si are prioritate; altfel ramane ultimul termen dinainte. Textul e HTML.
+export function termenDupa(htmlDupa: string): string | null {
+  const text = htmlDupa.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").slice(0, 80);
+  const m = text.match(/^\s*\(\s*((?:art|pct|punct|alin)[^()]{0,40}(?:\(\d+\)[^()]{0,20})?)\)/i);
+  return m ? termenCautare(m[1]!) : null;
+}
+
+const termenPentru = (inainte: string, dupa: string) => termenDupa(dupa) ?? termenCautare(inainte);
+
 // Termenii de cautare pentru fiecare (sursa, pagina) citata in raspuns, adunati de la toate
 // trimiterile spre acea pagina; pentru lista "Surse" de sub raspuns, care nu are text inainte.
 export function termeniPeCitare(text: string, citari: Citare[]): Record<string, string> {
@@ -41,7 +52,7 @@ export function termeniPeCitare(text: string, citari: Citare[]): Record<string, 
     const n = norm(m[1]!);
     const c = cunoscute.find((x) => x.n === n) ?? cunoscute.find((x) => x.n.startsWith(n) || n.startsWith(x.n));
     if (!c?.sursa_id) continue;
-    const termen = termenCautare(text.slice(Math.max(0, m.index! - 600), m.index!));
+    const termen = termenPentru(text.slice(Math.max(0, m.index! - 600), m.index!), text.slice(m.index! + m[0].length));
     if (!termen) continue;
     const cheie = `${c.sursa_id}|${Number(m[2])}`;
     (rezultat[cheie] ??= new Set()).add(termen);
@@ -62,7 +73,7 @@ export function legaReferinte(html: string, citari: Citare[]): string {
       const eticheta = `${scurt(titluHtml)}, p. ${pagina}`;
       const titluComplet = `${titluHtml}, pagina ${pagina}`;
       if (!c?.sursa_id) return `<span class="ref" title="${titluComplet}">${eticheta}</span>`;
-      const cauta = termenCautare(html.slice(Math.max(0, pozitie - 600), pozitie));
+      const cauta = termenPentru(html.slice(Math.max(0, pozitie - 600), pozitie), html.slice(pozitie + tot.length));
       const dateVizor = ` data-vizor="${encodeURIComponent(c.sursa_id)}" data-pagina="${pagina}" data-titlu="${titluHtml}"${cauta ? ` data-cauta="${cauta}"` : ""}`;
       return `<a class="ref" href="/f/pdf/${encodeURIComponent(c.sursa_id)}#page=${pagina}" target="_blank" rel="noopener" title="${titluComplet}"${dateVizor}>${eticheta}</a>`;
     }

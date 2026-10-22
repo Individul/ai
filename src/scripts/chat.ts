@@ -163,7 +163,7 @@ function pornesteChat(el: HTMLElement) {
       camp.value = "";
       lista.firstElementChild?.scrollIntoView({ block: "nearest", behavior: "smooth" });
       const cost = d.cost_microdolari !== undefined ? ` · a costat ${dolari(d.cost_microdolari)}` : "";
-      const plafon = d.claude ? ` · rămas ${dolari(d.claude.ramas)} din ${dolari(d.claude.plafon)} pe Claude luna aceasta` : "";
+      const plafon = d.claude ? ` · rămas ${dolari(d.claude.ramas)} din ${dolari(d.claude.plafon)} pe Claude luna aceasta (inclus în Max)` : "";
       stare(`${d.ramase ?? "?"} din ${d.limita ?? "?"} întrebări rămase azi · răspuns în ${scurs()}${cost}${plafon}`);
       buton.disabled = d.ramase === 0;
     } catch (e) {

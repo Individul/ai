@@ -15,17 +15,22 @@ const dolari = (m: number) => {
   const d = m / 1_000_000;
   return `${Number.isInteger(d) ? String(d) : d.toFixed(2).replace(".", ",")} $`;
 };
-let consum: { text: string; titlu: string; plin: boolean };
+// Plafonul Claude vine din creditele API lunare incluse in abonamentul Max (100 $ pe luna, fara plata
+// separata); eticheta "inclus în Max" o spune, ca suma sa nu para cheltuiala din buzunar.
+let consum: { text: string; titlu: string; plin: boolean; max: boolean };
 if (admin) {
   const c = await stareClaudeLuna(env.DB, azi.slice(0, 7));
   consum = {
     text: `${dolari(c.cheltuit)} din ${dolari(c.plafon)}`,
-    titlu: `Cheltuit pe Claude luna aceasta (toți, chat și corector) din plafonul lunar; rămas ${dolari(c.ramas)}`,
+    titlu: `Cheltuit pe Claude luna aceasta (toți, chat și corector) din plafonul de ${dolari(c.plafon)}; rămas ${dolari(c.ramas)}. ` +
+      "Banii vin din creditele API lunare incluse în abonamentul Claude Max (100 $ pe lună), nu se plătesc separat; " +
+      "plafonul e partea pusă deoparte pentru Cataloage. Creditele nefolosite nu se reportează.",
     plin: c.ramas === 0,
+    max: true,
   };
 } else {
   const [folosite, limita] = await Promise.all([intrebariAzi(env.DB, Astro.locals.email, azi), limitaPentru(env.DB, Astro.locals.email)]);
-  consum = { text: `${folosite} din ${limita} azi`, titlu: "întrebările tale de azi din limita pe zi", plin: folosite >= limita };
+  consum = { text: `${folosite} din ${limita} azi`, titlu: "întrebările tale de azi din limita pe zi", plin: folosite >= limita, max: false };
 }
 const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsWith("/c/") : cale.startsWith(prefix));
 ---
@@ -35,7 +40,7 @@ const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsW
   <nav aria-label="Navigare principală">
     <a href="/" class:list={{ activ: activ("/") }}>Culegeri</a>
     <a href="/corector" class:list={{ activ: activ("/corector") }}>Corector</a>
-    <a href="/consum" class:list={{ activ: activ("/consum") }}>Consum <span class:list={["suma", { plin: consum.plin }]} title={consum.titlu}>{consum.text}</span></a>
+    <a href="/consum" class:list={{ activ: activ("/consum") }}>Consum <span class:list={["suma", { plin: consum.plin }]} title={consum.titlu}>{consum.text}{consum.max && <span class="max"> · inclus în Max</span>}</span></a>
     <a href="/acces" class:list={{ activ: activ("/acces") }}>Cum obțin acces</a>
     {admin && <a href="/admin" class:list={["admin", { activ: activ("/admin") }]}>Admin</a>}
   </nav>
@@ -79,6 +84,7 @@ const activ = (prefix: string) => (prefix === "/" ? cale === "/" || cale.startsW
   .suma { margin-left: 6px; font-size: 12px; font-weight: 700; color: var(--faint); font-variant-numeric: tabular-nums; }
   nav a.activ .suma, nav a:hover .suma { color: inherit; opacity: 0.75; }
   .suma.plin, nav a .suma.plin { color: var(--coral); opacity: 1; }
+  .suma .max { color: var(--live); }
   nav a.admin.activ { background: rgba(var(--coral-rgb), 0.12); }
   .tema {
     flex: none; width: 36px; height: 36px; border-radius: 10px; border: 0; background: transparent; color: var(--muted);

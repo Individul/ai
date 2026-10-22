@@ -25,9 +25,9 @@ const [surse, audio, folosite, limita, model] = await Promise.all([
   listeazaSurse(env.DB, catalog.id), listeazaAudio(env.DB, catalog.id),
   intrebariAzi(env.DB, email, aziChisinau()), limitaPentru(env.DB, email), citesteSetare(env.DB, "model"),
 ]);
-// Chatul e disponibil cand motorul ales in Admin are ce citi (Gemini: indexate; Z.AI: cu text extras).
-const motor = motorModel(model) ?? "gemini";
-const disponibile = disponibilePentruChat(motor, catalog.magazin, surse);
+// Chatul e disponibil cand culegerea are surse cu text extras.
+const motor = motorModel(model) ?? "claude";
+const disponibile = disponibilePentruChat(surse);
 const varf = textVarf(stareVarf(model));
 const note = catalog.note_utilizare ? randeazaMarkdown(catalog.note_utilizare) : "";
 ---

@@ -31,7 +31,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return eroare(413, `Verificarea merge până la ${LIMITA_VERIFICARE.toLocaleString("ro-RO")} de caractere; pentru documentul ăsta folosește corectura.`);
   }
   const model = await modelCorector(env.DB);
-  if (!cheieMotor(env, motorModel(model) ?? "gemini")) return eroare(503, "Corectorul nu este configurat încă pe server.");
+  if (!cheieMotor(env, motorModel(model) ?? "deepseek")) return eroare(503, "Corectorul nu este configurat încă pe server.");
   const r = await creeazaCorectare(env.DB, { email: locals.email, zi: aziChisinau(), fisier, mod, caractere, model });
   return json({ id: r.id, model });
 };

@@ -19,7 +19,7 @@ describe("stareVarf + textVarf", () => {
 
   it("weekend in interval: nu e varf; modelele fara ore de varf dau null", () => {
     expect(stareVarf("deepseek-flash", new Date("2026-09-12T07:30:00Z"))?.activ).toBe(false);
-    expect(stareVarf("gemini-3.5-flash-lite")).toBeNull();
+    expect(stareVarf("claude-sonnet-5-5")).toBeNull();
     expect(textVarf(null)).toBeNull();
   });
 });

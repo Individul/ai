@@ -3,7 +3,6 @@
 // progres la upload. La succes, pagina se reincarca (serverul e sursa adevarului).
 
 import { compunePagina, type ElementPagina } from "../lib/pdf";
-import { PDFDocument } from "pdf-lib";
 import * as pdfjs from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -12,7 +11,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 interface Raspuns { status: number; corp: string }
 interface Pagina { pagina: number; text: string }
 
-// Textul PDF-ului, pagina cu pagina, pentru motoarele fara File Search (Z.AI, DeepSeek). Se face
+// Textul PDF-ului, pagina cu pagina, pe care il citeste chatul (Claude, DeepSeek). Se face
 // aici, in browser: fara limita de CPU si fara sa tinem PDF-ul in memoria Workerului. Paginile fara
 // text (scanate) lipsesc din lista; lista goala = PDF fara strat de text. Compunerea paginii din
 // elementele pdf.js (inclusiv exponentii: 217¹, b¹) e in `compunePagina`, ca sa fie testabila.
@@ -68,26 +67,6 @@ async function pdfDeLaServer(id: string): Promise<Blob> {
   return r.blob();
 }
 
-// PDF-urile de la legis.md (mPDF) au gunoi inaintea antetului si o structura pe care indexarea
-// Google o refuza. Rescrierea cu pdf-lib (acelasi continut, alta structura) le face acceptate.
-// Daca pdf-lib nu poate citi fisierul, il trimitem cum e; serverul mai curata antetul.
-async function normalizeazaPdf(fisier: File, progres: (t: string) => void): Promise<File> {
-  try {
-    progres("se pregătește fișierul…");
-    let octeti = new Uint8Array(await fisier.arrayBuffer());
-    const antet = [0x25, 0x50, 0x44, 0x46]; // %PDF
-    for (let i = 0; i + 4 <= Math.min(octeti.length, 4096); i++) {
-      if (antet.every((b, k) => octeti[i + k] === b)) { if (i > 0) octeti = octeti.subarray(i); break; }
-    }
-    const doc = await PDFDocument.load(octeti, { ignoreEncryption: true, updateMetadata: false });
-    const rescris = await doc.save({ useObjectStreams: false });
-    const tampon = rescris.buffer.slice(rescris.byteOffset, rescris.byteOffset + rescris.byteLength) as ArrayBuffer;
-    return new File([tampon], fisier.name, { type: "application/pdf" });
-  } catch {
-    return fisier;
-  }
-}
-
 function trimite(url: string, fisier: File, antete: Record<string, string>, progres: (p: number) => void): Promise<Raspuns> {
   return new Promise((rezolva, respinge) => {
     const x = new XMLHttpRequest();
@@ -136,16 +115,13 @@ for (const input of document.querySelectorAll<HTMLInputElement>("input[data-pdf-
     input.disabled = true;
     stare(iesire, "se încarcă… 0%");
     try {
-      const pregatit = await normalizeazaPdf(fisier, (t) => stare(iesire, t));
-      const r = await trimite(`/api/admin/surse/${id}/fisier`, pregatit, {
+      const r = await trimite(`/api/admin/surse/${id}/fisier`, fisier, {
         "content-type": "application/pdf",
         "x-nume-fisier": antet(fisier.name),
       }, (p) => stare(iesire, `se încarcă… ${Math.round(p * 100)}%`));
       if (r.status === 200) {
         stare(iesire, "încărcat; se extrage textul…", "ok");
-        const text = await pregatesteText(id, pregatit, iesire);
-        stare(iesire, `${text}; se indexează…`, "ok");
-        await indexeaza(id, iesire, text);
+        stare(iesire, await pregatesteText(id, fisier, iesire), "ok");
         location.reload();
         return;
       }
@@ -158,52 +134,23 @@ for (const input of document.querySelectorAll<HTMLInputElement>("input[data-pdf-
   });
 }
 
-// --- Indexare in Gemini File Search: porneste, apoi intreaba starea la 3 s pana se termina.
-// `prefix` = starea textului deja pregatit, ca sa nu se piarda din mesaj. Fara cheie Gemini (503),
-// textul ramane bun pentru Z.AI: e avertisment, nu eroare.
-async function indexeaza(id: string, iesire: HTMLElement | null, prefix = ""): Promise<void> {
-  const cu = (t: string) => (prefix ? `${prefix}; ${t}` : t);
-  const r = await fetch(`/api/admin/surse/${id}/indexeaza`, { method: "POST" });
-  if (!r.ok) {
-    let mesaj = `Eroare ${r.status}.`;
-    try { mesaj = ((await r.json()) as { eroare?: string }).eroare ?? mesaj; } catch { /* nu e JSON */ }
-    stare(iesire, cu(r.status === 503 ? "indexarea Gemini nu e configurată" : mesaj), r.status === 503 ? "" : "eroare");
-    return;
-  }
-  // Actele mari (sute de pagini) stau la Google si 10 minute; asteptam pana la 15.
-  for (let i = 0; i < 300; i++) {
-    await new Promise((res) => setTimeout(res, 3000));
-    const s = await fetch(`/api/admin/surse/${id}/indexeaza`);
-    if (!s.ok) { stare(iesire, `Verificarea a eșuat (${s.status}).`, "eroare"); return; }
-    const d = (await s.json()) as { indexare: string; mesaj: string | null };
-    if (d.indexare === "gata") { stare(iesire, "indexat", "ok"); return; }
-    if (d.indexare === "eroare") { stare(iesire, d.mesaj ?? "eroare la indexare", "eroare"); return; }
-    const secunde = (i + 1) * 3;
-    stare(iesire, `se indexează… (${secunde < 60 ? `${secunde}s` : `${Math.floor(secunde / 60)} min`}; la acte mari durează până la 10 minute)`);
-  }
-  stare(iesire, "încă se indexează; reîncarcă pagina mai târziu");
-}
-
-// "Reindexeaza": ia PDF-ul de pe server, extrage textul din nou, apoi indexarea Gemini.
-for (const b of document.querySelectorAll<HTMLButtonElement>("button[data-indexeaza]")) {
+// "Extrage din nou textul" pe o sursa: ia PDF-ul de pe server si reface textul.
+for (const b of document.querySelectorAll<HTMLButtonElement>("button[data-extrage]")) {
   b.addEventListener("click", async () => {
-    const id = b.dataset.indexeaza ?? "";
+    const id = b.dataset.extrage ?? "";
     const iesire = b.closest("form")?.querySelector<HTMLElement>("[data-stare]") ?? null;
     b.disabled = true;
-    let text = "";
     try {
       stare(iesire, "se ia PDF-ul de pe server…");
-      text = await pregatesteText(id, await pdfDeLaServer(id), iesire);
+      stare(iesire, await pregatesteText(id, await pdfDeLaServer(id), iesire), "ok");
     } catch (e) {
-      text = (e as Error).message;
+      stare(iesire, (e as Error).message, "eroare");
     }
-    stare(iesire, `${text}; se trimite la indexare…`);
-    await indexeaza(id, iesire, text);
     location.reload();
   });
 }
 
-// "Extrage textul" pentru toate sursele cu PDF, dar fara text (incarcate inainte de motorul Z.AI).
+// "Extrage textul" pentru toate sursele cu PDF (cele fara text sau ca sa refaca textul existent).
 for (const b of document.querySelectorAll<HTMLButtonElement>("button[data-extrage-toate]")) {
   b.addEventListener("click", async () => {
     const ids = (b.dataset.extrageToate ?? "").split(",").filter(Boolean);

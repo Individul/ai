@@ -4,7 +4,7 @@ import { adaugaSursa, creeazaCatalog, seteazaText } from "./db";
 import { scrieText } from "./text";
 import { seteazaSetare } from "./consum";
 import { EMAIL_SISTEM, incalzeste, incalzesteToate, listaIncalzire } from "./incalzire";
-import type { CerereZai, RaspunsZai } from "./zai";
+import type { CerereChat, RaspunsModel } from "./deepseek";
 
 async function culegere() {
   const catalog = await creeazaCatalog(env.DB, "penala", { titlu: "Legislația penală", stare: "activ" });
@@ -14,7 +14,7 @@ async function culegere() {
   return catalog;
 }
 
-const apelOk = async (_c: string, _b: string, c: CerereZai): Promise<RaspunsZai> => ({
+const apelOk = async (_c: string, _b: string, c: CerereChat): Promise<RaspunsModel> => ({
   text: "Gata.", tokens_intrare: c.context.length / 4, tokens_cache: 0, tokens_iesire: 2,
 });
 
@@ -30,8 +30,8 @@ describe("incalzire", () => {
   it("trimite contextul integral si scrie in jurnal pe emailul de sistem", async () => {
     const c = await culegere();
     await seteazaSetare(env.DB, "model", "deepseek-flash");
-    const cereri: CerereZai[] = [];
-    const apel = async (k: string, b: string, q: CerereZai) => { cereri.push(q); return apelOk(k, b, q); };
+    const cereri: CerereChat[] = [];
+    const apel = async (k: string, b: string, q: CerereChat) => { cereri.push(q); return apelOk(k, b, q); };
     const r = await incalzeste({ DB: env.DB, FISIERE: env.FISIERE, DEEPSEEK_API_KEY: "x" }, c.id, apel);
     expect(r).toMatchObject({ stare: "ok", mod: "integral" });
     expect(cereri[0]!.context).toContain("=== Codul penal | pag. 1 ===");
@@ -44,7 +44,7 @@ describe("incalzire", () => {
     await seteazaSetare(env.DB, "model", "deepseek-flash");
     await seteazaSetare(env.DB, "incalzire", ` ${c.id} , lipsa `);
     expect(listaIncalzire(" a, b ,,")).toEqual(["a", "b"]);
-    const cade = async (): Promise<RaspunsZai> => { throw new Error("pică"); };
+    const cade = async (): Promise<RaspunsModel> => { throw new Error("pică"); };
     const r = await incalzesteToate({ DB: env.DB, FISIERE: env.FISIERE, DEEPSEEK_API_KEY: "x" }, cade);
     expect(r).toEqual([{ catalog: c.id, stare: "eroare", mesaj: "pică" }, { catalog: "lipsa", stare: "sarit", motiv: expect.any(String) }]);
     const n = await env.DB.prepare("SELECT count(*) AS n FROM intrebari WHERE stare = 'eroare'").first<{ n: number }>();

@@ -4,8 +4,8 @@ import { env } from "cloudflare:workers";
 import Base from "../../layouts/Base.astro";
 import Suma from "../../components/Suma.astro";
 import {
-  cereriClaudeLuna, cheltuitClaudeLuna, citesteBuget, citesteBugetClaude, citestePlafonClaude, citesteSetare, costUltimele30Zile, crediteUltimele7Zile, fmtCost,
-  fmtCredite, limitaImplicita, modelCorector, modelRezerva, raportUtilizatori,
+  cereriClaudeLuna, cheltuitClaudeLuna, citesteBuget, citesteBugetClaude, citestePlafonClaude, citesteSetare, costUltimele30Zile, fmtCost,
+  limitaImplicita, modelCorector, modelRezerva, raportUtilizatori,
 } from "../../lib/consum";
 import { aziChisinau, fmtMoment, fmtZi } from "../../lib/data";
 import { cursUsd } from "../../lib/curs";
@@ -13,12 +13,11 @@ import { LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, MODELE, MODELE_CHAT, PLAFON_CLAUDE_
 import { textVarf } from "../../lib/varf";
 import { listeazaCataloage } from "../../lib/db";
 import { listaIncalzire } from "../../lib/incalzire";
-import { cotaZai } from "../../lib/zai";
 
 const azi = aziChisinau();
-const [raport, limita, model, cost30, credite7, buget, curs, modelCor] = await Promise.all([
+const [raport, limita, model, cost30, buget, curs, modelCor] = await Promise.all([
   raportUtilizatori(env.DB, azi), limitaImplicita(env.DB), citesteSetare(env.DB, "model"), costUltimele30Zile(env.DB, azi),
-  crediteUltimele7Zile(env.DB, azi), citesteBuget(env.DB), cursUsd(env.DB, azi), modelCorector(env.DB),
+  citesteBuget(env.DB), cursUsd(env.DB, azi), modelCorector(env.DB),
 ]);
 const [bugetClaude, plafonClaude, cheltuitClaude, rezerva, cereriClaude] = await Promise.all([
   citesteBugetClaude(env.DB), citestePlafonClaude(env.DB), cheltuitClaudeLuna(env.DB, azi.slice(0, 7)), modelRezerva(env.DB),
@@ -28,15 +27,10 @@ const ramasClaude = Math.max(0, plafonClaude * 1_000_000 - cheltuitClaude);
 const numeModel = (m: string) => TARIFE[m]?.eticheta.split(" · ")[0] ?? m;
 const MODELE_REZERVA = MODELE_CHAT.filter((m) => motorModel(m) !== "claude");
 const plafonAtins = cheltuitClaude >= plafonClaude * 1_000_000;
-const motor = motorModel(model) ?? "gemini";
-// Cota reala a planului (include si Claude Code), de la Z.AI; null daca nu raspunde sau motorul nu e Z.AI.
-const cota = motor === "zai" && env.ZAI_API_KEY ? await cotaZai(env.ZAI_API_KEY) : null;
-// Planul Lite Z.AI: 2.000 de credite la 5 ore, 10.000 pe saptamana, pentru toti la un loc.
-const COTA_SAPTAMANA = cota?.ferestre.find((f) => f.eticheta === "săpt.")?.total ?? 10_000;
+const motor = motorModel(model);
 const descriereModel = (m: string) => {
   const t = TARIFE[m]!;
-  const tarif = `${t.intrare.toFixed(2)} / ${t.iesire.toFixed(2)} $ per M tokeni` + (t.intrare_cache ? ` (din cache ${t.intrare_cache.toFixed(4)})` : "");
-  return t.credite ? `${t.eticheta} · ${tarif} orientativ · credite ×${t.credite.intrare} / ×${t.credite.iesire}` : `${t.eticheta} · ${tarif}`;
+  return `${t.eticheta} · ${t.intrare.toFixed(2)} / ${t.iesire.toFixed(2)} $ per M tokeni` + (t.intrare_cache ? ` (din cache ${t.intrare_cache.toFixed(4)})` : "");
 };
 const culegeri = (await listeazaCataloage(env.DB)).filter((c) => c.stare !== "arhivat");
 const incalzite = new Set(listaIncalzire(await citesteSetare(env.DB, "incalzire")));
@@ -55,11 +49,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
       <span><strong>{totalAzi}</strong> întrebări azi</span>
       <span><strong>{total30}</strong> în 30 de zile</span>
       <span><strong><Suma microdolari={cost30} curs={curs} /></strong> cost în 30 de zile</span>
-      <span><strong>{fmtCredite(credite7)}</strong> credite Z.AI în 7 zile, din {fmtCredite(COTA_SAPTAMANA)}</span>
       <span title="chat și corector, în luna calendaristică (fusul Chișinăului), la tarifele publice Anthropic"><strong>{fmtCost(cheltuitClaude)}</strong> pe Claude luna aceasta, din {plafonClaude} $ · {plafonAtins ? "plafon atins" : <>rămas <strong>{fmtCost(ramasClaude)}</strong></>}</span>
-      {cota && cota.ferestre.map((f) => (
-        <span title={`se resetează ${fmtMoment(f.reset)}`}><strong>{f.procent} %</strong> din cota pe {f.eticheta} ({fmtCredite(f.folosit)} din {fmtCredite(f.total)}, planul {cota.nivel})</span>
-      ))}
     </div>
   </header>
 
@@ -84,7 +74,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
       </select>
     </label>
     <label>
-      <span>Buget context (caractere) · Z.AI, DeepSeek</span>
+      <span>Buget context DeepSeek (caractere)</span>
       <input name="buget_context" type="number" min={LIMITA_BUGET_MIN} max={LIMITA_BUGET_MAX} step="10000" value={buget} required />
     </label>
     <label>
@@ -113,14 +103,10 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
     <button class="buton" type="submit">Salvează setările</button>
   </form>
   <p class="lamurire sus">
-    Motorul activ: <strong>{motor === "zai" ? "Z.AI (GLM)" : motor === "deepseek" ? "DeepSeek" : motor === "claude" ? "Claude" : "Gemini File Search"}</strong>.{" "}
+    Motorul activ: <strong>{motor === "claude" ? "Claude" : motor === "deepseek" ? "DeepSeek" : "necunoscut (alege un model)"}</strong>.{" "}
     {motor === "claude"
       ? `Claude primește doar paginile care se potrivesc cu întrebarea, până la bugetul de context Claude (300.000 de caractere ≈ 100 k tokeni ≈ 0,22 $ pe întrebare la Sonnet 5.5). Se plătește din creditele API lunare ale abonamentului. Când cheltuiala Claude a lunii (chat și corector) ajunge la plafon, chatul răspunde cu modelul de rezervă până la 1 ale lunii următoare.${plafonAtins ? " Plafonul e atins acum: răspunde modelul de rezervă." : ""}`
-      : motor === "zai"
-      ? "GLM primește textul întregii culegeri dacă încape în buget, altfel paginile care se potrivesc cu întrebarea. La 3.000.000 de caractere (≈ 1 M tokeni) o întrebare pe GLM-5.3-Flash costă ≈ 230 de credite din cota planului Lite (2.000 la 5 ore, 10.000 pe săptămână, pentru toți)."
-      : motor === "deepseek"
-        ? "DeepSeek primește textul întregii culegeri dacă încape în buget, altfel paginile care se potrivesc cu întrebarea. Plata e per token, fără cotă; cache-ul e automat pe prefix, deci de la a doua întrebare pe aceeași culegere documentele se plătesc la prețul de cache (0,0028 $ per M în loc de 0,14 $). Jurnalul arată costul real, cu tokenii din cache."
-        : "Modelele GLM și DeepSeek cer textul extras din PDF-uri (se face la upload sau din „Extrage textul” în pagina culegerii)."}
+      : "DeepSeek primește textul întregii culegeri dacă încape în buget, altfel paginile care se potrivesc cu întrebarea. Plata e per token, fără cotă; cache-ul e automat pe prefix, deci de la a doua întrebare pe aceeași culegere documentele se plătesc la prețul de cache. Jurnalul arată costul real, cu tokenii din cache."}
   </p>
   {(() => { const v = textVarf(stareVarf(model)); return v && <p class:list={["lamurire", "varf", { activ: v.activ }]}>{v.text}</p>; })()}
 
@@ -159,7 +145,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
         <thead>
           <tr>
             <th>E-mail</th><th class="nr">Azi</th><th class="nr">7 zile</th><th class="nr">30 zile</th><th class="nr">Total</th><th class="nr" title="documente corectate în ultimele 30 de zile">Doc. 30 z.</th>
-            <th class="nr">Tokeni</th><th class="nr">Cost 30 z.</th><th class="nr">Credite 7 z.</th><th>Ultima vizită</th><th>Limită / zi</th><th>Blocat</th><th>Notă</th><th></th>
+            <th class="nr">Tokeni</th><th class="nr">Cost 30 z.</th><th>Ultima vizită</th><th>Limită / zi</th><th>Blocat</th><th>Notă</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -174,7 +160,6 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
               <td class="nr">{r.documente_30}</td>
               <td class="nr" title={`${r.tokens_intrare} intrare · ${r.tokens_iesire} ieșire`}>{fmtTokeni(r.tokens_intrare + r.tokens_iesire)}</td>
               <td class="nr"><Suma microdolari={r.cost_30_microdolari} curs={curs} /></td>
-              <td class="nr" title={`${fmtCredite(r.credite_30)} în 30 de zile`}>{fmtCredite(r.credite_7)}</td>
               <td>{r.ultima_vizita ? fmtZi(r.ultima_vizita) : "—"}</td>
               <td><input form={`f-${r.email}`} name="limita_zi" type="number" min="0" max="10000" value={r.limita_zi ?? ""} placeholder={`implicit ${limita}`} aria-label="Limită pe zi" /></td>
               <td><label class="bifa"><input form={`f-${r.email}`} name="blocat" type="checkbox" value="1" checked={r.blocat === 1} /> blocat</label></td>
@@ -187,8 +172,7 @@ const fmtTokeni = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).
     </div>
   )}
   <p class="lamurire">
-    Costul e estimat din tokenii raportați de model și tariful lui public, afișat în lei la cursul oficial BNM al zilei (dolarii și cursul, la trecerea mouse-ului); pe GLM se plătește din planul de coding Z.AI, în credite:
-    (tokeni intrare × 2,3 + din cache × 0,56 + ieșire × 8) / 10.000 la Flash. Costul include și documentele trecute prin corector, care nu au limită pe zi. Limita goală înseamnă limita implicită.
+    Costul e estimat din tokenii raportați de model și tariful lui public, afișat în lei la cursul oficial BNM al zilei (dolarii și cursul, la trecerea mouse-ului). Costul include și documentele trecute prin corector, care nu au limită pe zi. Limita goală înseamnă limita implicită.
     Un utilizator blocat nu mai poate deschide nicio pagină; adminul nu poate fi blocat.
   </p>
 </Base>

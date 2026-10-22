@@ -1,16 +1,14 @@
 // POST /api/chat { catalog, intrebare, istoric: [{intrebare, raspuns}] }
-// Intrebarea unui coleg catre catalogul dat: verifica limita zilnica, intreaba motorul ales in Admin
-// (Gemini File Search, sau Z.AI / DeepSeek / Claude cu textul extras; Claude doar sub plafonul lunar, altfel
-// modelul de rezerva), scrie in jurnal si intoarce raspunsul
-// cu citari si cate intrebari mai are azi.
+// Intrebarea unui coleg catre catalogul dat: verifica limita zilnica, intreaba modelul ales in Admin
+// cu textul extras (Claude doar sub plafonul lunar, altfel modelul de rezerva), scrie in jurnal si
+// intoarce raspunsul cu citari si cate intrebari mai are azi.
 //
 // Blocarea si identitatea sunt in middleware. Istoricul vine de la client (stateless).
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { citesteCatalog, listeazaSurse } from "../../../lib/db";
 import { alegeModelChat, inregistreazaIntrebare, intrebariAzi, limitaPentru, stareClaudeLuna } from "../../../lib/consum";
-import { EroareGemini, type Schimb } from "../../../lib/gemini";
-import { EroareZai } from "../../../lib/zai";
+import { EroareModel, type Schimb } from "../../../lib/deepseek";
 import { cheieMotor, disponibilePentruChat, raspunde } from "../../../lib/motor";
 import { citesteJson, eroare, json } from "../../../lib/api";
 import { aziChisinau } from "../../../lib/data";
@@ -37,9 +35,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const zi = aziChisinau();
   const { model, rezerva, buget } = await alegeModelChat(env.DB, zi.slice(0, 7));
-  const motor = motorModel(model) ?? "gemini";
+  const motor = motorModel(model);
+  if (!motor) return eroare(503, "Modelul de chat nu e ales încă în Admin.");
   const surse = await listeazaSurse(env.DB, catalog.id);
-  if (disponibilePentruChat(motor, catalog.magazin, surse) === 0) {
+  if (disponibilePentruChat(surse) === 0) {
     return eroare(409, "Culegerea nu are încă documente pregătite pentru chat.");
   }
   if (!cheieMotor(env, motor)) return eroare(503, "Chatul nu este configurat încă pe server.");
@@ -49,7 +48,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (folosite >= limita) {
     await inregistreazaIntrebare(env.DB, {
       email, catalog_id: catalog.id, zi, intrebare, raspuns: "", citari: [], model: "",
-      tokens_intrare: 0, tokens_iesire: 0, cost_microdolari: 0, credite: 0, stare: "refuzat", durata_ms: null,
+      tokens_intrare: 0, tokens_iesire: 0, cost_microdolari: 0, stare: "refuzat", durata_ms: null,
     });
     return json({ eroare: `Ai atins limita de ${limita} întrebări pe zi. Revino mâine.`, ramase: 0, limita }, 429);
   }
@@ -61,7 +60,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     await inregistreazaIntrebare(env.DB, {
       email, catalog_id: catalog.id, zi, intrebare, raspuns: r.text, citari: r.citari, model,
       tokens_intrare: r.tokens_intrare, tokens_iesire: r.tokens_iesire,
-      cost_microdolari: r.cost_microdolari, credite: r.credite, stare: "ok", durata_ms,
+      cost_microdolari: r.cost_microdolari, stare: "ok", durata_ms,
     });
     // Doar adminul vede costul raspunsului si, la Claude, cat a mai ramas din plafonul lunii (in $).
     const pentruAdmin = !locals.admin ? {} : {
@@ -73,9 +72,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const mesaj = (e as Error).message;
     await inregistreazaIntrebare(env.DB, {
       email, catalog_id: catalog.id, zi, intrebare, raspuns: `[eroare] ${mesaj}`, citari: [], model,
-      tokens_intrare: 0, tokens_iesire: 0, cost_microdolari: 0, credite: 0, stare: "eroare", durata_ms: Date.now() - start,
+      tokens_intrare: 0, tokens_iesire: 0, cost_microdolari: 0, stare: "eroare", durata_ms: Date.now() - start,
     });
-    const status = (e instanceof EroareGemini || e instanceof EroareZai) && e.status === 503 ? 503 : 502;
+    const status = e instanceof EroareModel && e.status === 503 ? 503 : 502;
     return eroare(status, `Nu am putut obține răspunsul: ${mesaj}`);
   }
 };

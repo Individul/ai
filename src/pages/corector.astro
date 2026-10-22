@@ -17,7 +17,7 @@ import { textVarf } from "../lib/varf";
 const [model, documente, curs] = await Promise.all([
   modelCorector(env.DB), corectariUtilizator(env.DB, Astro.locals.email, 20), cursUsd(env.DB, aziChisinau()),
 ]);
-const motor = motorModel(model) ?? "gemini";
+const motor = motorModel(model) ?? "deepseek";
 const configurat = !!cheieMotor(env, motor);
 const varf = textVarf(stareVarf(model));
 const descriere = (d: (typeof documente)[number]) => {

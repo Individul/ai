@@ -34,7 +34,7 @@ const grupuri = TIPURI_SURSA
                   {s.numar && <span>nr. {s.numar}</span>}
                   {s.data_emiterii && <span>{fmtZi(s.data_emiterii)}</span>}
                   {s.fisier_nume && <span>PDF, {fmtMarime(s.fisier_marime ?? 0)}</span>}
-                  {s.fisier_nume && s.indexare === "gata" && <span class="in-chat">în chat</span>}
+                  {s.fisier_nume && (s.text_caractere ?? 0) > 0 && <span class="in-chat">în chat</span>}
                 </span>
               </div>
               <div class="actiuni">

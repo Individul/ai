@@ -101,7 +101,7 @@ describe("continutLocal", () => {
 
 describe("cerereVerificare", () => {
   it("trimite tot documentul cu promptul de verificare si schema celor doua liste", () => {
-    const c = cerereVerificare("claude-opus-5", [{ i: 1, text: "Penitenciarul nr.6", fel: "antet" }]);
+    const c = cerereVerificare("claude-opus-5-5", [{ i: 1, text: "Penitenciarul nr.6", fel: "antet" }]);
     expect(c.sistem).toBe(PROMPT_VERIFICARE);
     expect(JSON.parse(c.utilizator)).toEqual({ paragrafe: [{ i: 1, unde: "antet", text: "Penitenciarul nr.6" }] });
     const schema = c.schema as { required: string[]; properties: Record<string, { items?: { properties?: { tip?: { enum?: string[] } } } }> };

@@ -22,56 +22,50 @@ export const ETICHETE_PICTOGRAMA: Record<Pictograma, string> = {
   carte: "Carte", balanta: "Balanță", ciocan: "Ciocan", document: "Document", lacat: "Lacăt", cheie: "Cheie",
 };
 
-// Modelele disponibile in Admin; modelul decide motorul. Tarifele: $ per milion de tokeni, sept. 2026
-// (3.8 Flash creste la 1,50 / 7,50 de la 1 ian. 2027). Modelele Z.AI (GLM) se platesc din planul de
-// coding, masurat in credite: (intrare x i + cache x c + iesire x o) / 10.000 (docs.z.ai/devpack/overview);
-// tariful lor in $ e cel public (api.z.ai), doar orientativ.
-// DeepSeek (sept. 2026): plata per token, cache automat pe prefix, tokenii din cache la intrare_cache.
-// `deepseek-flash` e numele din API pentru V4.1 Flash (10 sept. 2026); V4 Flash / V4 Pro sunt retrase si
-// redirectionate spre el. Tarifele DeepSeek sunt cele de la orele libere; la orele de varf (`varf`) sunt
-// duble. Un model `retras` ramane in tabel pentru costul din jurnal, dar nu mai apare in Admin.
-export type Motor = "gemini" | "zai" | "deepseek" | "claude";
+// Modelele disponibile in Admin; modelul decide motorul. Tarifele: $ per milion de tokeni.
+// Din 22 oct. 2026 raman doar trei (decizia lui Dumitru: chatul pe Claude Sonnet 5.5, restul scos din cod):
+// Gemini (File Search), GLM (Z.AI) si Claude-urile vechi (Haiku 4.5, Sonnet 5, Opus 5) nu mai exista.
+// Jurnalul pastreaza costul calculat la momentul cererii, deci randurile vechi nu au nevoie de tarif.
+// DeepSeek: plata per token, cache automat pe prefix, tokenii din cache la intrare_cache. `deepseek-flash`
+// e numele din API pentru V4.1 Flash; tariful e cel de la orele libere, iar la orele de varf (`varf`) e dublu.
+// Claude (platform.claude.com/docs/en/about-claude/pricing): plata per token, cache la 0,1x, se plateste din
+// creditele API lunare ale abonamentului Max.
+export type Motor = "deepseek" | "claude";
 export interface Tarif {
   motor: Motor;
   intrare: number;
   intrare_cache?: number;   // $ per milion pentru tokenii de intrare veniti din cache; lipsa = pret intreg
   iesire: number;
   eticheta: string;
-  credite?: { intrare: number; cache: number; iesire: number };
   // Orele de varf (UTC), cu factorul de pret; `doar_lucratoare` = luni-vineri.
   varf?: { factor: number; ore_utc: [number, number][]; doar_lucratoare: boolean };
-  retras?: boolean;
-  // Doar pentru corector: pe chat, contextul culegerilor ar costa cativa dolari pe intrebare. Claude Sonnet 5.5
-  // e singurul Claude de chat (22 oct. 2026): context filtrat (`buget_context_claude`) si plafon lunar in $.
+  // Doar pentru corector: la chat, Opus ar costa prea mult pe intrebare.
   doar_corector?: boolean;
   // Claude: output_config.effort (adancimea gandirii adaptive); lipsa = modelul nu il accepta.
   efort?: "low" | "medium" | "high";
 }
 export const TARIFE: Record<string, Tarif> = {
-  "gemini-3.5-flash-lite": { motor: "gemini", intrare: 0.30, iesire: 2.50, eticheta: "Gemini 3.5 Flash-Lite (cel mai ieftin)" },
-  "gemini-3.8-flash": { motor: "gemini", intrare: 0.75, iesire: 3.75, eticheta: "Gemini 3.8 Flash (mai bun)" },
-  "gemini-3.5-flash": { motor: "gemini", intrare: 1.50, iesire: 9.00, eticheta: "Gemini 3.5 Flash" },
-  "glm-5.3-flash": { motor: "zai", intrare: 0.15, intrare_cache: 0.03, iesire: 0.50, eticheta: "GLM-5.3-Flash · Z.AI, planul de coding", credite: { intrare: 2.3, cache: 0.56, iesire: 8 } },
-  "glm-5.3": { motor: "zai", intrare: 1.40, intrare_cache: 0.26, iesire: 4.40, eticheta: "GLM-5.3 · Z.AI, planul de coding (scump în credite)", credite: { intrare: 6.9, cache: 1.7, iesire: 24 } },
+  "claude-sonnet-5-5": { motor: "claude", intrare: 2.00, intrare_cache: 0.20, iesire: 10.00, eticheta: "Claude Sonnet 5.5 · Anthropic, cu gândire; la chat context filtrat și plafon lunar", efort: "medium" },
+  "claude-opus-5-5": { motor: "claude", intrare: 4.00, intrare_cache: 0.20, iesire: 20.00, eticheta: "Claude Opus 5.5 · Anthropic, cel mai atent, cu gândire (doar corector)", doar_corector: true, efort: "medium" },
   "deepseek-flash": {
     motor: "deepseek", intrare: 0.15, intrare_cache: 0.003, iesire: 0.60,
     eticheta: "DeepSeek V4.1 Flash · plată per token, cache automat; preț dublu la orele de vârf",
     varf: { factor: 2, ore_utc: [[1, 4], [6, 10]], doar_lucratoare: true },
   },
-  "deepseek-v4-flash": { motor: "deepseek", intrare: 0.14, intrare_cache: 0.0028, iesire: 0.28, eticheta: "DeepSeek V4 Flash (retras, redirecționat spre 4.1)", retras: true },
-  // Claude (Anthropic, sept. 2026, platform.claude.com/docs/en/about-claude/pricing): plata per token,
-  // cache la 0,1x. Opus 5 si Sonnet 5 gandesc implicit; Haiku 4.5 nu.
-  "claude-haiku-4-5-20251001": { motor: "claude", intrare: 1.00, intrare_cache: 0.10, iesire: 5.00, eticheta: "Claude Haiku 4.5 · Anthropic, rapid, fără gândire (doar corector)", doar_corector: true },
-  "claude-sonnet-5": { motor: "claude", intrare: 2.00, intrare_cache: 0.20, iesire: 10.00, eticheta: "Claude Sonnet 5 · Anthropic, cu gândire (doar corector)", doar_corector: true, efort: "medium" },
-  "claude-opus-5": { motor: "claude", intrare: 5.00, intrare_cache: 0.50, iesire: 25.00, eticheta: "Claude Opus 5 · Anthropic, cel mai atent, cu gândire (doar corector)", doar_corector: true, efort: "medium" },
-  // Seria 5.5 (oct. 2026): Sonnet 5.5 la acelasi pret ca Sonnet 5, Opus 5.5 mai ieftin decat Opus 5. Se platesc
-  // din creditele API lunare ale abonamentului Max (22 oct. 2026, decizia lui Dumitru: Sonnet 5.5 la chat).
-  "claude-sonnet-5-5": { motor: "claude", intrare: 2.00, intrare_cache: 0.20, iesire: 10.00, eticheta: "Claude Sonnet 5.5 · Anthropic, cu gândire; la chat context filtrat și plafon lunar", efort: "medium" },
-  "claude-opus-5-5": { motor: "claude", intrare: 4.00, intrare_cache: 0.20, iesire: 20.00, eticheta: "Claude Opus 5.5 · Anthropic, cel mai atent, cu gândire (doar corector)", doar_corector: true, efort: "medium" },
 };
-// Modelele selectabile in Admin (fara cele retrase): toate la corector, la chat fara cele `doar_corector`.
-export const MODELE = Object.keys(TARIFE).filter((m) => !TARIFE[m]!.retras);
+// Modelele selectabile in Admin: toate la corector, la chat fara cele `doar_corector`.
+export const MODELE = Object.keys(TARIFE);
 export const MODELE_CHAT = MODELE.filter((m) => !TARIFE[m]!.doar_corector);
+
+// Costul unei cereri in microdolari, la tariful public al modelului: tokenii din cache la intrare_cache,
+// iar la orele de varf (DeepSeek) inmultit cu factorul. 0 pentru un model necunoscut.
+export function costMicrodolari(model: string, tokensIntrare: number, tokensIesire: number, tokensCache = 0, moment: Date = new Date()): number {
+  const t = TARIFE[model];
+  if (!t) return 0;
+  const cache = Math.min(Math.max(tokensCache, 0), tokensIntrare);
+  const f = factorTarif(model, moment);
+  return Math.round(((tokensIntrare - cache) * t.intrare + cache * (t.intrare_cache ?? t.intrare) + tokensIesire * t.iesire) * f);
+}
 
 // Starea orelor de varf pentru pagini: daca acum e varf, pana cand (UTC, ca Date) si intervalele.
 // `null` pentru modelele fara ore de varf. Orele din intervale sunt UTC; paginile le formateaza in fus.
@@ -102,10 +96,10 @@ export function factorTarif(model: string, moment: Date = new Date()): number {
 }
 export function esteModel(s: string): boolean { return s in TARIFE; }
 export function motorModel(model: string): Motor | null { return TARIFE[model]?.motor ?? null; }
-export const NUME_MOTOR: Record<Motor, string> = { gemini: "Gemini", zai: "Z.AI", deepseek: "DeepSeek", claude: "Claude" };
+export const NUME_MOTOR: Record<Motor, string> = { deepseek: "DeepSeek", claude: "Claude" };
 
-// Bugetul de context pentru GLM (caractere trimise modelului), setabil din Admin.
-// 3 M caractere ~ 1 M tokeni, plafonul GLM-5.3 / 5.3-Flash.
+// Bugetul de context pentru DeepSeek (caractere trimise modelului), setabil din Admin.
+// 3 M caractere ~ 1 M tokeni.
 export const LIMITA_BUGET_MIN = 10_000;
 export const LIMITA_BUGET_MAX = 3_000_000;
 

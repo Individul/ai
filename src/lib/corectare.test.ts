@@ -17,9 +17,9 @@ describe("jurnalul corectarilor", () => {
     const c = await creeazaCorectare(env.DB, { email: A, zi: ZI, fisier: "raport.docx", mod: "corectura", caractere: 12_000, model: "deepseek-flash" });
     expect(c).toMatchObject({ stare: "in_curs", loturi: 0, cost_microdolari: 0 });
     await Promise.all([
-      adaugaLaCorectare(env.DB, c.id, { caractere: 4000, tokens_intrare: 1000, tokens_iesire: 200, cost_microdolari: 300, credite: 0, reusit: true }),
-      adaugaLaCorectare(env.DB, c.id, { caractere: 4000, tokens_intrare: 500, tokens_iesire: 100, cost_microdolari: 150, credite: 0, reusit: true }),
-      adaugaLaCorectare(env.DB, c.id, { caractere: 4000, tokens_intrare: 50, tokens_iesire: 10, cost_microdolari: 20, credite: 0, reusit: false }),
+      adaugaLaCorectare(env.DB, c.id, { caractere: 4000, tokens_intrare: 1000, tokens_iesire: 200, cost_microdolari: 300, reusit: true }),
+      adaugaLaCorectare(env.DB, c.id, { caractere: 4000, tokens_intrare: 500, tokens_iesire: 100, cost_microdolari: 150, reusit: true }),
+      adaugaLaCorectare(env.DB, c.id, { caractere: 4000, tokens_intrare: 50, tokens_iesire: 10, cost_microdolari: 20, reusit: false }),
     ]);
     expect(await incheieCorectare(env.DB, c.id, { stare: "ok", corecturi: 9, aplicate: 8, mesaj: null, durata_ms: 5000 })).toBe(true);
     expect(await incheieCorectare(env.DB, c.id, { stare: "eroare", corecturi: 0, aplicate: 0, mesaj: "x", durata_ms: 1 })).toBe(false);
@@ -30,7 +30,7 @@ describe("jurnalul corectarilor", () => {
     const catalog = await creeazaCatalog(env.DB, "penala", { titlu: "Legislația penală", stare: "activ" });
     await inregistreazaIntrebare(env.DB, {
       email: A, catalog_id: catalog.id, zi: ZI, intrebare: "?", raspuns: "!", citari: [], model: "deepseek-flash",
-      tokens_intrare: 10, tokens_iesire: 5, cost_microdolari: 1000, credite: 0, stare: "ok", durata_ms: 1,
+      tokens_intrare: 10, tokens_iesire: 5, cost_microdolari: 1000, stare: "ok", durata_ms: 1,
     });
     await creeazaCorectare(env.DB, { email: B, zi: ZI, fisier: "nota.docx", mod: "verificare", caractere: 100, model: "deepseek-flash" });
 
@@ -48,8 +48,10 @@ describe("jurnalul corectarilor", () => {
 
   it("modelul corectorului vine din setari, cu revenire la implicit", async () => {
     expect(await modelCorector(env.DB)).toBe("deepseek-flash");
-    await seteazaSetare(env.DB, "model_corector", "gemini-3.8-flash");
-    expect(await modelCorector(env.DB)).toBe("gemini-3.8-flash");
+    await seteazaSetare(env.DB, "model_corector", "claude-opus-5-5");
+    expect(await modelCorector(env.DB)).toBe("claude-opus-5-5");
+    await seteazaSetare(env.DB, "model_corector", "gemini-3.8-flash");   // scos din aplicatie
+    expect(await modelCorector(env.DB)).toBe("deepseek-flash");
     await seteazaSetare(env.DB, "model_corector", "nu-exista");
     expect(await modelCorector(env.DB)).toBe("deepseek-flash");
   });
@@ -69,30 +71,29 @@ describe("corecteazaLot", () => {
       cereri.push(args);
       return { text: raspuns, tokens_intrare: 1000, tokens_cache: 0, tokens_iesire: 100 };
     };
-    const r = await corecteazaLot({ DB: env.DB, FISIERE: env.FISIERE, GEMINI_API_KEY: "g" }, "gemini-3.5-flash-lite", [{ i: 4, text: "insa" }], apel);
-    expect(r).toEqual({
+    const r = await corecteazaLot({ DB: env.DB, FISIERE: env.FISIERE, DEEPSEEK_API_KEY: "d" }, "deepseek-flash", [{ i: 4, text: "insa" }], apel);
+    expect(r).toMatchObject({
       corecturi: [{ i: 4, vechi: "insa", nou: "însă", tip: "ortografie", motiv: "Se scrie cu î și ă." }],
-      tokens_intrare: 1000, tokens_cache: 0, tokens_iesire: 100, cost_microdolari: 550, credite: 0,
+      tokens_intrare: 1000, tokens_cache: 0, tokens_iesire: 100,
     });
-    expect(cereri[0]!.slice(0, 2)).toEqual(["gemini", "g"]);
-    expect(cereri[0]![3]).toMatchObject({ model: "gemini-3.5-flash-lite", sistem: PROMPT_CORECTOR });
+    // 1000 x 0,15 + 100 x 0,60 = 210 microdolari; dublu la orele de varf DeepSeek
+    expect([210, 420]).toContain(r.cost_microdolari);
+    expect(cereri[0]!.slice(0, 3)).toEqual(["deepseek", "d", "https://api.deepseek.com"]);
+    expect(cereri[0]![3]).toMatchObject({ model: "deepseek-flash", sistem: PROMPT_CORECTOR });
 
-    await corecteazaLot({ DB: env.DB, FISIERE: env.FISIERE, DEEPSEEK_API_KEY: "d" }, "deepseek-flash", [{ i: 4, text: "insa" }], apel);
-    expect(cereri[1]!.slice(0, 3)).toEqual(["deepseek", "d", "https://api.deepseek.com"]);
-
-    // Claude: cheia Anthropic, schema impusa, costul la tariful Sonnet 5 (2 $ / 10 $ per M)
-    const c = await corecteazaLot({ DB: env.DB, FISIERE: env.FISIERE, ANTHROPIC_API_KEY: "a" }, "claude-sonnet-5", [{ i: 4, text: "insa" }], apel);
-    expect(cereri[2]!.slice(0, 3)).toEqual(["claude", "a", "https://api.anthropic.com"]);
-    expect(cereri[2]![3].schema).toBeDefined();
+    // Claude: cheia Anthropic, schema impusa, costul la tariful Sonnet 5.5 (2 $ / 10 $ per M)
+    const c = await corecteazaLot({ DB: env.DB, FISIERE: env.FISIERE, ANTHROPIC_API_KEY: "a" }, "claude-sonnet-5-5", [{ i: 4, text: "insa" }], apel);
+    expect(cereri[1]!.slice(0, 3)).toEqual(["claude", "a", "https://api.anthropic.com"]);
+    expect(cereri[1]![3].schema).toBeDefined();
     expect(c.cost_microdolari).toBe(3000);
   });
 
   it("fara cheie da 503; un raspuns ilizibil poarta consumul, ca sa intre in jurnal", async () => {
     await expect(corecteazaLot({ DB: env.DB, FISIERE: env.FISIERE }, "deepseek-flash", [{ i: 0, text: "x" }])).rejects.toMatchObject({ status: 503 });
     const apel: ApelText = async () => ({ text: "Documentul e corect.", tokens_intrare: 1000, tokens_cache: 0, tokens_iesire: 100 });
-    const e = await corecteazaLot({ DB: env.DB, FISIERE: env.FISIERE, GEMINI_API_KEY: "g" }, "gemini-3.5-flash-lite", [{ i: 0, text: "x" }], apel).catch((x) => x);
+    const e = await corecteazaLot({ DB: env.DB, FISIERE: env.FISIERE, ANTHROPIC_API_KEY: "a" }, "claude-sonnet-5-5", [{ i: 0, text: "x" }], apel).catch((x) => x);
     expect(e).toBeInstanceOf(EroareCorectare);
-    expect((e as EroareCorectare).consum).toMatchObject({ tokens_intrare: 1000, cost_microdolari: 550 });
+    expect((e as EroareCorectare).consum).toMatchObject({ tokens_intrare: 1000, cost_microdolari: 3000 });
   });
 });
 
@@ -138,7 +139,7 @@ describe("modelele Claude la chat", () => {
   it("raspunde refuza modelele doar pentru corector", async () => {
     const catalog = await creeazaCatalog(env.DB, "penala", { titlu: "Legislația penală", stare: "activ" });
     await expect(raspunde({ DB: env.DB, FISIERE: env.FISIERE, ANTHROPIC_API_KEY: "a" }, {
-      model: "claude-sonnet-5", catalog, istoric: [], intrebare: "?", buget: 1000,
+      model: "claude-opus-5-5", catalog, istoric: [], intrebare: "?", buget: 1000,
     })).rejects.toMatchObject({ status: 409 });
   });
 });

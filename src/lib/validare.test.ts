@@ -89,31 +89,24 @@ describe("valideazaAudio", () => {
 });
 
 describe("modele si motoare", () => {
-  it("deduce motorul din model", () => {
-    expect(motorModel("gemini-3.5-flash-lite")).toBe("gemini");
-    expect(motorModel("glm-5.3-flash")).toBe("zai");
+  it("raman doar Claude Sonnet 5.5 (chat), Claude Opus 5.5 (corector) si DeepSeek V4.1 Flash", () => {
+    expect(MODELE).toEqual(["claude-sonnet-5-5", "claude-opus-5-5", "deepseek-flash"]);
+    expect(motorModel("claude-sonnet-5-5")).toBe("claude");
+    expect(motorModel("deepseek-flash")).toBe("deepseek");
+    expect(motorModel("gemini-3.5-flash-lite")).toBeNull();
+    expect(motorModel("glm-5.3-flash")).toBeNull();
     expect(motorModel("necunoscut")).toBeNull();
+    expect(NUME_MOTOR).toEqual({ deepseek: "DeepSeek", claude: "Claude" });
   });
 
-  it("modelele Z.AI au tariful public si multiplicatorii de credite ai planului de coding", () => {
-    expect(TARIFE["glm-5.3-flash"]).toMatchObject({ motor: "zai", intrare: 0.15, iesire: 0.5, credite: { intrare: 2.3, cache: 0.56, iesire: 8 } });
-    expect(TARIFE["glm-5.3"]).toMatchObject({ motor: "zai", intrare: 1.4, iesire: 4.4, credite: { intrare: 6.9, cache: 1.7, iesire: 24 } });
-    expect(TARIFE["gemini-3.5-flash-lite"]).toMatchObject({ motor: "gemini" });
-    expect(TARIFE["gemini-3.5-flash-lite"]).not.toHaveProperty("credite");
+  it("tarifele au pret de cache", () => {
+    expect(TARIFE["deepseek-flash"]).toMatchObject({ motor: "deepseek", intrare: 0.15, intrare_cache: 0.003, iesire: 0.6 });
+    expect(TARIFE["claude-sonnet-5-5"]).toMatchObject({ motor: "claude", intrare: 2, intrare_cache: 0.2, iesire: 10 });
   });
 
   it("bugetul de context are limite fixe", () => {
     expect(LIMITA_BUGET_MIN).toBe(10_000);
     expect(LIMITA_BUGET_MAX).toBe(3_000_000);
-  });
-});
-
-describe("motorul deepseek", () => {
-  it("deepseek-v4-flash are motorul deepseek, tarif cu pret de cache si un nume de afisat", () => {
-    expect(motorModel("deepseek-v4-flash")).toBe("deepseek");
-    expect(TARIFE["deepseek-v4-flash"]).toMatchObject({ motor: "deepseek", intrare: 0.14, intrare_cache: 0.0028, iesire: 0.28 });
-    expect(TARIFE["glm-5.3-flash"]).toMatchObject({ intrare_cache: 0.03 });
-    expect(NUME_MOTOR).toEqual({ gemini: "Gemini", zai: "Z.AI", deepseek: "DeepSeek", claude: "Claude" });
   });
 });
 
@@ -123,8 +116,6 @@ describe("factorTarif si MODELE", () => {
     expect(factorTarif("deepseek-flash", new Date("2026-09-10T04:00:00Z"))).toBe(1);
     expect(factorTarif("deepseek-flash", new Date("2026-09-10T09:59:00Z"))).toBe(2);
     expect(factorTarif("deepseek-flash", new Date("2026-09-13T08:00:00Z"))).toBe(1); // duminica
-    expect(factorTarif("gemini-3.5-flash-lite", new Date("2026-09-10T08:00:00Z"))).toBe(1);
-    expect(MODELE).toContain("deepseek-flash");
-    expect(MODELE).not.toContain("deepseek-v4-flash");
+    expect(factorTarif("claude-sonnet-5-5", new Date("2026-09-10T08:00:00Z"))).toBe(1);
   });
 });

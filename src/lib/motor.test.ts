@@ -2,31 +2,19 @@ import { describe, expect, it } from "vitest";
 import type { Sursa } from "./db";
 import { disponibilePentruChat } from "./motor";
 
-const s = (x: Partial<Sursa>): Sursa => ({ indexare: "neindexat", text_caractere: null, ...x }) as Sursa;
-const SURSE = [
-  s({ indexare: "gata" }),                            // doar Gemini
-  s({ indexare: "gata", text_caractere: 10 }),        // ambele
-  s({ indexare: "in_curs", text_caractere: 5 }),      // doar Z.AI
-  s({ indexare: "eroare", text_caractere: 0 }),       // PDF scanat: niciunul
-  s({ text_caractere: null }),                        // fara nimic
-];
+const s = (x: Partial<Sursa>): Sursa => ({ text_caractere: null, ...x }) as Sursa;
 
 describe("disponibilePentruChat", () => {
-  it("la Gemini numara sursele indexate, doar daca catalogul are magazin", () => {
-    expect(disponibilePentruChat("gemini", "fileSearchStores/x", SURSE)).toBe(2);
-    expect(disponibilePentruChat("gemini", null, SURSE)).toBe(0);
-  });
-
-  it("la Z.AI numara sursele cu text extras nevid, indiferent de magazin", () => {
-    expect(disponibilePentruChat("zai", null, SURSE)).toBe(2);
-    expect(disponibilePentruChat("zai", "fileSearchStores/x", [])).toBe(0);
+  it("numara doar sursele cu text extras nevid (PDF-urile scanate au 0)", () => {
+    expect(disponibilePentruChat([s({ text_caractere: 10 }), s({ text_caractere: 5 }), s({ text_caractere: 0 }), s({})])).toBe(2);
+    expect(disponibilePentruChat([])).toBe(0);
   });
 });
 
 import { env } from "cloudflare:workers";
 import { adaugaSursa, creeazaCatalog, seteazaFisierSursa, seteazaText } from "./db";
 import { scrieText } from "./text";
-import { EroareZai, type CerereZai, type RaspunsZai } from "./zai";
+import { EroareModel, type CerereChat, type RaspunsModel } from "./deepseek";
 import { raspunde } from "./motor";
 
 const SURSA = { tip: "ordin" as const, numar: null, data_emiterii: null, url: null };
@@ -47,75 +35,58 @@ async function catalogCuText() {
   return { catalog, cod, ord };
 }
 
-describe("raspunde pe Z.AI", () => {
-  const mediu = () => ({ DB: env.DB, FISIERE: env.FISIERE, ZAI_API_KEY: "test" });
+describe("raspunde pe DeepSeek", () => {
+  const mediu = () => ({ DB: env.DB, FISIERE: env.FISIERE, DEEPSEEK_API_KEY: "ds-test" });
 
-  it("citeste textele din R2, trimite tot cand incape, leaga citarile de surse si socoteste creditele", async () => {
+  it("citeste textele din R2, trimite tot cand incape, leaga citarile si socoteste costul pe tokenii din cache", async () => {
     const { catalog, ord } = await catalogCuText();
-    const cereri: CerereZai[] = [];
-    const apel = async (_cheie: string, _baza: string, c: CerereZai): Promise<RaspunsZai> => {
-      cereri.push(c);
-      return { text: "Marți și joi [Ordinul nr. 777, pag. 2].", tokens_intrare: 1000, tokens_cache: 0, tokens_iesire: 20 };
+    const cereri: { cheie: string; baza: string; c: CerereChat }[] = [];
+    const apel = async (cheie: string, baza: string, c: CerereChat): Promise<RaspunsModel> => {
+      cereri.push({ cheie, baza, c });
+      return { text: "Marți și joi [Ordinul nr. 777, pag. 2].", tokens_intrare: 1000, tokens_cache: 900, tokens_iesire: 20 };
     };
-    const r = await raspunde(mediu(), { model: "glm-5.3-flash", catalog, istoric: [], intrebare: "Când se predau pachetele?", buget: 1000 }, apel);
+    const r = await raspunde(mediu(), { model: "deepseek-flash", catalog, istoric: [], intrebare: "Când se predau pachetele?", buget: 1000 }, apel);
     expect(cereri).toHaveLength(1);
-    expect(cereri[0]!.context).toContain("=== Codul de executare | pag. 1 ===");
-    expect(cereri[0]!.context).toContain("=== Ordinul nr. 777 | pag. 2 ===");
-    expect(cereri[0]!.context).not.toContain("Scanat");
-    expect(r).toEqual({
+    expect(cereri[0]!.cheie).toBe("ds-test");
+    expect(cereri[0]!.baza).toBe("https://api.deepseek.com");
+    expect(cereri[0]!.c.context).toContain("=== Codul de executare | pag. 1 ===");
+    expect(cereri[0]!.c.context).toContain("=== Ordinul nr. 777 | pag. 2 ===");
+    expect(cereri[0]!.c.context).not.toContain("Scanat");
+    expect(r).toMatchObject({
       text: "Marți și joi [Ordinul nr. 777, pag. 2].",
       citari: [{ sursa_id: ord.id, titlu: "Ordinul nr. 777", pagina: 2 }],
-      tokens_intrare: 1000, tokens_cache: 0, tokens_iesire: 20, cost_microdolari: 160, credite: 0.25, mod: "integral",
+      tokens_intrare: 1000, tokens_cache: 900, tokens_iesire: 20, mod: "integral",
     });
+    // 100 x 0,15 + 900 x 0,003 + 20 x 0,60 = 29,7 -> 30 microdolari; dublu la orele de varf
+    expect([30, 59]).toContain(r.cost_microdolari);
   });
 
   it("la context prea lung reincearca o singura data, cu bugetul injumatatit", async () => {
     const { catalog } = await catalogCuText();
-    const cereri: CerereZai[] = [];
-    const apel = async (_c: string, _b: string, c: CerereZai): Promise<RaspunsZai> => {
+    const cereri: CerereChat[] = [];
+    const apel = async (_c: string, _b: string, c: CerereChat): Promise<RaspunsModel> => {
       cereri.push(c);
-      if (cereri.length === 1) throw new EroareZai(400, "Prompt exceeds max length", "1261");
+      if (cereri.length === 1) throw new EroareModel(400, "This model's maximum context length is 1048576 tokens");
       return { text: "ok", tokens_intrare: 10, tokens_cache: 0, tokens_iesire: 1 };
     };
-    const r = await raspunde(mediu(), { model: "glm-5.3-flash", catalog, istoric: [], intrebare: "pachete", buget: 1000 }, apel);
+    const r = await raspunde(mediu(), { model: "deepseek-flash", catalog, istoric: [], intrebare: "pachete", buget: 1000 }, apel);
     expect(cereri).toHaveLength(2);
     expect(cereri[1]!.context.length).toBeLessThan(cereri[0]!.context.length);
     expect(r.mod).toBe("filtrat");
 
-    const mereu = async (): Promise<RaspunsZai> => { throw new EroareZai(400, "Prompt exceeds max length", "1261"); };
-    await expect(raspunde(mediu(), { model: "glm-5.3-flash", catalog, istoric: [], intrebare: "x", buget: 1000 }, mereu)).rejects.toThrow(/exceeds/);
+    const mereu = async (): Promise<RaspunsModel> => { throw new EroareModel(400, "maximum context length exceeded"); };
+    await expect(raspunde(mediu(), { model: "deepseek-flash", catalog, istoric: [], intrebare: "x", buget: 1000 }, mereu)).rejects.toThrow(/context length/);
   });
 
-  it("fara cheie Z.AI raspunde 503", async () => {
+  it("fara cheie DeepSeek raspunde 503, chiar daca exista cheia Anthropic", async () => {
     const { catalog } = await catalogCuText();
-    await expect(raspunde({ DB: env.DB, FISIERE: env.FISIERE }, { model: "glm-5.3-flash", catalog, istoric: [], intrebare: "x", buget: 1000 }))
-      .rejects.toMatchObject({ status: 503 });
-  });
-});
-
-describe("motorul deepseek", () => {
-  it("numara sursele cu text, ca orice motor fara File Search", () => {
-    expect(disponibilePentruChat("deepseek", null, SURSE)).toBe(2);
+    await expect(raspunde({ DB: env.DB, FISIERE: env.FISIERE, ANTHROPIC_API_KEY: "a" }, { model: "deepseek-flash", catalog, istoric: [], intrebare: "x", buget: 1000 }))
+      .rejects.toMatchObject({ status: 503, message: "Cheia DeepSeek nu este configurată pe server." });
   });
 
-  it("trimite cheia si baza DeepSeek, fara credite, cu costul socotit pe tokenii din cache", async () => {
-    const { catalog, ord } = await catalogCuText();
-    const apeluri: { cheie: string; baza: string }[] = [];
-    const apel = async (cheie: string, baza: string, _c: CerereZai): Promise<RaspunsZai> => {
-      apeluri.push({ cheie, baza });
-      return { text: "Marți [Ordinul nr. 777, pag. 2].", tokens_intrare: 1000, tokens_cache: 900, tokens_iesire: 20 };
-    };
-    const r = await raspunde({ DB: env.DB, FISIERE: env.FISIERE, DEEPSEEK_API_KEY: "ds-test", ZAI_API_KEY: "zai-test" },
-      { model: "deepseek-v4-flash", catalog, istoric: [], intrebare: "Când?", buget: 1000 }, apel);
-    expect(apeluri).toEqual([{ cheie: "ds-test", baza: "https://api.deepseek.com" }]);
-    expect(r).toMatchObject({ citari: [{ sursa_id: ord.id, titlu: "Ordinul nr. 777", pagina: 2 }], credite: 0, mod: "integral", tokens_cache: 900 });
-    // 100 x 0,14 + 900 x 0,0028 + 20 x 0,28 = 14 + 2,52 + 5,6 = 22,12 -> 22 microdolari
-    expect(r.cost_microdolari).toBe(22);
-  });
-
-  it("fara cheie DeepSeek raspunde 503, chiar daca exista cheia Z.AI", async () => {
+  it("un model scos din aplicatie (ex. Gemini) raspunde 409", async () => {
     const { catalog } = await catalogCuText();
-    await expect(raspunde({ DB: env.DB, FISIERE: env.FISIERE, ZAI_API_KEY: "zai-test" }, { model: "deepseek-v4-flash", catalog, istoric: [], intrebare: "x", buget: 1000 }))
-      .rejects.toMatchObject({ status: 503 });
+    await expect(raspunde(mediu(), { model: "gemini-3.5-flash-lite", catalog, istoric: [], intrebare: "x", buget: 1000 }))
+      .rejects.toMatchObject({ status: 409 });
   });
 });

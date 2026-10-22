@@ -53,9 +53,9 @@ export function verificaUpload(fel: FelFisier, cerere: Request): VerificareUploa
 }
 
 // Unele PDF-uri (ex. cele generate de legis.md cu mPDF) au cativa octeti de gunoi inaintea
-// antetului "%PDF". Cititoarele ii tolereaza, dar indexarea Google esueaza. Cautam antetul in
+// antetului "%PDF". Cititoarele ii tolereaza, dar fisierul e mai curat fara. Cautam antetul in
 // primii 4 KB si sarim peste ce e inainte; lungimea noua = marime - offset.
-// Fluxul rezultat trece printr-un FixedLengthStream: R2 (si Files API) refuza fluxurile fara
+// Fluxul rezultat trece printr-un FixedLengthStream: R2 refuza fluxurile fara
 // lungime cunoscuta ("Provided readable stream must have a known length").
 export const CAUTARE_ANTET = 4096;
 

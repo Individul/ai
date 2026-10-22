@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BAZA_CLAUDE, BETA_FALLBACK, construiesteCerereChatClaude, EroareClaude, intreabaClaudeChat } from "./claude";
 import { adaugaSursa, creeazaCatalog, seteazaFisierSursa, seteazaText } from "./db";
 import { scrieText } from "./text";
-import { PROMPT_SISTEM_ZAI, type CerereZai, type RaspunsZai } from "./zai";
+import { PROMPT_SISTEM_CHAT, type CerereChat, type RaspunsModel } from "./deepseek";
 import { raspunde } from "./motor";
 import {
   alegeModelChat, cereriClaudeLuna, cheltuitClaudeLuna, creeazaCorectare, inregistreazaIntrebare, MODEL_REZERVA_IMPLICIT, seteazaSetare,
@@ -12,7 +12,7 @@ import {
 } from "./consum";
 import { BUGET_CLAUDE_IMPLICIT, LIMITA_BUGET_MAX } from "./validare";
 
-const CERERE: CerereZai = {
+const CERERE: CerereChat = {
   model: "claude-sonnet-5-5",
   context: "=== Ordinul nr. 777 | pag. 2 ===\nPachetele se predau marți și joi.",
   istoric: [{ intrebare: "Prima?", raspuns: "Primul răspuns." }, { intrebare: "", raspuns: "fără întrebare" }],
@@ -24,7 +24,7 @@ describe("construiesteCerereChatClaude", () => {
     expect(construiesteCerereChatClaude(CERERE)).toEqual({
       model: "claude-sonnet-5-5",
       max_tokens: 16_000,
-      system: `${PROMPT_SISTEM_ZAI}\n\nDOCUMENTE:\n${CERERE.context}`,
+      system: `${PROMPT_SISTEM_CHAT}\n\nDOCUMENTE:\n${CERERE.context}`,
       messages: [
         { role: "user", content: "Prima?" },
         { role: "assistant", content: "Primul răspuns." },
@@ -70,21 +70,20 @@ describe("raspunde pe Claude", () => {
     await seteazaFisierSursa(env.DB, ord.id, "x.pdf", 10);
     await scrieText(env.FISIERE, ord.id, [{ pagina: 1, text: "Ordinul nr. 777 privind pachetele." }, { pagina: 2, text: "Pachetele se predau marți și joi." }]);
     await seteazaText(env.DB, ord.id, { pagini: 2, caractere: 66 });
-    const cereri: CerereZai[] = [];
-    const nuZai = async (): Promise<RaspunsZai> => { throw new Error("Z.AI nu trebuia chemat"); };
-    const claude = async (cheie: string, baza: string, c: CerereZai): Promise<RaspunsZai> => {
+    const cereri: CerereChat[] = [];
+    const nuDeepSeek = async (): Promise<RaspunsModel> => { throw new Error("DeepSeek nu trebuia chemat"); };
+    const claude = async (cheie: string, baza: string, c: CerereChat): Promise<RaspunsModel> => {
       expect(cheie).toBe("a");
       expect(baza).toBe(BAZA_CLAUDE);
       cereri.push(c);
       return { text: "Marți și joi [Ordinul nr. 777, pag. 2].", tokens_intrare: 100_000, tokens_cache: 0, tokens_iesire: 2_000 };
     };
     const r = await raspunde({ DB: env.DB, FISIERE: env.FISIERE, ANTHROPIC_API_KEY: "a" },
-      { model: "claude-sonnet-5-5", catalog, istoric: [], intrebare: "Când se predau pachetele?", buget: 10_000 }, nuZai, claude);
+      { model: "claude-sonnet-5-5", catalog, istoric: [], intrebare: "Când se predau pachetele?", buget: 10_000 }, nuDeepSeek, claude);
     expect(cereri[0]!.context).toContain("=== Ordinul nr. 777 | pag. 2 ===");
     expect(r.citari).toEqual([{ sursa_id: ord.id, titlu: "Ordinul nr. 777", pagina: 2 }]);
     // 100 k x 2 $ + 2 k x 10 $ per milion = 0,22 $
     expect(r.cost_microdolari).toBe(220_000);
-    expect(r.credite).toBe(0);
   });
 
   it("fara cheia Anthropic raspunde 503", async () => {
@@ -107,7 +106,7 @@ describe("plafonul lunar Claude", () => {
     const c = await creeazaCatalog(env.DB, `c-${crypto.randomUUID().slice(0, 8)}`, { titlu: "C" });
     await inregistreazaIntrebare(env.DB, {
       email: "a@exemplu.md", catalog_id: c.id, zi, intrebare: "?", raspuns: "!", citari: [], model,
-      tokens_intrare: 1, tokens_iesire: 1, cost_microdolari: cost, credite: 0, stare: "ok", durata_ms: 1,
+      tokens_intrare: 1, tokens_iesire: 1, cost_microdolari: cost, stare: "ok", durata_ms: 1,
     });
   }
 
@@ -135,8 +134,8 @@ describe("plafonul lunar Claude", () => {
     await seteazaSetare(env.DB, "plafon_claude", "0");
     await seteazaSetare(env.DB, "model_rezerva", "claude-sonnet-5-5");
     expect(await alegeModelChat(env.DB, "2026-10")).toMatchObject({ model: MODEL_REZERVA_IMPLICIT, rezerva: true });
-    await seteazaSetare(env.DB, "model_rezerva", "glm-5.3-flash");
-    expect((await alegeModelChat(env.DB, "2026-10")).model).toBe("glm-5.3-flash");
+    await seteazaSetare(env.DB, "model_rezerva", "glm-5.3-flash");   // scos din aplicatie
+    expect((await alegeModelChat(env.DB, "2026-10")).model).toBe(MODEL_REZERVA_IMPLICIT);
   });
 
   it("stareClaudeLuna arata cat a ramas din plafon, fara sa coboare sub zero", async () => {

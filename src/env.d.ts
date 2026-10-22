@@ -15,15 +15,11 @@ declare namespace Cloudflare {
     ACCESS_AUD?: string;
     // Adresele care pot intra la /admin, separate prin virgula. Goala = nimeni.
     ADMIN_EMAILS?: string;
-    // Cheia Gemini API (secret pe Worker, .dev.vars local). Fara ea, chatul si indexarea raspund 503.
-    GEMINI_API_KEY?: string;
-    // Cheia Z.AI (secret pe Worker, .dev.vars local), pentru modelele GLM alese din Admin. Fara ea,
-    // chatul pe GLM raspunde 503. ZAI_API_BASE e optional: implicit endpointul planului de coding.
-    ZAI_API_KEY?: string;
-    ZAI_API_BASE?: string;
-    // Cheia DeepSeek (platform.deepseek.com, sold preplatit), pentru modelele deepseek-*. Fara ea, 503.
+    // Cheia DeepSeek (platform.deepseek.com, sold preplatit): modelul de rezerva al chatului si corectorul.
+    // Fara ea, 503.
     DEEPSEEK_API_KEY?: string;
-    // Cheia Anthropic (platform.claude.com), pentru modelele Claude ale corectorului. Fara ea, 503.
+    // Cheia Anthropic (platform.claude.com, cheie legata de un workspace), pentru chat si corector pe
+    // Claude; se plateste din creditele API lunare ale abonamentului Max. Fara ea, 503.
     ANTHROPIC_API_KEY?: string;
     // Doar in .dev.vars, pentru dezvoltare locala. Ignorat in productie.
     DEV_EMAIL?: string;

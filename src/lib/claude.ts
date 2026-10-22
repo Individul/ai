@@ -16,7 +16,7 @@
 
 import type { CerereText } from "./corector";
 import { TARIFE } from "./validare";
-import { PROMPT_SISTEM_ZAI, type CerereZai, type RaspunsZai } from "./zai";
+import { PROMPT_SISTEM_CHAT, type CerereChat, type RaspunsModel } from "./deepseek";
 
 export const BAZA_CLAUDE = "https://api.anthropic.com";
 export const VERSIUNE_API_CLAUDE = "2023-06-01";
@@ -49,10 +49,10 @@ export function construiesteCerereClaude(c: CerereText): Record<string, unknown>
   return cerere;
 }
 
-// Chatul: acelasi prompt si aceleasi citari [Titlu, pag. N] ca la Z.AI / DeepSeek, deci extrageCitariText
+// Chatul: acelasi prompt si aceleasi citari [Titlu, pag. N] ca la DeepSeek, deci extrageCitariText
 // leaga trimiterile la fel. Documentele stau in system; istoricul (ultimele 8 schimburi) e text simplu.
 // Gandirea e adaptiva (Sonnet 5.5 nu o poate opri), cu efortul din TARIFE; ea intra in max_tokens.
-export function construiesteCerereChatClaude(c: CerereZai): Record<string, unknown> {
+export function construiesteCerereChatClaude(c: CerereChat): Record<string, unknown> {
   const messages: { role: "user" | "assistant"; content: string }[] = [];
   for (const s of c.istoric.slice(-8)) {
     if (!s.intrebare || !s.raspuns) continue;
@@ -63,7 +63,7 @@ export function construiesteCerereChatClaude(c: CerereZai): Record<string, unkno
   const cerere: Record<string, unknown> = {
     model: c.model,
     max_tokens: 16_000,
-    system: `${PROMPT_SISTEM_ZAI}
+    system: `${PROMPT_SISTEM_CHAT}
 
 DOCUMENTE:
 ${c.context}`,
@@ -75,7 +75,7 @@ ${c.context}`,
   return cerere;
 }
 
-export interface RaspunsClaude extends RaspunsZai {
+export interface RaspunsClaude extends RaspunsModel {
   oprire: string; // stop_reason
 }
 
@@ -113,7 +113,7 @@ export async function intreabaClaude(cheie: string, baza: string, corp: Record<s
 }
 
 // Chatul: un raspuns fara text (refuz, sau taiat la max_tokens inainte de text) e o eroare pentru om.
-export async function intreabaClaudeChat(cheie: string, baza: string, c: CerereZai): Promise<RaspunsZai> {
+export async function intreabaClaudeChat(cheie: string, baza: string, c: CerereChat): Promise<RaspunsModel> {
   const r = await intreabaClaude(cheie, baza, construiesteCerereChatClaude(c));
   if (!r.text) {
     throw new EroareClaude(502, r.oprire === "refusal"

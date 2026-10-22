@@ -6,10 +6,10 @@ import { MODELE, MODELE_CHAT, TARIFE } from "./validare";
 const LOT = [{ i: 2, text: "Deţinutii au fost informati." }];
 
 describe("construiesteCerereClaude", () => {
-  it("pe Sonnet 5 impune schema corecturilor si regleaza gandirea prin effort, fara temperature", () => {
-    const c = construiesteCerereClaude(cerereCorectura("claude-sonnet-5", LOT));
+  it("pe Sonnet 5.5 impune schema corecturilor si regleaza gandirea prin effort, fara temperature", () => {
+    const c = construiesteCerereClaude(cerereCorectura("claude-sonnet-5-5", LOT));
     expect(c).toMatchObject({
-      model: "claude-sonnet-5",
+      model: "claude-sonnet-5-5",
       max_tokens: 32_768,
       messages: [{ role: "user", content: JSON.stringify({ paragrafe: LOT }) }],
       output_config: { format: { type: "json_schema", schema: SCHEMA_CORECTURI }, effort: "medium" },
@@ -17,11 +17,6 @@ describe("construiesteCerereClaude", () => {
     expect(typeof c.system).toBe("string");
     expect(c).not.toHaveProperty("temperature");
     expect(c).not.toHaveProperty("thinking");
-  });
-
-  it("pe Haiku 4.5 nu trimite effort (nu il accepta)", () => {
-    const c = construiesteCerereClaude(cerereCorectura("claude-haiku-4-5-20251001", LOT));
-    expect(c.output_config).toEqual({ format: { type: "json_schema", schema: SCHEMA_CORECTURI } });
   });
 
   it("schema respecta limitele Anthropic: additionalProperties false la fiecare obiect", () => {
@@ -59,7 +54,7 @@ describe("intreabaClaude", () => {
       cereri.push({ url, antete: new Headers(init.headers) });
       return new Response(JSON.stringify({ type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }), { status: 401 });
     });
-    const e = await intreabaClaude("k", BAZA_CLAUDE, { model: "claude-sonnet-5" }).catch((x) => x);
+    const e = await intreabaClaude("k", BAZA_CLAUDE, { model: "claude-sonnet-5-5" }).catch((x) => x);
     expect(e).toBeInstanceOf(EroareClaude);
     expect(e).toMatchObject({ status: 401, message: "invalid x-api-key" });
     expect(cereri[0]!.url).toBe("https://api.anthropic.com/v1/messages");
@@ -78,7 +73,7 @@ describe("intreabaClaude", () => {
 describe("modelele Claude", () => {
   it("toate sunt la corector; la chat doar Sonnet 5.5", () => {
     const claude = MODELE.filter((m) => TARIFE[m]!.motor === "claude");
-    expect(claude).toEqual(["claude-haiku-4-5-20251001", "claude-sonnet-5", "claude-opus-5", "claude-sonnet-5-5", "claude-opus-5-5"]);
+    expect(claude).toEqual(["claude-sonnet-5-5", "claude-opus-5-5"]);
     expect(MODELE_CHAT.filter((m) => TARIFE[m]!.motor === "claude")).toEqual(["claude-sonnet-5-5"]);
     expect(MODELE_CHAT).toContain("deepseek-flash");
   });

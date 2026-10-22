@@ -1,4 +1,4 @@
-// Contextul trimis modelului GLM (Z.AI nu are File Search). Portat din ai2/retrieve.py.
+// Contextul trimis modelului de chat (Claude sau DeepSeek), din textul extras. Portat din ai2/retrieve.py.
 //
 // Daca textul intregului catalog incape in buget, modelul primeste tot (calitate maxima).
 // Altfel: TF-IDF simplu pe cuvinte trunchiate la 4 litere (prinde flexiunile romanesti:
@@ -101,7 +101,7 @@ export function construiesteContext(surse: SursaText[], intrebare: string, buget
 }
 
 // "[Titlu, pag. N]" / "[Titlu, p. N]" din raspuns -> citari unice, in ordinea aparitiei.
-// GLM mai pune si articolul in paranteza ("[Titlu, pag. 2, Articolul 3]", "[Titlu, art. 7, pag. 3]"):
+// Unele modele pun si articolul in paranteza ("[Titlu, pag. 2, Articolul 3]", "[Titlu, art. 7, pag. 3]"):
 // ce e dupa pagina se ignora, iar ce e inaintea ei intra in titlu si se potriveste prin prefix.
 // Titlul se potriveste fara diacritice si majuscule; daca modelul il scurteaza, prefixul ajunge.
 export function extrageCitariText(text: string, surse: { id: string; titlu: string }[]): Citare[] {

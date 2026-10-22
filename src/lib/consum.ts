@@ -35,7 +35,6 @@ export interface Intrebare {
   tokens_intrare: number;
   tokens_iesire: number;
   cost_microdolari: number;
-  credite: number;      // creditele planului Z.AI; 0 la Gemini
   stare: "ok" | "eroare" | "refuzat";
   durata_ms: number | null;
   creat_la: string;
@@ -51,8 +50,6 @@ export interface RandRaport {
   tokens_iesire: number;
   cost_microdolari: number;
   cost_30_microdolari: number;
-  credite_7: number;
-  credite_30: number;
   documente_30: number;   // corectari reusite in 30 de zile
   limita_zi: number | null;
   blocat: number;
@@ -60,12 +57,12 @@ export interface RandRaport {
   ultima_vizita: string | null;
 }
 
-// Modelul de chat cand plafonul lunar Claude e atins: ieftin, cu text, fara File Search.
+// Modelul de chat cand plafonul lunar Claude e atins: ieftin, platit separat, din soldul DeepSeek.
 export const MODEL_REZERVA_IMPLICIT = "deepseek-flash";
 
 export const SETARI_IMPLICITE: Record<string, string> = {
   limita_zi_implicita: "15",
-  model: "gemini-3.5-flash-lite",
+  model: "claude-sonnet-5-5",
   buget_context: String(LIMITA_BUGET_MAX),
   model_corector: MODEL_CORECTOR_IMPLICIT,
   buget_context_claude: String(BUGET_CLAUDE_IMPLICIT),
@@ -92,7 +89,7 @@ export async function limitaImplicita(db: D1Database): Promise<number> {
   return Number.isInteger(n) && n >= 0 ? n : 15;
 }
 
-// Caracterele trimise modelului GLM la o intrebare; in afara limitelor se revine la implicit.
+// Caracterele trimise lui DeepSeek la o intrebare; in afara limitelor se revine la implicit.
 export async function citesteBuget(db: D1Database): Promise<number> {
   const n = Number(await citesteSetare(db, "buget_context"));
   return Number.isInteger(n) && n >= LIMITA_BUGET_MIN && n <= LIMITA_BUGET_MAX ? n : LIMITA_BUGET_MAX;
@@ -113,7 +110,7 @@ export async function citestePlafonClaude(db: D1Database): Promise<number> {
 // Modelul de rezerva: orice model de chat care nu e Claude; altfel implicitul.
 export async function modelRezerva(db: D1Database): Promise<string> {
   const m = await citesteSetare(db, "model_rezerva");
-  return esteModel(m) && motorModel(m) !== "claude" && !TARIFE[m]!.doar_corector && !TARIFE[m]!.retras ? m : MODEL_REZERVA_IMPLICIT;
+  return esteModel(m) && motorModel(m) !== "claude" && !TARIFE[m]!.doar_corector ? m : MODEL_REZERVA_IMPLICIT;
 }
 
 // Cat s-a cheltuit pe Claude in luna calendaristica data ("2026-10", in fusul Chisinau), la chat si la
@@ -238,7 +235,7 @@ export async function seteazaUtilizator(
 // ---------------------------------------------------------------- intrebari
 
 const COL_INTREBARE =
-  "id, email, catalog_id, zi, intrebare, raspuns, citari, model, tokens_intrare, tokens_iesire, cost_microdolari, credite, stare, durata_ms, creat_la";
+  "id, email, catalog_id, zi, intrebare, raspuns, citari, model, tokens_intrare, tokens_iesire, cost_microdolari, stare, durata_ms, creat_la";
 
 // Doar intrebarile reusite conteaza la limita; erorile noastre nu se pun in carca omului.
 export async function intrebariAzi(db: D1Database, email: string, zi: string): Promise<number> {
@@ -260,7 +257,6 @@ export interface IntrebareNoua {
   tokens_intrare: number;
   tokens_iesire: number;
   cost_microdolari: number;
-  credite: number;
   stare: "ok" | "eroare" | "refuzat";
   durata_ms: number | null;
 }
@@ -269,11 +265,11 @@ export async function inregistreazaIntrebare(db: D1Database, i: IntrebareNoua): 
   const id = crypto.randomUUID();
   await db
     .prepare(
-      `INSERT INTO intrebari (${COL_INTREBARE}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO intrebari (${COL_INTREBARE}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id, i.email, i.catalog_id, i.zi, i.intrebare, i.raspuns, JSON.stringify(i.citari), i.model,
-      i.tokens_intrare, i.tokens_iesire, i.cost_microdolari, i.credite, i.stare, i.durata_ms, acum()
+      i.tokens_intrare, i.tokens_iesire, i.cost_microdolari, i.stare, i.durata_ms, acum()
     )
     .run();
   const r = await db.prepare(`SELECT ${COL_INTREBARE} FROM intrebari WHERE id = ?`).bind(id).first<Intrebare>();
@@ -329,7 +325,6 @@ export interface Corectare {
   tokens_intrare: number;
   tokens_iesire: number;
   cost_microdolari: number;
-  credite: number;
   stare: "in_curs" | "ok" | "eroare";
   mesaj: string | null;
   durata_ms: number | null;
@@ -338,7 +333,7 @@ export interface Corectare {
 }
 
 const COL_CORECTARE =
-  "id, email, zi, fisier, mod, caractere, caractere_trimise, loturi, corecturi, aplicate, observatii, model, tokens_intrare, tokens_iesire, cost_microdolari, credite, stare, mesaj, durata_ms, creat_la, actualizat_la";
+  "id, email, zi, fisier, mod, caractere, caractere_trimise, loturi, corecturi, aplicate, observatii, model, tokens_intrare, tokens_iesire, cost_microdolari, stare, mesaj, durata_ms, creat_la, actualizat_la";
 
 export async function creeazaCorectare(
   db: D1Database, c: { email: string; zi: string; fisier: string; mod: ModCorectare; caractere: number; model: string }
@@ -362,16 +357,16 @@ export async function citesteCorectare(db: D1Database, id: string): Promise<Core
 // `reusit` = modelul a dat corecturi lizibile (altfel se adauga doar costul si caracterele).
 export async function adaugaLaCorectare(
   db: D1Database, id: string,
-  x: { caractere: number; tokens_intrare: number; tokens_iesire: number; cost_microdolari: number; credite: number; reusit: boolean }
+  x: { caractere: number; tokens_intrare: number; tokens_iesire: number; cost_microdolari: number; reusit: boolean }
 ): Promise<void> {
   await db
     .prepare(
       `UPDATE corectari SET loturi = loturi + ?, caractere_trimise = caractere_trimise + ?,
          tokens_intrare = tokens_intrare + ?, tokens_iesire = tokens_iesire + ?,
-         cost_microdolari = cost_microdolari + ?, credite = credite + ?, actualizat_la = ?
+         cost_microdolari = cost_microdolari + ?, actualizat_la = ?
        WHERE id = ?`
     )
-    .bind(x.reusit ? 1 : 0, x.caractere, x.tokens_intrare, x.tokens_iesire, x.cost_microdolari, x.credite, acum(), id)
+    .bind(x.reusit ? 1 : 0, x.caractere, x.tokens_intrare, x.tokens_iesire, x.cost_microdolari, acum(), id)
     .run();
 }
 
@@ -421,9 +416,7 @@ export async function raportUtilizatori(db: D1Database, azi: string): Promise<Ra
          SELECT email,
                 sum(tokens_intrare) AS tokens_intrare, sum(tokens_iesire) AS tokens_iesire,
                 sum(cost_microdolari) AS cost_microdolari,
-                sum(CASE WHEN zi >= ?3 THEN cost_microdolari ELSE 0 END) AS cost_30_microdolari,
-                sum(CASE WHEN zi >= ?2 THEN credite ELSE 0 END) AS credite_7,
-                sum(CASE WHEN zi >= ?3 THEN credite ELSE 0 END) AS credite_30
+                sum(CASE WHEN zi >= ?3 THEN cost_microdolari ELSE 0 END) AS cost_30_microdolari
          FROM cheltuieli GROUP BY email
        ),
        d AS (
@@ -434,7 +427,6 @@ export async function raportUtilizatori(db: D1Database, azi: string): Promise<Ra
               coalesce(q.azi, 0) AS azi, coalesce(q.zile7, 0) AS zile7, coalesce(q.zile30, 0) AS zile30, coalesce(q.total, 0) AS total,
               coalesce(c.tokens_intrare, 0) AS tokens_intrare, coalesce(c.tokens_iesire, 0) AS tokens_iesire,
               coalesce(c.cost_microdolari, 0) AS cost_microdolari, coalesce(c.cost_30_microdolari, 0) AS cost_30_microdolari,
-              coalesce(c.credite_7, 0) AS credite_7, coalesce(c.credite_30, 0) AS credite_30,
               coalesce(d.documente_30, 0) AS documente_30,
               u.limita_zi, coalesce(u.blocat, 0) AS blocat, u.nota, u.ultima_vizita
        FROM emailuri e
@@ -492,15 +484,6 @@ export async function costPropriu(db: D1Database, email: string): Promise<number
   return r?.c ?? 0;
 }
 
-// Creditele Z.AI consumate de toti in ultimele 7 zile (planul are cota saptamanala), pentru antetul raportului.
-export async function crediteUltimele7Zile(db: D1Database, azi: string): Promise<number> {
-  const r = await db
-    .prepare("SELECT coalesce(sum(credite), 0) AS c FROM cheltuieli WHERE zi >= ?")
-    .bind(ziMinus(azi, 6))
-    .first<{ c: number }>();
-  return r?.c ?? 0;
-}
-
 // Costul total (microdolari) al intrebarilor din ultimele 30 de zile, pentru antetul raportului.
 export async function costUltimele30Zile(db: D1Database, azi: string): Promise<number> {
   const r = await db
@@ -516,12 +499,4 @@ export function fmtCost(microdolari: number): string {
   if (microdolari === 0) return "0 $";
   const d = microdolari / 1_000_000;
   return `${(d < 1 ? d.toFixed(4) : d.toFixed(2)).replace(".", ",")} $`;
-}
-
-// Creditele planului Z.AI: 33.5 -> "33,5"; 1234.56 -> "1.234,6"; intregii fara zecimale.
-export function fmtCredite(credite: number): string {
-  const rotunjit = Math.round(credite * 10) / 10;
-  const [intreg, zecimal] = rotunjit.toFixed(1).split(".") as [string, string];
-  const cuMii = intreg.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return zecimal === "0" ? cuMii : `${cuMii},${zecimal}`;
 }

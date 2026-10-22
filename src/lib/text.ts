@@ -1,4 +1,4 @@
-// Textul extras din PDF-ul unei surse, pentru motorul Z.AI (GLM), care nu are File Search.
+// Textul extras din PDF-ul unei surse, pe care il citeste chatul (Claude sau DeepSeek).
 // Se extrage in browser (pdf.js, la upload sau la "extrage textul") si sta in R2 sub text/{sursa.id}
 // ca JSON [{pagina, text}]; D1 tine doar contoarele (surse.text_pagini, text_caractere).
 // Regula R2 -> D1 ramane: obiectul se scrie inaintea contoarelor si se sterge inaintea lor.

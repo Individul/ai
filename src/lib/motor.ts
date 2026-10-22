@@ -1,26 +1,21 @@
-// Motorul chatului: modelul ales in Admin decide daca intrebarea merge la Gemini File Search
-// sau la un model OpenAI-compatibil (Z.AI sau DeepSeek) cu textul extras din R2. Tot aici,
-// corectorul (corecteazaLot), care poate merge si la Claude. Rutele si paginile vorbesc doar cu
-// acest modul; clientii (gemini.ts, zai.ts, claude.ts) nu se apeleaza direct. Corectorul are doua feluri
-// de cereri: un lot de paragrafe (corecteazaLot) si verificarea intregului document (verificaDocument).
+// Motorul chatului si al corectorului: modelul ales in Admin decide motorul (Claude sau DeepSeek), iar
+// intrebarea merge cu textul extras din R2. Rutele si paginile vorbesc doar cu acest modul; clientii
+// (claude.ts, deepseek.ts) nu se apeleaza direct. Corectorul are doua feluri de cereri: un lot de
+// paragrafe (corecteazaLot) si verificarea intregului document (verificaDocument).
 
 import { listeazaSurse, type Catalog, type Sursa } from "./db";
 import type { Citare } from "./consum";
-import { costMicrodolari, genereaza, intreaba, EroareGemini, type Schimb } from "./gemini";
-import { BAZA_DEEPSEEK, BAZA_ZAI, completeaza, construiesteCerereText, crediteZai, EroareZai, intreabaZai, type RaspunsZai } from "./zai";
+import { BAZA_DEEPSEEK, completeaza, construiesteCerereText, EroareModel, intreabaDeepSeek, type RaspunsModel, type Schimb } from "./deepseek";
 import { cerereCorectura, cerereVerificare, extrageCorecturi, extrageVerificare, type CerereText, type Observatie } from "./corector";
 import { BAZA_CLAUDE, construiesteCerereClaude, intreabaClaude, intreabaClaudeChat } from "./claude";
 import type { Corectura, ParagrafIntreg, ParagrafText } from "./docx";
 import { construiesteContext, extrageCitariText, type SursaText } from "./context";
 import { citesteText } from "./text";
-import { motorModel, NUME_MOTOR, TARIFE, type Motor } from "./validare";
+import { costMicrodolari, motorModel, NUME_MOTOR, TARIFE, type Motor } from "./validare";
 
 export interface Mediu {
   DB: D1Database;
   FISIERE: R2Bucket;
-  GEMINI_API_KEY?: string;
-  ZAI_API_KEY?: string;
-  ZAI_API_BASE?: string;
   DEEPSEEK_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
 }
@@ -30,7 +25,7 @@ export interface Intrebare {
   catalog: Catalog;
   istoric: Schimb[];
   intrebare: string;
-  buget: number;        // caractere de context pentru motoarele cu text; Gemini il ignora
+  buget: number;        // caractere de context trimise modelului
 }
 
 export interface Rezultat {
@@ -40,74 +35,53 @@ export interface Rezultat {
   tokens_cache: number;
   tokens_iesire: number;
   cost_microdolari: number; // la tariful public al modelului, cu tokenii din cache la pretul de cache
-  credite: number;          // creditele planului Z.AI; 0 la celelalte
-  mod: "gemini" | "integral" | "filtrat";
+  mod: "integral" | "filtrat";
 }
 
-export type ApelZai = typeof intreabaZai;
+export type ApelChat = typeof intreabaDeepSeek;
 
 // Cheia si adresa motorului, din mediu. `undefined` = motorul nu e configurat pe server.
 export function cheieMotor(env: Mediu, motor: Motor): string | undefined {
-  if (motor === "gemini") return env.GEMINI_API_KEY || undefined;
-  if (motor === "zai") return env.ZAI_API_KEY || undefined;
-  if (motor === "claude") return env.ANTHROPIC_API_KEY || undefined;
-  return env.DEEPSEEK_API_KEY || undefined;
+  return (motor === "claude" ? env.ANTHROPIC_API_KEY : env.DEEPSEEK_API_KEY) || undefined;
 }
 
-export function bazaMotor(env: Mediu, motor: Motor): string {
-  if (motor === "zai") return env.ZAI_API_BASE || BAZA_ZAI;
+export function bazaMotor(motor: Motor): string {
   return motor === "claude" ? BAZA_CLAUDE : BAZA_DEEPSEEK;
 }
 
-// Cate surse poate citi motorul dat: Gemini cere document indexat (si magazin pe catalog),
-// motoarele cu text cer text extras nevid (PDF-urile scanate au 0 caractere).
-export function disponibilePentruChat(
-  motor: Motor, magazin: string | null, surse: Pick<Sursa, "indexare" | "text_caractere">[]
-): number {
-  if (motor !== "gemini") return surse.filter((s) => (s.text_caractere ?? 0) > 0).length;
-  if (!magazin) return 0;
-  return surse.filter((s) => s.indexare === "gata").length;
+// Cate surse poate citi chatul: cele cu text extras nevid (PDF-urile scanate au 0 caractere).
+export function disponibilePentruChat(surse: Pick<Sursa, "text_caractere">[]): number {
+  return surse.filter((s) => (s.text_caractere ?? 0) > 0).length;
 }
 
-// `apel` (Z.AI / DeepSeek) si `apelClaude` se injecteaza doar in teste (fara retea). Bugetul de context si
-// plafonul lunar al lui Claude le alege ruta (consum.ts); aici Claude e doar un motor cu text, ca DeepSeek.
-export async function raspunde(env: Mediu, i: Intrebare, apel: ApelZai = intreabaZai, apelClaude: ApelZai = intreabaClaudeChat): Promise<Rezultat> {
-  const motor = motorModel(i.model) ?? "gemini";
-  if (TARIFE[i.model]?.doar_corector) throw new EroareZai(409, "Modelul ales e doar pentru corector; alege alt model pentru chat în Admin.");
-  if (motor !== "gemini") return raspundeText(env, motor, i, motor === "claude" ? apelClaude : apel);
-  if (!env.GEMINI_API_KEY) throw new EroareGemini(503, "Cheia Gemini nu este configurată pe server.");
-  if (!i.catalog.magazin) throw new EroareGemini(409, "Culegerea nu are încă documente indexate.");
-  const r = await intreaba(env.GEMINI_API_KEY, { model: i.model, magazin: i.catalog.magazin, istoric: i.istoric, intrebare: i.intrebare });
-  return {
-    text: r.text, citari: r.citari, tokens_intrare: r.tokens_intrare, tokens_cache: 0, tokens_iesire: r.tokens_iesire,
-    cost_microdolari: costMicrodolari(i.model, r.tokens_intrare, r.tokens_iesire), credite: 0, mod: "gemini",
-  };
-}
-
-// Textele surselor din R2 -> context (integral sau filtrat) -> model OpenAI-compatibil sau Claude.
-// La context prea lung (3 M caractere pot depasi 1 M tokeni) reincearca o singura data cu bugetul injumatatit.
-async function raspundeText(env: Mediu, motor: Motor, i: Intrebare, apel: ApelZai): Promise<Rezultat> {
+// `apel` (DeepSeek) si `apelClaude` se injecteaza doar in teste (fara retea). Bugetul de context si
+// plafonul lunar al lui Claude le alege ruta (consum.ts).
+// Textele surselor din R2 -> context (integral sau filtrat) -> model. La context prea lung reincearca o
+// singura data cu bugetul injumatatit.
+export async function raspunde(env: Mediu, i: Intrebare, apel: ApelChat = intreabaDeepSeek, apelClaude: ApelChat = intreabaClaudeChat): Promise<Rezultat> {
+  const motor = motorModel(i.model);
+  if (!motor) throw new EroareModel(409, "Modelul ales nu mai există; alege altul în Admin.");
+  if (TARIFE[i.model]!.doar_corector) throw new EroareModel(409, "Modelul ales e doar pentru corector; alege alt model pentru chat în Admin.");
   const cheie = cheieMotor(env, motor);
-  if (!cheie) throw new EroareZai(503, `Cheia ${NUME_MOTOR[motor]} nu este configurată pe server.`);
+  if (!cheie) throw new EroareModel(503, `Cheia ${NUME_MOTOR[motor]} nu este configurată pe server.`);
+  const cere = motor === "claude" ? apelClaude : apel;
   const surse = (await listeazaSurse(env.DB, i.catalog.id)).filter((s) => (s.text_caractere ?? 0) > 0);
   const texte: SursaText[] = await Promise.all(
     surse.map(async (s) => ({ id: s.id, titlu: s.titlu, pagini: (await citesteText(env.FISIERE, s.id)) ?? [] }))
   );
-  const baza = bazaMotor(env, motor);
   let buget = i.buget;
   for (let incercare = 0; ; incercare++) {
     const ctx = construiesteContext(texte, i.intrebare, buget);
     try {
-      const r = await apel(cheie, baza, { model: i.model, context: ctx.text, istoric: i.istoric, intrebare: i.intrebare });
+      const r = await cere(cheie, bazaMotor(motor), { model: i.model, context: ctx.text, istoric: i.istoric, intrebare: i.intrebare });
       return {
         text: r.text, citari: extrageCitariText(r.text, surse),
         tokens_intrare: r.tokens_intrare, tokens_cache: r.tokens_cache, tokens_iesire: r.tokens_iesire,
         cost_microdolari: costMicrodolari(i.model, r.tokens_intrare, r.tokens_iesire, r.tokens_cache),
-        credite: crediteZai(i.model, r.tokens_intrare, r.tokens_cache, r.tokens_iesire),
         mod: ctx.mod,
       };
     } catch (e) {
-      if (incercare === 0 && e instanceof EroareZai && e.contextPreaLung) { buget = Math.floor(buget / 2); continue; }
+      if (incercare === 0 && e instanceof EroareModel && e.contextPreaLung) { buget = Math.floor(buget / 2); continue; }
       throw e;
     }
   }
@@ -120,7 +94,6 @@ export interface ConsumModel {
   tokens_cache: number;
   tokens_iesire: number;
   cost_microdolari: number;
-  credite: number;
 }
 
 export interface RezultatCorectare extends ConsumModel {
@@ -141,14 +114,10 @@ export class EroareCorectare extends Error {
   }
 }
 
-export type ApelText = (motor: Motor, cheie: string, baza: string, c: CerereText) => Promise<RaspunsZai>;
+export type ApelText = (motor: Motor, cheie: string, baza: string, c: CerereText) => Promise<RaspunsModel>;
 
-const apelText: ApelText = async (motor, cheie, baza, c) => {
-  if (motor === "claude") return intreabaClaude(cheie, baza, construiesteCerereClaude(c));
-  if (motor !== "gemini") return completeaza(cheie, baza, construiesteCerereText(c));
-  const r = await genereaza(cheie, c);
-  return { text: r.text, tokens_intrare: r.tokens_intrare, tokens_cache: 0, tokens_iesire: r.tokens_iesire };
-};
+const apelText: ApelText = async (motor, cheie, baza, c) =>
+  motor === "claude" ? intreabaClaude(cheie, baza, construiesteCerereClaude(c)) : completeaza(cheie, baza, construiesteCerereText(c));
 
 // Un lot de paragrafe al corectorului, pe modelul din setari.model_corector. Motorul vine din model,
 // ca la chat. `apel` se injecteaza doar in teste.
@@ -176,16 +145,16 @@ export async function verificaDocument(
 
 // Cererea catre modelul corectorului si consumul ei. Motorul vine din model, ca la chat.
 async function cereModelului(env: Mediu, model: string, cerere: CerereText, apel: ApelText): Promise<{ consum: ConsumModel; text: string }> {
-  const motor = motorModel(model) ?? "gemini";
+  const motor = motorModel(model);
+  if (!motor) throw new EroareModel(409, "Modelul corectorului nu mai există; alege altul în Admin.");
   const cheie = cheieMotor(env, motor);
-  if (!cheie) throw new EroareZai(503, `Cheia ${NUME_MOTOR[motor]} nu este configurată pe server.`);
-  const r = await apel(motor, cheie, bazaMotor(env, motor), cerere);
+  if (!cheie) throw new EroareModel(503, `Cheia ${NUME_MOTOR[motor]} nu este configurată pe server.`);
+  const r = await apel(motor, cheie, bazaMotor(motor), cerere);
   return {
     text: r.text,
     consum: {
       tokens_intrare: r.tokens_intrare, tokens_cache: r.tokens_cache, tokens_iesire: r.tokens_iesire,
       cost_microdolari: costMicrodolari(model, r.tokens_intrare, r.tokens_iesire, r.tokens_cache),
-      credite: crediteZai(model, r.tokens_intrare, r.tokens_cache, r.tokens_iesire),
     },
   };
 }

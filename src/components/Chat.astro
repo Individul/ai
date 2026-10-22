@@ -5,7 +5,7 @@ import type { Motor } from "../lib/validare";
 interface Props {
   catalogId: string;
   disponibile: number;   // surse pe care motorul ales le poate citi
-  motor: Motor;          // scriptul arata alta stare de asteptare la Z.AI (contexte mari, minute)
+  motor: Motor;          // scriptul arata alta stare de asteptare la DeepSeek (culegerea intreaga, minute)
   ramase: number;
   limita: number;
   // Orele de varf ale modelului activ (DeepSeek): textul de sub caseta, rosu cand e varf acum.
@@ -22,7 +22,7 @@ const admin = Astro.locals.admin;
       {admin && (
         <p class="pas-admin">
           <a class="buton" href={`/admin/cataloage/${catalogId}#surse`}>Adaugă sursele și PDF-urile →</a>
-          <small>La fiecare sursă apeși „+ PDF”; extragerea textului și indexarea pornesc singure.</small>
+          <small>La fiecare sursă apeși „+ PDF”; extragerea textului pornește singură.</small>
         </p>
       )}
     </div>

@@ -25,7 +25,6 @@ import {
   creeazaCatalog, listeazaCataloage, mutaAudio, mutaCatalog, mutaSursa, seteazaStareCatalog, stergeAudio, stergeSursa,
 } from "../../../lib/db";
 import { cheieR2 } from "../../../lib/fisiere";
-import { scoateDinIndex } from "../../../lib/indexare";
 import { stergeText } from "../../../lib/text";
 import {
   LIMITA_BUGET_MAX, LIMITA_BUGET_MIN, PLAFON_CLAUDE_MAX, TARIFE, esteModel, motorModel, esteStare, slug, valideazaAudio, valideazaCatalog, valideazaSursa,
@@ -116,7 +115,6 @@ export const POST: APIRoute = async ({ params, request, url, redirect }) => {
       return inapoi({ ok: true });
     }
     if (actiune === "sterge") {
-      if (sursa.doc_google) await scoateDinIndex(env, sursa);
       if (sursa.text_caractere !== null) await stergeText(env.FISIERE, id);
       if (sursa.fisier_nume) await env.FISIERE.delete(cheieR2("pdf", id));
       await stergeSursa(env.DB, id);

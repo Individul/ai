@@ -8,7 +8,6 @@ import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { citesteSursa, seteazaFisierSursa, seteazaText } from "../../../../../lib/db";
 import { cheieR2, curataPdf, numeFisierCurat, verificaUpload } from "../../../../../lib/fisiere";
-import { scoateDinIndex } from "../../../../../lib/indexare";
 import { stergeText } from "../../../../../lib/text";
 import { eroare, json } from "../../../../../lib/api";
 
@@ -33,10 +32,8 @@ export const PUT: APIRoute = async ({ params, request }) => {
   if (!request.body) return eroare(400, "Cererea nu are corp.");
 
   const nume = numeFisierCurat(request.headers.get("x-nume-fisier"), `${sursa.titlu}.pdf`);
-  // PDF nou = document nou la Google; cel vechi (daca era) se scoate, iar clientul porneste indexarea.
-  if (sursa.doc_google || sursa.indexare !== "neindexat") await scoateDinIndex(env, sursa);
   if (sursa.text_caractere !== null) await scoateTextul(id);
-  // Antetul %PDF trebuie sa fie primul octet; altfel Google nu poate indexa fisierul.
+  // PDF-urile de la legis.md (mPDF) au gunoi inaintea antetului %PDF; il taiem, ca fisierul sa fie curat.
   const curat = await curataPdf(request.body, v.marime);
   await env.FISIERE.put(cheieR2("pdf", id), curat.corp, { httpMetadata: { contentType: v.tip } });
   const actualizata = await seteazaFisierSursa(env.DB, id, nume, curat.marime);
@@ -52,7 +49,6 @@ export const DELETE: APIRoute = async ({ params, request }) => {
   const id = params.id ?? "";
   const sursa = await citesteSursa(env.DB, id);
   if (!sursa) return eroare(404, "Sursa nu există.");
-  await scoateDinIndex(env, sursa);
   await scoateTextul(id);
   await env.FISIERE.delete(cheieR2("pdf", id));
   await seteazaFisierSursa(env.DB, id, null, null);

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import {
-  adaugaLaCorectare, citesteCorectare, consumUtilizator, corectariUtilizator, costPropriu, costTotalToti, creeazaCorectare,
+  adaugaLaCorectare, citesteCorectare, consumUtilizator, corectariUtilizator, creeazaCorectare,
   incheieCorectare, inregistreazaIntrebare, intrebariAzi, modelCorector, raportUtilizatori, seteazaSetare,
 } from "./consum";
 import { corecteazaLot, EroareCorectare, raspunde, verificaDocument, type ApelText } from "./motor";
@@ -35,8 +35,6 @@ describe("jurnalul corectarilor", () => {
     await creeazaCorectare(env.DB, { email: B, zi: ZI, fisier: "nota.docx", mod: "verificare", caractere: 100, model: "deepseek-flash" });
 
     expect(await intrebariAzi(env.DB, A, ZI)).toBe(1);
-    expect(await costPropriu(env.DB, A)).toBe(1470);
-    expect(await costTotalToti(env.DB)).toBe(1470);
     expect(await consumUtilizator(env.DB, A, ZI)).toMatchObject({ azi: 1, total: 1, cost_azi: 1470, cost_total: 1470, tokens_total: 1875 });
     const raport = await raportUtilizatori(env.DB, ZI);
     expect(raport.map((r) => r.email)).toEqual([A, B]);

@@ -6,7 +6,7 @@
 import { env } from "cloudflare:workers";
 import Base from "../layouts/Base.astro";
 import Suma from "../components/Suma.astro";
-import { corectariUtilizator, modelCorector } from "../lib/consum";
+import { alegeModelCorector, corectariUtilizator } from "../lib/consum";
 import { cheieMotor } from "../lib/motor";
 import { cursUsd } from "../lib/curs";
 import { aziChisinau, fmtMoment } from "../lib/data";
@@ -14,8 +14,10 @@ import { LIMITA_VERIFICARE, numara } from "../lib/corector";
 import { motorModel, stareVarf } from "../lib/validare";
 import { textVarf } from "../lib/varf";
 
-const [model, documente, curs] = await Promise.all([
-  modelCorector(env.DB), corectariUtilizator(env.DB, Astro.locals.email, 20), cursUsd(env.DB, aziChisinau()),
+// Modelul care chiar va lucra (peste plafonul Claude, cel de rezerva), ca anuntul de varf si verificarea
+// cheii sa priveasca motorul care raspunde.
+const [{ model }, documente, curs] = await Promise.all([
+  alegeModelCorector(env.DB, aziChisinau().slice(0, 7)), corectariUtilizator(env.DB, Astro.locals.email, 20), cursUsd(env.DB, aziChisinau()),
 ]);
 const motor = motorModel(model) ?? "deepseek";
 const configurat = !!cheieMotor(env, motor);

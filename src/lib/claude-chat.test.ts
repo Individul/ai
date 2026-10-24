@@ -7,7 +7,7 @@ import { scrieText } from "./text";
 import { PROMPT_SISTEM_CHAT, type CerereChat, type RaspunsModel } from "./deepseek";
 import { raspunde } from "./motor";
 import {
-  alegeModelChat, cereriClaudeLuna, cheltuitClaudeLuna, creeazaCorectare, inregistreazaIntrebare, MODEL_REZERVA_IMPLICIT, seteazaSetare,
+  alegeModelChat, alegeModelCorector, cereriClaudeLuna, cheltuitClaudeLuna, creeazaCorectare, inregistreazaIntrebare, MODEL_REZERVA_IMPLICIT, seteazaSetare,
   stareClaudeLuna,
 } from "./consum";
 import { BUGET_CLAUDE_IMPLICIT, LIMITA_BUGET_MAX } from "./validare";
@@ -136,6 +136,27 @@ describe("plafonul lunar Claude", () => {
     expect(await alegeModelChat(env.DB, "2026-10")).toMatchObject({ model: MODEL_REZERVA_IMPLICIT, rezerva: true });
     await seteazaSetare(env.DB, "model_rezerva", "glm-5.3-flash");   // scos din aplicatie
     expect((await alegeModelChat(env.DB, "2026-10")).model).toBe(MODEL_REZERVA_IMPLICIT);
+  });
+
+  it("corectorul pe Claude trece si el pe rezerva peste plafon; corectarile lui se numara", async () => {
+    await seteazaSetare(env.DB, "model_corector", "claude-opus-5-5");
+    await seteazaSetare(env.DB, "model_rezerva", MODEL_REZERVA_IMPLICIT);
+    await seteazaSetare(env.DB, "plafon_claude", "1");
+    expect(await alegeModelCorector(env.DB, "2026-12")).toEqual({ model: "claude-opus-5-5", rezerva: false });
+    // un document mare pe Opus duce luna peste plafon...
+    const cor = await creeazaCorectare(env.DB, { email: "a@exemplu.md", zi: "2026-12-02", fisier: "mare.docx", mod: "verificare", caractere: 90_000, model: "claude-opus-5-5" });
+    await env.DB.prepare("UPDATE corectari SET cost_microdolari = ? WHERE id = ?").bind(1_400_000, cor.id).run();
+    // ...iar urmatoarea corectare nu mai porneste pe Claude
+    expect(await alegeModelCorector(env.DB, "2026-12")).toEqual({ model: MODEL_REZERVA_IMPLICIT, rezerva: true });
+    // plafonul 0 opreste Claude si la corector
+    await seteazaSetare(env.DB, "plafon_claude", "0");
+    expect((await alegeModelCorector(env.DB, "2027-01")).model).toBe(MODEL_REZERVA_IMPLICIT);
+  });
+
+  it("corectorul pe DeepSeek nu e atins de plafonul Claude", async () => {
+    await seteazaSetare(env.DB, "model_corector", "deepseek-flash");
+    await seteazaSetare(env.DB, "plafon_claude", "0");
+    expect(await alegeModelCorector(env.DB, "2026-12")).toEqual({ model: "deepseek-flash", rezerva: false });
   });
 
   it("stareClaudeLuna arata cat a ramas din plafon, fara sa coboare sub zero", async () => {

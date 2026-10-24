@@ -183,6 +183,19 @@ export async function modelCorector(db: D1Database): Promise<string> {
   return esteModel(m) ? m : MODEL_CORECTOR_IMPLICIT;
 }
 
+// Modelul cu care porneste o corectare. Ca la chat: Claude ramane cat timp cheltuiala lunii e sub plafon,
+// altfel corectarea merge pe modelul de rezerva. Inainte, corectorul era doar numarat la plafon, nu si oprit,
+// deci un document mare pe Opus putea cheltui peste plafon din creditele Max. Alegerea se face o data, la
+// pornire, si se scrie in `corectari.model`: tot documentul se corecteaza cu acelasi model, iar o
+// corectare inceputa sub plafon se termina chiar daca il depaseste putin.
+export async function alegeModelCorector(db: D1Database, luna: string): Promise<{ model: string; rezerva: boolean }> {
+  const model = await modelCorector(db);
+  if (motorModel(model) !== "claude") return { model, rezerva: false };
+  const [cheltuit, plafon] = await Promise.all([cheltuitClaudeLuna(db, luna), citestePlafonClaude(db)]);
+  if (cheltuit < plafon * 1_000_000) return { model, rezerva: false };
+  return { model: await modelRezerva(db), rezerva: true };
+}
+
 // ---------------------------------------------------------------- utilizatori
 
 const COL_UTILIZATOR = "email, limita_zi, blocat, nota, ultima_vizita, actualizat_la";

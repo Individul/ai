@@ -5,7 +5,7 @@
 // si incheie cu /api/corector/{id}/gata.
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
-import { creeazaCorectare, modelCorector, type ModCorectare } from "../../../lib/consum";
+import { alegeModelCorector, creeazaCorectare, type ModCorectare } from "../../../lib/consum";
 import { cheieMotor } from "../../../lib/motor";
 import { citesteJson, eroare, json } from "../../../lib/api";
 import { aziChisinau } from "../../../lib/data";
@@ -30,8 +30,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (mod === "verificare" && caractere > LIMITA_VERIFICARE) {
     return eroare(413, `Verificarea merge până la ${LIMITA_VERIFICARE.toLocaleString("ro-RO")} de caractere; pentru documentul ăsta folosește corectura.`);
   }
-  const model = await modelCorector(env.DB);
+  // Peste plafonul lunar Claude, corectarea porneste pe modelul de rezerva (vezi `alegeModelCorector`).
+  const zi = aziChisinau();
+  const { model } = await alegeModelCorector(env.DB, zi.slice(0, 7));
   if (!cheieMotor(env, motorModel(model) ?? "deepseek")) return eroare(503, "Corectorul nu este configurat încă pe server.");
-  const r = await creeazaCorectare(env.DB, { email: locals.email, zi: aziChisinau(), fisier, mod, caractere, model });
+  const r = await creeazaCorectare(env.DB, { email: locals.email, zi, fisier, mod, caractere, model });
   return json({ id: r.id, model });
 };
